@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler Studio: le sole funzioni di sistema che la finestra può usare.
  * Nessun accesso diretto a Node o al disco: tutto passa da qui e dai controlli in main.js.

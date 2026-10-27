@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /* Word Crawler (estensione): file del motore da iniettare nelle pagine web (usato da pannello e servizio). */
 (function (g) {
   'use strict';

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /* Word Crawler: la scansione gira in un thread separato, così la finestra resta fluida. */
 'use strict';
 const { parentPort, workerData } = require('worker_threads');

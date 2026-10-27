@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Test del processo principale (desktop/main.js) senza Electron: il modulo "electron" viene
  * sostituito da un finto con la stessa forma, e si chiamano davvero i gestori IPC.

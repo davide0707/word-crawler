@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: tabelle del rapporto di scansione (usate nell'app e nell'esportazione HTML).
  */

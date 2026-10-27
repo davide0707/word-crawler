@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: archivio delle letture salvate (sunti, sottolineature, parole chiave).
  * host: { list(): Promise<entries>, remove(id): Promise, saveFile(name, content, mime): Promise<boolean>, open?(entry) }

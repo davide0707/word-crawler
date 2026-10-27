@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: la penna, per segnare a mano (anche sui PDF e sulle pagine web).
  * Strumenti: evidenzia, sottolinea, nota, gomma. Si trascina sulle parole; la nota chiede il testo.

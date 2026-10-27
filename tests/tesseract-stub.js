@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Finto tesseract.js per i test nel browser. Risponde con l'uscita VERA del programma tesseract
  * (tests/fixtures/scan-N.tsv, creata da make-ocr-fixtures.py), convertita nel formato "blocks"

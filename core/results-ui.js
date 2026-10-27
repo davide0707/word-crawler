@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: pannello dei risultati.
  * Mostra sunto, evidenziazioni (anche quelle fatte a mano), parole chiave, schede di ripasso e statistiche

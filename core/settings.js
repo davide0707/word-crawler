@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: modalità, parametri e preset.
  * Ogni parametro dichiara cosa cambia davvero ("effect"), così l'interfaccia lo può spiegare.

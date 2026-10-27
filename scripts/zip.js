@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /* Crea un archivio .zip da una cartella, senza dipendenze (deflate di Node). */
 'use strict';
 const fs = require('fs');

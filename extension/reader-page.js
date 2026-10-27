@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /* Word Crawler (estensione): lettore di documenti (PDF, Word, OpenDocument, EPUB…) in una scheda. */
 (function () {
   'use strict';

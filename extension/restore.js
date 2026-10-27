@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler (estensione): piccolo controllo su ogni pagina. Se la pagina è tra le letture salvate,
  * chiede al servizio dell'estensione di rimettere i segni (senza animazione). Non legge la pagina e

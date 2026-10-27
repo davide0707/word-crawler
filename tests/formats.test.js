@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Test dei lettori di formato, eseguiti in Chromium (serve DOMParser).
  * Uso: node tests/formats.test.js [--show]

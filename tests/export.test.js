@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Test di esportazioni, documento segnato, Word, schede per Anki, OCR e riconoscimento delle immagini (Node).
  * Uso: node tests/export.test.js

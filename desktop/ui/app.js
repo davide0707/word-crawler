@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /* Word Crawler Studio: interfaccia dell'app desktop (schede, collegamento al sistema, guida). */
 (function () {
   'use strict';

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: parole e posizioni dentro un PDF.
  * Riceve per ogni pagina il viewport e il testo di PDF.js ({ vp, tc }) e produce i token

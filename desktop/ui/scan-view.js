@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: scanner del PC (solo app desktop).
  * Il ragno cammina sulla mappa delle cartelle: il centro è la cartella scelta, ogni anello è

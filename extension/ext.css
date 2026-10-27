@@ -1,3 +1,4 @@
+/* Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE. */
 /* Word Crawler (estensione): pannello laterale. Il resto dello stile viene da core/reader.css. */
 .brand { display: flex; align-items: center; gap: 10px; font: 600 12px var(--wc-mono); letter-spacing: .16em; color: var(--wc-fg); }
 .brand-mark { width: 11px; height: 20px; border: 1.5px solid #fff; background: #0b0b0e; position: relative; flex: none; }

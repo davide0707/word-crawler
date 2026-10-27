@@ -1,3 +1,4 @@
+/* Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE. */
 /* Word Crawler Studio: guscio dell'app desktop, scanner, archivio e guida.
    Le variabili di colore vengono da core/reader.css. */
 body { padding-top: var(--wc-top, 52px); }

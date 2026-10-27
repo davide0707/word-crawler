@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /* Test dell'analisi del testo (Node, senza browser). Uso: node tests/analysis.test.js */
 'use strict';
 const fs = require('fs');

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: strumenti di base sul testo (senza AI).
  * Normalizzazione delle parole, parole da ignorare (stopword), lingua, divisione in frasi.
