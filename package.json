@@ -1,0 +1,98 @@
+{
+  "name": "word-crawler-studio",
+  "productName": "Word Crawler",
+  "version": "2.0.0",
+  "description": "Un ragno che legge documenti e pagine web, sottolinea, cerchia, riassume e scansiona il disco in sola lettura. Senza intelligenza artificiale.",
+  "main": "desktop/main.js",
+  "private": true,
+  "author": {
+    "name": "Word Crawler",
+    "email": "wordcrawler@example.invalid"
+  },
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node tests/analysis.test.js && node tests/scanner.test.js && node tests/main.test.js && node tests/formats.test.js",
+    "test:ui": "node tests/desktop-ui.test.js",
+    "fixtures": "python3 tests/make-fixtures.py",
+    "build:extension": "node scripts/build-extension.js",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:linux": "electron-builder --linux --publish never"
+  },
+  "dependencies": {
+    "pdfjs-dist": "4.10.38"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8",
+    "playwright": "1.48.2"
+  },
+  "build": {
+    "appId": "it.wordcrawler.studio",
+    "productName": "Word Crawler",
+    "copyright": "Word Crawler",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "package.json",
+      "desktop/**/*",
+      "core/**/*",
+      "build/icons/**/*",
+      "!**/*.map",
+      "!node_modules/pdfjs-dist/legacy/**",
+      "!node_modules/pdfjs-dist/web/**",
+      "!node_modules/pdfjs-dist/types/**",
+      "!node_modules/pdfjs-dist/image_decoders/**",
+      "!node_modules/@napi-rs/**"
+    ],
+    "asarUnpack": [
+      "desktop/scanner.js",
+      "desktop/scan-worker.js"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["pdf", "docx", "doc", "odt", "epub", "rtf", "md", "txt"],
+        "name": "Documento",
+        "role": "Viewer"
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Word Crawler",
+      "artifactName": "Word-Crawler-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Word-Crawler-Portatile-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "category": "public.app-category.education",
+      "icon": "build/icons/icon.png",
+      "artifactName": "Word-Crawler-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Education",
+      "icon": "build/icons/icon.png",
+      "artifactName": "Word-Crawler-${version}-${arch}.${ext}"
+    }
+  }
+}

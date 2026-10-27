@@ -1,0 +1,11 @@
+1
+00:00:01,000 --> 00:00:04,000
+Benvenuti alla lezione sulla guerra fredda.
+
+2
+00:00:04,500 --> 00:00:08,000
+Oggi parliamo di <i>Berlino</i> e della NATO.
+
+3
+00:00:15,000 --> 00:00:19,000
+Nel 1989 cadde il muro di Berlino.

@@ -1,0 +1,85 @@
+# Costruisce Word Crawler per Windows, macOS e Linux e prepara l'estensione per Chrome.
+# Si avvia da solo quando pubblichi un tag "v..." (es. v2.0.0), oppure a mano da Actions → Build → Run workflow.
+# I file pronti si scaricano da Actions (Artifacts) e, per i tag, dalla pagina Releases.
+name: Build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+
+  desktop:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npx electron-builder --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: word-crawler-${{ runner.os }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error
+
+  extension:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run build:extension
+      - uses: actions/upload-artifact@v4
+        with:
+          name: word-crawler-extension
+          path: dist/word-crawler-extension.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [desktop, extension]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          body: |
+            Word Crawler ${{ github.ref_name }}
+            - Windows: Word-Crawler-Setup (installazione) o Word-Crawler-Portatile (senza installare)
+            - macOS: .dmg (arm64 per Mac con chip Apple, x64 per Mac Intel)
+            - Linux: .AppImage o .deb
+            - Estensione per Chrome, Edge e Brave: word-crawler-extension.zip

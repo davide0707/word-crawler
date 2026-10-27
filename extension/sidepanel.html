@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Word Crawler</title>
+  <link rel="stylesheet" href="core/reader.css">
+  <link rel="stylesheet" href="ext.css">
+</head>
+<body class="sp">
+  <header class="sp-head">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>WORD CRAWLER</span></div>
+    <nav class="sp-links">
+      <button type="button" class="wc-link" id="open-reader">Apri un documento</button>
+      <button type="button" class="wc-link" id="open-archive">Archivio</button>
+    </nav>
+  </header>
+  <section class="sp-page">
+    <p class="sp-title" id="page-title">—</p>
+    <div class="sp-run">
+      <button type="button" class="wc-btn wc-primary" id="run">Leggi questa pagina</button>
+      <button type="button" class="wc-btn" id="pause" disabled>Pausa</button>
+      <button type="button" class="wc-btn" id="finish" disabled>Completa ora</button>
+      <button type="button" class="wc-btn" id="stop" disabled>Ferma</button>
+    </div>
+    <p class="wc-note" id="msg" role="status"></p>
+  </section>
+  <section class="sp-results" id="results"></section>
+  <details class="sp-settings" open>
+    <summary>Impostazioni</summary>
+    <div id="settings"></div>
+  </details>
+
+  <script src="core/settings.js"></script>
+  <script src="core/export.js"></script>
+  <script src="core/settings-ui.js"></script>
+  <script src="core/results-ui.js"></script>
+  <script src="store.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
