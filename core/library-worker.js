@@ -14,21 +14,40 @@
  *   edit     { op }                  modifica dell'utente -> { edits, graph? }
  *   markdown {}                      mappa in Markdown
  *   docs     {}                      elenco dei documenti
+ * Studio (core/study.js), sullo stesso grafo:
+ *   study-load  { state }            carica i progressi salvati
+ *   study-stats { doc? }             quanti concetti nuovi, da ripassare, saldi
+ *   study-path  { doc?, limit? }     percorso dai concetti generali a quelli specifici
+ *   session     { limit?, doc?, ... } le domande di una sessione
+ *   grade       { op }               voto di una risposta -> { result, state }
+ *   mastery     {}                   padronanza di ogni concetto, per colorare la mappa
+ *   anki        { doc?, ... }        esportazione per Anki
+ *   study-reset { id? }              azzera un concetto o tutto
  */
-/* global importScripts, WCLibrary */
+/* global importScripts, WCLibrary, WCStudy */
 'use strict';
-importScripts('settings.js', 'lang.js', 'text.js', 'analysis.js', 'library.js');
+importScripts('settings.js', 'lang.js', 'text.js', 'analysis.js', 'library.js', 'study.js');
 
-var records = [], edits = null, kb = null;
+var records = [], edits = null, kb = null, study = null, studyState = null;
 function base() {
   if (!kb) kb = WCLibrary.open(records, edits);
   return kb;
 }
-function dirty() { if (kb) edits = kb.edits(); kb = null; }
+function learn() {
+  if (!study) study = WCStudy.open(studyState || WCStudy.emptyState(), base());
+  return study;
+}
+// il grafo è cambiato: la libreria si riapre e lo studio rilegge i concetti, senza perdere i progressi
+function dirty() {
+  if (kb) edits = kb.edits();
+  if (study) studyState = study.state();
+  kb = null;
+  study = null;
+}
 
 var handlers = {
   process: function (d) { return WCLibrary.buildRecord(d.input, d.settings || {}); },
-  load: function (d) { records = Array.isArray(d.records) ? d.records : []; edits = d.edits || null; kb = null; return base().stats(); },
+  load: function (d) { records = Array.isArray(d.records) ? d.records : []; edits = d.edits || null; dirty(); kb = null; return base().stats(); },
   upsert: function (d) {
     dirty();
     var r = d.record;
@@ -47,11 +66,29 @@ var handlers = {
   edit: function (d) {
     var k = base(), out = k.applyEdit(d.op);
     edits = out.edits;
-    return d.op && d.op.type === 'pos' ? { edits: edits } : { edits: edits, graph: k.graph() };
+    if (d.op && d.op.type === 'pos') return { edits: edits };
+    if (study) study.invalidate(); // unioni, separazioni e rinomine cambiano i concetti da studiare
+    return { edits: edits, graph: k.graph() };
   },
   markdown: function () { return base().markdown(); },
   docs: function () { return base().docs(); },
-  stats: function () { return base().stats(); }
+  stats: function () { return base().stats(); },
+
+  'study-load': function (d) { studyState = d.state && d.state.cards ? d.state : null; study = null; return learn().stats(); },
+  'study-stats': function (d) { return learn().stats({ doc: d.doc }); },
+  'study-path': function (d) { return learn().path({ doc: d.doc, limit: d.limit }); },
+  session: function (d) { return learn().session({ limit: d.limit, doc: d.doc, ids: d.ids, newCount: d.newCount, newOnly: d.newOnly, anyway: d.anyway }); },
+  grade: function (d) {
+    var s = learn(), out = s.grade(d.op);
+    return { result: out, state: s.state(), stats: s.stats({ doc: d.doc }) };
+  },
+  mastery: function () { return learn().mastery(); },
+  anki: function (d) { return learn().anki({ doc: d.doc, limit: d.limit, onlyStudied: d.onlyStudied }); },
+  'study-reset': function (d) {
+    var s = learn();
+    s.reset({ id: d.id });
+    return { state: s.state(), stats: s.stats({ doc: d.doc }) };
+  }
 };
 
 self.onmessage = function (e) {

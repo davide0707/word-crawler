@@ -779,7 +779,8 @@
     function nodeOut(nd, pos) {
       var p = pos.get(nd.id) || [0, 0];
       return { id: nd.id, label: nd.label, ndocs: nd.docs.length, count: nd.count, weight: round(nd.weight, 3), rank: round(nd.rank, 3), deg: nd.deg,
-        central: nd.central, multi: nd.multi, name: nd.name, defs: nd.defs.length, x: round(p[0], 1), y: round(p[1], 1), pinned: !!p.pinned, docs: nd.docs.map(function (d) { return d.id; }) };
+        central: nd.central, multi: nd.multi, name: nd.name, defs: nd.defs.length, lang: nd.lang, members: nd.members,
+        x: round(p[0], 1), y: round(p[1], 1), pinned: !!p.pinned, docs: nd.docs.map(function (d) { return d.id; }) };
     }
     function graphOut() {
       var G = graph();
