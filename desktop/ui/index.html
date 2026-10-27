@@ -13,6 +13,7 @@
     <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>WORD CRAWLER</span></div>
     <nav class="tabs" role="tablist" aria-label="Sezioni">
       <button type="button" role="tab" id="tab-reader" aria-controls="view-reader" data-view="reader">Lettore</button>
+      <button type="button" role="tab" id="tab-library" aria-controls="view-library" data-view="library">Libreria</button>
       <button type="button" role="tab" id="tab-scanner" aria-controls="view-scanner" data-view="scanner">Scanner del PC</button>
       <button type="button" role="tab" id="tab-archive" aria-controls="view-archive" data-view="archive">Archivio</button>
       <button type="button" role="tab" id="tab-guide" aria-controls="view-guide" data-view="guide">Guida</button>
@@ -21,6 +22,7 @@
   </header>
 
   <section class="view" id="view-reader" role="tabpanel" aria-labelledby="tab-reader"><div id="reader"></div></section>
+  <section class="view" id="view-library" role="tabpanel" aria-labelledby="tab-library" hidden><div id="library"></div></section>
   <section class="view" id="view-scanner" role="tabpanel" aria-labelledby="tab-scanner" hidden><div id="scanner"></div></section>
   <section class="view" id="view-archive" role="tabpanel" aria-labelledby="tab-archive" hidden><div id="archive"></div></section>
   <section class="view guide" id="view-guide" role="tabpanel" aria-labelledby="tab-guide" hidden><div id="guide"></div></section>
@@ -49,6 +51,9 @@
   <script src="../../core/results-ui.js"></script>
   <script src="../../core/reader.js"></script>
   <script src="../../core/archive-ui.js"></script>
+  <script src="../../core/library.js"></script>
+  <script src="../../core/library-import.js"></script>
+  <script src="library-view.js"></script>
   <script src="scan-report.js"></script>
   <script src="scan-view.js"></script>
   <script src="app.js"></script>

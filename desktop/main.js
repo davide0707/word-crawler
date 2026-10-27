@@ -8,6 +8,8 @@
  *  - i file dell'app sono serviti dal protocollo interno app:// (niente file:// generico);
  *  - si aprono solo i file scelti dall'utente; si scrive solo dove l'utente sceglie di salvare
  *    o nella cartella dati dell'app (impostazioni, archivio, rapporti delle scansioni);
+ *  - la libreria legge soltanto i file scelti dall'utente (o trovati nelle cartelle che ha scelto) e salva
+ *    i risultati nella cartella dati dell'app: i documenti originali non vengono mai modificati;
  *  - la scansione del disco è in sola lettura (vedi scanner.js); l'unica azione che cambia qualcosa
  *    sul disco è spostare nel Cestino i duplicati scelti dall'utente, dopo una conferma e molti controlli
  *    (vedi scan-tools.js).
@@ -19,6 +21,7 @@ const fs = require('fs');
 const fsp = fs.promises;
 const { pathToFileURL } = require('url');
 const { Worker } = require('worker_threads');
+const crypto = require('crypto');
 const scanTools = require('./scan-tools');
 
 const APP_ROOT = path.join(__dirname, '..');
@@ -90,6 +93,9 @@ function buildMenu() {
       { label: 'Apri documento…', accelerator: 'CmdOrCtrl+O', click: send('open') },
       { label: 'Apri pagina web…', accelerator: 'CmdOrCtrl+L', click: send('open-url') },
       { type: 'separator' },
+      { label: 'Aggiungi documenti alla libreria…', accelerator: 'CmdOrCtrl+Shift+O', click: send('library:add-files') },
+      { label: 'Aggiungi una cartella alla libreria…', click: send('library:add-folder') },
+      { type: 'separator' },
       { label: 'Scansiona una cartella o un disco…', accelerator: 'CmdOrCtrl+Shift+S', click: send('scanner') },
       { type: 'separator' },
       isMac ? { role: 'close', label: 'Chiudi finestra' } : { role: 'quit', label: 'Esci' }
@@ -100,8 +106,9 @@ function buildMenu() {
     ] },
     { label: 'Vista', submenu: [
       { label: 'Lettore', accelerator: 'CmdOrCtrl+1', click: send('tab:reader') },
-      { label: 'Scanner del PC', accelerator: 'CmdOrCtrl+2', click: send('tab:scanner') },
-      { label: 'Archivio', accelerator: 'CmdOrCtrl+3', click: send('tab:archive') },
+      { label: 'Libreria', accelerator: 'CmdOrCtrl+2', click: send('tab:library') },
+      { label: 'Scanner del PC', accelerator: 'CmdOrCtrl+3', click: send('tab:scanner') },
+      { label: 'Archivio', accelerator: 'CmdOrCtrl+4', click: send('tab:archive') },
       { label: 'Guida', accelerator: 'F1', click: send('tab:guide') },
       { type: 'separator' },
       { role: 'resetZoom', label: 'Dimensione reale' }, { role: 'zoomIn', label: 'Ingrandisci' }, { role: 'zoomOut', label: 'Riduci' },
@@ -372,6 +379,152 @@ ipcMain.handle('scan:export-csv', async (_e, csvPath) => {
   const r = await dialog.showSaveDialog(win, { title: 'Salva l’elenco completo dei file', defaultPath: path.join(app.getPath('documents'), 'elenco-file - Word Crawler.csv'), filters: [{ name: 'CSV', extensions: ['csv'] }] });
   if (r.canceled || !r.filePath) return false;
   await fsp.copyFile(csvPath, r.filePath);
+  return true;
+});
+
+// ------------------------------------------------------------------ IPC: libreria
+// I documenti originali si leggono soltanto. Per ognuno si salva un "record" (testo diviso in pezzi,
+// concetti, posizione delle fonti) nella cartella dati dell'app: library/docs/<id>.json.
+const LIB_SKIP_DIRS = new Set(['node_modules', '$recycle.bin', 'system volume information', '.git', '.svn', '.trash', '.trashes', '__pycache__']);
+// nelle cartelle si saltano le immagini (foto, icone…): si aggiungono una per una se servono
+const LIB_FOLDER_EXT = DOC_EXT.filter((e) => !['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'log', 'text'].includes(e));
+const LIB_MAX_FILES = 5000;
+const LIB_TRASH_DAYS = 30;
+const libraryPaths = new Set(); // file che l'utente ha messo nella libreria
+function libDir(...p) { return userDir('library', ...p); }
+function libId(p) { return 'd-' + crypto.createHash('sha256').update(path.resolve(p)).digest('hex').slice(0, 16); }
+function libRecordPath(id, where) {
+  if (typeof id !== 'string' || !/^d-[a-f0-9]{16}$/.test(id)) throw new Error('Identificativo non valido');
+  return libDir(where || 'docs', id + '.json');
+}
+async function libFileInfo(p) {
+  const st = await fsp.stat(p);
+  return { path: p, id: libId(p), name: path.basename(p), ext: path.extname(p).slice(1).toLowerCase(), size: st.size,
+    mtime: st.mtime.toISOString(), created: st.birthtime && st.birthtime.getTime() > 0 ? st.birthtime.toISOString() : null };
+}
+// tutti i documenti di una cartella e delle sottocartelle, senza seguire i collegamenti e senza aprire i file
+async function libWalk(root) {
+  const files = [];
+  let skipped = 0, truncated = false;
+  const stack = [[root, 0]];
+  while (stack.length) {
+    const [dir, depth] = stack.pop();
+    let entries;
+    try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch (e) { skipped++; continue; }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const e of entries) {
+      if (e.name.startsWith('.') || e.name.startsWith('~$')) continue; // nascosti e file temporanei di Office
+      const full = path.join(dir, e.name);
+      if (e.isSymbolicLink()) continue;
+      if (e.isDirectory()) {
+        if (depth < 20 && !LIB_SKIP_DIRS.has(e.name.toLowerCase())) stack.push([full, depth + 1]);
+      } else if (e.isFile() && LIB_FOLDER_EXT.includes(path.extname(e.name).slice(1).toLowerCase())) {
+        if (files.length >= LIB_MAX_FILES) { truncated = true; break; }
+        try { files.push(await libFileInfo(full)); } catch (err) { skipped++; }
+      }
+    }
+    if (truncated) break;
+  }
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  return { files, skipped, truncated };
+}
+async function writeJsonAtomic(file, data) {
+  await ensureDir(path.dirname(file));
+  const tmp = file + '.' + process.pid + '.tmp';
+  await fsp.writeFile(tmp, data, 'utf8');
+  await fsp.rename(tmp, file);
+}
+async function libPurgeTrash() {
+  const dir = libDir('trash');
+  let names = [];
+  try { names = await fsp.readdir(dir); } catch (e) { return; }
+  const limit = Date.now() - LIB_TRASH_DAYS * 86400000;
+  for (const n of names) {
+    try { const st = await fsp.stat(path.join(dir, n)); if (st.mtimeMs < limit) await fsp.rm(path.join(dir, n), { force: true }); } catch (e) { /* già tolto */ }
+  }
+}
+
+ipcMain.handle('library:add-files', async () => {
+  const r = await dialog.showOpenDialog(win, {
+    title: 'Aggiungi documenti alla libreria',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Documenti', extensions: DOC_EXT }, { name: 'Tutti i file', extensions: ['*'] }]
+  });
+  if (r.canceled || !r.filePaths.length) return null;
+  const files = [];
+  for (const p of r.filePaths.slice(0, LIB_MAX_FILES)) {
+    try { const info = await libFileInfo(p); libraryPaths.add(info.path); files.push(info); } catch (e) { /* sparito */ }
+  }
+  return { files, skipped: 0, truncated: r.filePaths.length > LIB_MAX_FILES };
+});
+ipcMain.handle('library:add-folder', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Aggiungi una cartella alla libreria', properties: ['openDirectory'] });
+  if (r.canceled || !r.filePaths.length) return null;
+  const res = await libWalk(r.filePaths[0]);
+  res.files.forEach((f) => libraryPaths.add(f.path));
+  res.root = r.filePaths[0];
+  return res;
+});
+ipcMain.handle('library:read', async (_e, p) => {
+  if (typeof p !== 'string' || !libraryPaths.has(p)) throw new Error('File non presente nella libreria');
+  const f = await readForRenderer(p);
+  const info = await libFileInfo(p);
+  info.hash = crypto.createHash('sha256').update(f.bytes).digest('hex');
+  return Object.assign(f, info);
+});
+ipcMain.handle('library:list', async () => {
+  const dir = await ensureDir(libDir('docs'));
+  const out = [];
+  for (const f of await fsp.readdir(dir)) {
+    if (!/^d-[a-f0-9]{16}\.json$/.test(f)) continue;
+    try {
+      const rec = JSON.parse(await fsp.readFile(path.join(dir, f), 'utf8'));
+      if (rec && typeof rec.path === 'string' && rec.id === libId(rec.path)) { libraryPaths.add(rec.path); out.push(rec); }
+    } catch (e) { /* record danneggiato: ignorato */ }
+  }
+  libPurgeTrash().catch(() => {});
+  return out;
+});
+ipcMain.handle('library:save', async (_e, rec) => {
+  if (!rec || typeof rec !== 'object' || typeof rec.path !== 'string' || !libraryPaths.has(rec.path) || rec.id !== libId(rec.path)) throw new Error('Documento non valido');
+  const data = JSON.stringify(rec);
+  if (data.length > 80 * 1024 * 1024) throw new Error('Documento troppo grande per la libreria');
+  await writeJsonAtomic(libRecordPath(rec.id), data);
+  return true;
+});
+// togliere un documento dalla libreria non tocca il file originale; il record resta 30 giorni in library/trash
+ipcMain.handle('library:remove', async (_e, id) => {
+  const from = libRecordPath(id), to = libRecordPath(id, 'trash');
+  await ensureDir(path.dirname(to));
+  try { await fsp.rename(from, to); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  return true;
+});
+ipcMain.handle('library:restore', async (_e, id) => {
+  const from = libRecordPath(id, 'trash'), to = libRecordPath(id);
+  await ensureDir(path.dirname(to));
+  await fsp.rename(from, to);
+  const rec = JSON.parse(await fsp.readFile(to, 'utf8'));
+  if (rec && typeof rec.path === 'string') libraryPaths.add(rec.path);
+  return rec;
+});
+ipcMain.handle('library:stat', async (_e, paths) => {
+  if (!Array.isArray(paths)) throw new Error('Elenco non valido');
+  const out = [];
+  for (const p of paths.slice(0, 20000)) {
+    if (typeof p !== 'string' || !libraryPaths.has(p)) continue;
+    try { const st = await fsp.stat(p); out.push({ path: p, exists: true, size: st.size, mtime: st.mtime.toISOString() }); }
+    catch (e) { out.push({ path: p, exists: false }); }
+  }
+  return out;
+});
+ipcMain.handle('library:edits-load', async () => {
+  try { return JSON.parse(await fsp.readFile(libDir('edits.json'), 'utf8')); } catch (e) { return null; }
+});
+ipcMain.handle('library:edits-save', async (_e, edits) => {
+  if (!edits || typeof edits !== 'object') throw new Error('Modifiche non valide');
+  const data = JSON.stringify(edits);
+  if (data.length > 20 * 1024 * 1024) throw new Error('Modifiche troppo grandi');
+  await writeJsonAtomic(libDir('edits.json'), data);
   return true;
 });
 

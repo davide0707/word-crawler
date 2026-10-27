@@ -34,7 +34,8 @@ const fake = {
   ipcMain: { handle: (name, fn) => { handlers[name] = fn; } },
   dialog: {
     showSaveDialog: async (_w, o) => ({ canceled: false, filePath: path.join(USER, 'salvato-' + path.basename(o.defaultPath)) }),
-    showMessageBox: async (_w, o) => { fake.asked = o; return { response: fake.answer }; }
+    showMessageBox: async (_w, o) => { fake.asked = o; return { response: fake.answer }; },
+    showOpenDialog: async (_w, o) => { fake.openDialog = o; return fake.openResult || { canceled: true, filePaths: [] }; }
   },
   // "Cestino" finto: sposta il file in una cartella a parte
   shell: { showItemInFolder: () => {}, openExternal: () => {}, trashItem: async (p) => { const d = path.join(USER, 'cestino'); fs.mkdirSync(d, { recursive: true }); fs.renameSync(p, path.join(d, Date.now() + '-' + path.basename(p))); } },
@@ -60,7 +61,9 @@ async function check(name, fn) {
   await check('tutti i canali IPC sono registrati', () => {
     ['file:open', 'url:fetch', 'file:save', 'settings:load', 'settings:save', 'archive:list', 'archive:save', 'archive:remove',
       'scan:roots', 'scan:pick-folder', 'scan:start', 'scan:cancel', 'scan:export-csv', 'shell:show', 'shell:external', 'app:info',
-      'export:pdf', 'scan:history', 'scan:compare', 'scan:trash']
+      'export:pdf', 'scan:history', 'scan:compare', 'scan:trash',
+      'library:add-files', 'library:add-folder', 'library:read', 'library:list', 'library:save', 'library:remove', 'library:restore',
+      'library:stat', 'library:edits-load', 'library:edits-save']
       .forEach((c) => assert.ok(handlers[c], 'manca ' + c));
   });
   await check('impostazioni: salvataggio e lettura', async () => {
@@ -207,6 +210,75 @@ async function check(name, fn) {
     assert.ok(log.includes('NEL CESTINO') && log.includes(copy) && log.includes('copia tenuta: ' + orig));
   });
   fs.rmSync(dir2, { recursive: true, force: true });
+
+  // ---------------------------------------------------------------- libreria
+  const LIB = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-lib-'));
+  fs.mkdirSync(path.join(LIB, 'Dispense', 'Reti'), { recursive: true });
+  fs.mkdirSync(path.join(LIB, 'node_modules', 'pacchetto'), { recursive: true });
+  fs.mkdirSync(path.join(LIB, '.nascosta'), { recursive: true });
+  fs.writeFileSync(path.join(LIB, 'Dispense', 'Reti', 'lezione 1.pdf'), '%PDF-1.4 finto');
+  fs.writeFileSync(path.join(LIB, 'Dispense', 'appunti.md'), '# Appunti\n\nLa QAM è una modulazione digitale.');
+  fs.writeFileSync(path.join(LIB, 'Dispense', 'foto.jpg'), 'immagine');
+  fs.writeFileSync(path.join(LIB, 'Dispense', '~$bozza.docx'), 'temporaneo di Word');
+  fs.writeFileSync(path.join(LIB, 'node_modules', 'pacchetto', 'README.md'), 'da saltare');
+  fs.writeFileSync(path.join(LIB, '.nascosta', 'segreto.txt'), 'da saltare');
+  fs.writeFileSync(path.join(LIB, 'programma.exe'), 'MZ');
+  // solo i file (la cartella Reti cambia data perché il test stesso, più sotto, cancella il PDF)
+  const filesOf = () => fs.readdirSync(path.join(LIB, 'Dispense')).filter((f) => fs.statSync(path.join(LIB, 'Dispense', f)).isFile())
+    .map((f) => f + ':' + fs.statSync(path.join(LIB, 'Dispense', f)).mtimeMs + ':' + fs.statSync(path.join(LIB, 'Dispense', f)).size).join('|');
+  const before = filesOf();
+  let folder;
+  await check('libreria: una cartella intera, senza nascosti, programmi, immagini e file temporanei', async () => {
+    fake.openResult = { canceled: false, filePaths: [LIB] };
+    folder = await handlers['library:add-folder']({});
+    assert.deepStrictEqual(folder.files.map((f) => path.relative(LIB, f.path)).sort(), [path.join('Dispense', 'Reti', 'lezione 1.pdf'), path.join('Dispense', 'appunti.md')].sort());
+    const md = folder.files.find((f) => f.ext === 'md');
+    assert.ok(/^d-[a-f0-9]{16}$/.test(md.id) && md.size > 10 && md.mtime);
+    assert.deepStrictEqual(fake.openDialog.properties, ['openDirectory']);
+  });
+  await check('libreria: legge solo i file scelti, con l’impronta SHA-256', async () => {
+    const md = folder.files.find((f) => f.ext === 'md');
+    const f = await handlers['library:read']({}, md.path);
+    assert.strictEqual(Buffer.from(f.bytes).toString('utf8'), fs.readFileSync(md.path, 'utf8'));
+    assert.strictEqual(f.hash, require('crypto').createHash('sha256').update(fs.readFileSync(md.path)).digest('hex'));
+    assert.strictEqual(f.id, md.id);
+    await assert.rejects(() => handlers['library:read']({}, '/etc/passwd'));
+    await assert.rejects(() => handlers['library:read']({}, path.join(LIB, '.nascosta', 'segreto.txt')));
+  });
+  await check('libreria: salva, elenca, toglie e rimette un documento (il file originale non si tocca)', async () => {
+    const md = folder.files.find((f) => f.ext === 'md');
+    const rec = { v: 1, id: md.id, path: md.path, name: md.name, chunks: [{ n: 0, kind: 'p', text: 'La QAM è una modulazione digitale.' }], concepts: [], aliases: [] };
+    assert.strictEqual(await handlers['library:save']({}, rec), true);
+    await assert.rejects(() => handlers['library:save']({}, Object.assign({}, rec, { id: 'd-0000000000000000' })), /non valido/);
+    await assert.rejects(() => handlers['library:save']({}, Object.assign({}, rec, { path: '/etc/passwd', id: rec.id })));
+    let list = await handlers['library:list']({});
+    assert.deepStrictEqual(list.map((r) => r.name), ['appunti.md']);
+    await handlers['library:remove']({}, md.id);
+    assert.strictEqual((await handlers['library:list']({})).length, 0);
+    assert.ok(fs.existsSync(md.path), 'il file originale resta');
+    const back = await handlers['library:restore']({}, md.id);
+    assert.strictEqual(back.name, 'appunti.md');
+    list = await handlers['library:list']({});
+    assert.strictEqual(list.length, 1);
+    await assert.rejects(() => handlers['library:remove']({}, '../../settings'));
+    await assert.rejects(() => handlers['library:restore']({}, 'd-zzzz'));
+  });
+  await check('libreria: file cambiati o spariti, modifiche dell’utente', async () => {
+    const md = folder.files.find((f) => f.ext === 'md');
+    const pdfF = folder.files.find((f) => f.ext === 'pdf');
+    fs.rmSync(pdfF.path);
+    const st = await handlers['library:stat']({}, [md.path, pdfF.path, '/etc/passwd']);
+    assert.deepStrictEqual(st.map((x) => x.exists), [true, false]);
+    assert.strictEqual(await handlers['library:edits-load']({}), null);
+    await handlers['library:edits-save']({}, { v: 1, merges: [['qam', 'quadratur amplitud modulation']], labels: { qam: 'QAM' } });
+    assert.deepStrictEqual((await handlers['library:edits-load']({})).labels, { qam: 'QAM' });
+    await assert.rejects(() => handlers['library:edits-save']({}, null));
+  });
+  await check('libreria: nessun file della cartella è stato modificato', () => {
+    assert.strictEqual(filesOf(), before);
+    assert.ok(fs.existsSync(path.join(USER, 'library', 'docs')) && !fs.readdirSync(LIB).includes('library'));
+  });
+  fs.rmSync(LIB, { recursive: true, force: true });
 
   fs.rmSync(USER, { recursive: true, force: true });
   console.log(failures ? '\n' + failures + ' test falliti' : '\nTutti i test superati');

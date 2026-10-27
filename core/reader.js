@@ -3,7 +3,8 @@
  * Word Crawler: il lettore (condiviso tra app desktop ed estensione).
  * Apre un documento, lo mostra, lo fa leggere al ragno e raccoglie i risultati.
  *
- * WCReader.mount(root, host) -> { openBytes(name, bytes, source), openUrl(url), openText(text, title), stop(), pause() }
+ * WCReader.mount(root, host) -> { openBytes(name, bytes, source, opts), openUrl(url), openText(text, title), stop(), pause() }
+ *   opts.focus: { text, page } apre il documento già letto, alla posizione di quel passaggio (dalla libreria)
  * host: {
  *   pickFile?(): Promise<{ name, bytes, source }|null>   (se manca: selettore file del browser)
  *   fetchUrl?(url): Promise<{ html, url }>                 (solo app desktop)
@@ -65,7 +66,7 @@
     var settings = g.WCSettings.defaults();
     var doc = null;          // { title, format, source }
     var tokens = [], plan = null, results = null, engine = null, pages = [], io = null, offVer = 0, headings = [];
-    var dirty = false, openSeq = 0, runSeq = 0, userMarks = [], ocrEngine = null, objectUrls = [];
+    var dirty = false, openSeq = 0, runSeq = 0, userMarks = [], ocrEngine = null, objectUrls = [], focus = null;
 
     // ------------------------------------------------------------ struttura
     root.textContent = '';
@@ -240,8 +241,9 @@
       setButtons();
     }
 
-    async function openBytes(name, bytes, source) {
+    async function openBytes(name, bytes, source, opts) {
       resetDoc();
+      focus = opts && opts.focus && opts.focus.text ? opts.focus : null;
       busy('Apro ' + name + '…');
       var model;
       try { model = await g.WCFormats.open(bytes, name); }
@@ -582,6 +584,39 @@
       rui.show(results, doc, tokens);
       rui.setUserMarks(userMarks);
       startEngine(false);
+      if (focus) { var f = focus; focus = null; applyFocus(f); }
+    }
+
+    // passaggio cercato nella libreria: lettura completata subito, poi il passaggio evidenziato
+    function findPassage(f) {
+      var want = [], m, re = new RegExp(g.WCText.WORD.source, 'gu');
+      while ((m = re.exec(f.text)) && want.length < 12) want.push(g.WCText.fold(m[0]));
+      if (!want.length) return -1;
+      var n = Math.min(want.length, 8), best = -1, bestScore = 0;
+      for (var i = 0; i < tokens.length; i++) {
+        if (g.WCText.fold(tokens[i].text) !== want[0]) continue;
+        var sc = 0;
+        for (var k = 0; k < n && i + k < tokens.length; k++) if (g.WCText.fold(tokens[i + k].text) === want[k]) sc++;
+        if (f.page != null && tokens[i].page === f.page) sc += 0.5;
+        if (sc > bestScore) { bestScore = sc; best = i; }
+        if (sc >= n) break;
+      }
+      return bestScore >= Math.min(3, n) ? best : -1;
+    }
+    function applyFocus(f) {
+      var idx = findPassage(f);
+      if (idx < 0 && f.page != null) idx = tokens.findIndex(function (t) { return t.page === f.page; });
+      if (idx < 0) return;
+      if (engine && engine.isActive()) engine.finish();
+      setButtons();
+      var len = Math.max(1, (f.text.match(new RegExp(g.WCText.WORD.source, 'gu')) || []).length);
+      setTimeout(function () {
+        jumpTo(idx);
+        if (engine && engine.setPreview) {
+          engine.setPreview({ from: idx, to: Math.min(tokens.length, idx + len), type: 'hl' });
+          setTimeout(function () { if (engine && engine.setPreview) engine.setPreview(null); }, 4000);
+        }
+      }, 60);
     }
 
     function startEngine(isStatic) {
@@ -676,7 +711,7 @@
     window.addEventListener('beforeunload', function () { if (ocrEngine) ocrEngine.terminate(); });
 
     return {
-      openBytes: openBytes, openUrl: openUrl, openText: openText,
+      openBytes: openBytes, openUrl: openUrl, openText: openText, focus: applyFocus,
       stop: function () { if (engine) engine.stop(); },
       pause: function () { if (engine && engine.isRunning()) { engine.pause(); setButtons(); } },
       // per i test e l'app: stato attuale

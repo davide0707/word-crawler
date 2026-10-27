@@ -37,6 +37,18 @@ contextBridge.exposeInMainWorld('wcDesktop', {
     trash: (scanId, items) => ipcRenderer.invoke('scan:trash', scanId, items),
     onEvent: (cb) => listen('scan:event', cb)
   },
+  library: {
+    addFiles: () => ipcRenderer.invoke('library:add-files'),
+    addFolder: () => ipcRenderer.invoke('library:add-folder'),
+    read: (p) => ipcRenderer.invoke('library:read', p),
+    list: () => ipcRenderer.invoke('library:list'),
+    save: (rec) => ipcRenderer.invoke('library:save', rec),
+    remove: (id) => ipcRenderer.invoke('library:remove', id),
+    restore: (id) => ipcRenderer.invoke('library:restore', id),
+    stat: (paths) => ipcRenderer.invoke('library:stat', paths),
+    loadEdits: () => ipcRenderer.invoke('library:edits-load'),
+    saveEdits: (edits) => ipcRenderer.invoke('library:edits-save', edits)
+  },
   showItem: (p) => ipcRenderer.invoke('shell:show', p),
   openExternal: (url) => ipcRenderer.invoke('shell:external', url),
   info: () => ipcRenderer.invoke('app:info'),
