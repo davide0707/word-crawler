@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler (estensione): il ragno sulle pagine web.
  * Riceve i comandi dal pannello laterale, legge il testo principale della pagina,

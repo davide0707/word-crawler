@@ -3,6 +3,8 @@
   "name": "Word Crawler",
   "version": "2.1.0",
   "description": "Un ragno che legge pagine web, PDF (anche scansionati), documenti Word e immagini: sottolinea, cerchia, riassume, prepara le schede di ripasso e salva. Senza intelligenza artificiale.",
+  "author": "Davide Di Filippo",
+  "homepage_url": "https://github.com/davide0707/word-crawler",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

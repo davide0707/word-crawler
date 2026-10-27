@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: dati delle lingue (senza AI).
  * Italiano, inglese, francese, spagnolo, tedesco e portoghese.

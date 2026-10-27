@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: lettura del testo da una pagina HTML (sito web o documento già mostrato).
  * Trova il contenitore del testo principale e trasforma ogni parola in un token

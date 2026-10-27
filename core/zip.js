@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: ZIP minimale.
  * Lettura (per DOCX, ODT, PPTX, XLSX, EPUB): file "stored" e "deflate", e ZIP64.

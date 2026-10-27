@@ -2,25 +2,47 @@
   "name": "word-crawler-studio",
   "productName": "Word Crawler",
   "version": "2.1.0",
-  "description": "Un ragno che legge documenti, PDF (anche scansionati, con Tesseract) e pagine web in sei lingue: sottolinea, cerchia, riassume, prepara le schede di ripasso e scansiona il disco. Senza intelligenza artificiale.",
-  "homepage": "https://github.com/davide0707/word-crawler",
+  "description": "Reads documents, scanned PDFs and web pages in six languages: underlines, circles, summarises, builds review cards and maps your disk. Statistical text analysis, no AI.",
+  "keywords": [
+    "reader",
+    "summarization",
+    "keyword-extraction",
+    "textrank",
+    "study-tool",
+    "flashcards",
+    "ocr",
+    "tesseract",
+    "pdf",
+    "docx",
+    "electron",
+    "chrome-extension",
+    "disk-usage",
+    "duplicate-finder",
+    "treemap",
+    "italian"
+  ],
+  "homepage": "https://github.com/davide0707/word-crawler#readme",
+  "bugs": {
+    "url": "https://github.com/davide0707/word-crawler/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/davide0707/word-crawler.git"
+    "url": "git+https://github.com/davide0707/word-crawler.git"
+  },
+  "license": "UNLICENSED",
+  "author": {
+    "name": "Davide Di Filippo",
+    "email": "77792194+davide0707@users.noreply.github.com",
+    "url": "https://github.com/davide0707"
   },
   "main": "desktop/main.js",
   "private": true,
-  "author": {
-    "name": "Word Crawler",
-    "email": "wordcrawler@example.invalid"
-  },
-  "license": "UNLICENSED",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "start": "electron .",
-    "test": "node tests/analysis.test.js && node tests/export.test.js && node tests/scanner.test.js && node tests/main.test.js && node tests/formats.test.js && node tests/reader.test.js",
+    "test": "npm run lint && node tests/analysis.test.js && node tests/export.test.js && node tests/scanner.test.js && node tests/main.test.js && node tests/formats.test.js && node tests/reader.test.js",
     "test:ui": "node tests/desktop-ui.test.js",
     "fixtures": "python3 tests/make-fixtures.py",
     "build:extension": "node scripts/build-extension.js",
@@ -29,7 +51,8 @@
     "dist:mac": "electron-builder --mac --publish never",
     "dist:linux": "electron-builder --linux --publish never",
     "test:extension": "node tests/extension.test.js",
-    "fixtures:ocr": "python3 tests/make-ocr-fixtures.py"
+    "fixtures:ocr": "python3 tests/make-ocr-fixtures.py",
+    "lint": "node scripts/check.js"
   },
   "dependencies": {
     "pdfjs-dist": "4.10.38",
@@ -43,7 +66,7 @@
   "build": {
     "appId": "it.wordcrawler.studio",
     "productName": "Word Crawler",
-    "copyright": "Word Crawler",
+    "copyright": "Copyright © 2026 Davide Di Filippo. All rights reserved.",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -54,6 +77,7 @@
       "core/**/*",
       "build/icons/**/*",
       "THIRD-PARTY.md",
+      "LICENSE",
       "!**/*.map",
       "!node_modules/pdfjs-dist/legacy/**",
       "!node_modules/pdfjs-dist/web/**",
@@ -147,7 +171,7 @@
       "artifactName": "Word-Crawler-Setup-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "Word-Crawler-Portatile-${version}.${ext}"
+      "artifactName": "Word-Crawler-Portable-${version}.${ext}"
     },
     "mac": {
       "target": [
@@ -173,7 +197,7 @@
       "category": "Education",
       "icon": "build/icons/icon.png",
       "artifactName": "Word-Crawler-${version}-${arch}.${ext}",
-      "maintainer": "Word Crawler <wordcrawler@example.invalid>"
+      "maintainer": "Davide Di Filippo <77792194+davide0707@users.noreply.github.com>"
     }
   }
 }

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /* Word Crawler (estensione): pannello laterale. Comanda il ragno nella scheda e mostra i risultati. */
 (function () {
   'use strict';

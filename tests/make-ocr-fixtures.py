@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 """
 Crea le pagine "scansionate" per i test dell'OCR e il loro testo riconosciuto dal vero Tesseract.
   tests/fixtures/scan-1.png, scan-2.png   due pagine scritte a 150 dpi, come uscite da uno scanner

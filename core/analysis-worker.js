@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: analisi in un thread separato (Web Worker), per i documenti lunghi.
  * La pagina resta reattiva mentre si analizzano centinaia di migliaia di parole.

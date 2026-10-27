@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: lettore dei vecchi file Word 97-2003 (.doc).
  * Legge il contenitore "Compound File" (CFB), poi il testo del documento attraverso

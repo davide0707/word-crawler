@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: riconoscimento del testo nelle immagini (OCR) con Tesseract.
  * Serve per i PDF scansionati e per le foto o le immagini di pagine (PNG, JPG, WebP, BMP, GIF).

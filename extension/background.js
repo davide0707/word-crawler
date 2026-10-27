@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /* Word Crawler (estensione): icona, scorciatoia da tastiera, menu e segni ritrovati sulle pagine salvate. */
 importScripts('core/settings.js', 'core/lang.js', 'content-list.js');
 

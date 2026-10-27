@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Test del lettore in Chromium: la pagina vera del lettore (core/reader.js) con un host finto.
  * Prova: esempio, ripasso e quiz, penna, esportazioni (Word, pagina segnata, Anki, PDF), documento lungo

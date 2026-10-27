@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: modulo delle impostazioni, generato dall'elenco dei parametri (settings.js).
  * Ogni controllo mostra il valore e una riga che spiega cosa cambia.

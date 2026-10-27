@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /* Word Crawler (estensione): mostra il documento segnato e apre la finestra di stampa (per salvarlo in PDF). */
 (function () {
   'use strict';

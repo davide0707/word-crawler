@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 """Crea i file di prova in tutti i formati (serve LibreOffice e pandoc). Uso: python3 tests/make-fixtures.py"""
 import os, subprocess, shutil
 from pathlib import Path

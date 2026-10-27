@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Test dello scanner del disco (Node, senza Electron). Uso: node tests/scanner.test.js
  * Crea una cartella di prova con casi difficili e verifica il rapporto.

@@ -1,0 +1,46 @@
+Word Crawler
+Copyright (c) 2026 Davide Di Filippo. All rights reserved.
+
+This software and its source code, documentation, images and other files
+(the "Software") are the exclusive property of the copyright holder.
+
+The source code is published for viewing only. No licence is granted to use,
+copy, modify, merge, publish, distribute, sublicense or sell copies of the
+Software, in whole or in part, or to create derivative works from it, without
+prior written permission from the copyright holder.
+
+Permission requests: https://github.com/davide0707
+
+THIRD-PARTY COMPONENTS
+Components and data written by others keep their own licences, which are
+listed in THIRD-PARTY.md. In particular, the word-frequency files in
+core/freq/ are adapted from FrequencyWords by Hermit Dave and are distributed
+under the Creative Commons Attribution-ShareAlike 4.0 International licence
+(https://creativecommons.org/licenses/by-sa/4.0/); they are not covered by the
+reservation of rights above.
+
+DISCLAIMER
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+-------------------------------------------------------------------------------
+
+Word Crawler
+Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati.
+
+Il software, il codice sorgente, la documentazione, le immagini e gli altri
+file (il "Software") sono di proprietà esclusiva del titolare dei diritti.
+
+Il codice sorgente è pubblicato solo per la consultazione. Non è concessa
+alcuna licenza per usare, copiare, modificare, unire, pubblicare, distribuire,
+concedere in sublicenza o vendere copie del Software, in tutto o in parte, né
+per creare opere derivate, senza il permesso scritto del titolare.
+
+I componenti e i dati di terze parti mantengono le proprie licenze, elencate in
+THIRD-PARTY.md; i file di frequenza in core/freq/ sono distribuiti con licenza
+Creative Commons Attribuzione - Condividi allo stesso modo 4.0 Internazionale.
+
+Il Software è fornito "così com'è", senza garanzie di alcun tipo.

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Prepara l'estensione per Chrome/Edge/Brave in dist/extension e la comprime in dist/word-crawler-extension.zip.
  * Copia il motore condiviso (core/), le icone e, se installato con "npm install", PDF.js.
@@ -20,6 +21,7 @@ fs.cpSync(path.join(ROOT, 'extension'), OUT, { recursive: true });
 CORE.forEach((f) => fs.copyFileSync(path.join(ROOT, 'core', f), path.join(OUT, 'core', f)));
 fs.cpSync(path.join(ROOT, 'core', 'freq'), path.join(OUT, 'core', 'freq'), { recursive: true });
 fs.copyFileSync(path.join(ROOT, 'THIRD-PARTY.md'), path.join(OUT, 'THIRD-PARTY.md'));
+fs.copyFileSync(path.join(ROOT, 'LICENSE'), path.join(OUT, 'LICENSE.txt'));
 fs.mkdirSync(path.join(OUT, 'icons'), { recursive: true });
 [16, 48, 128].forEach((s) => fs.copyFileSync(path.join(ROOT, 'build', 'icons', 'icon' + s + '.png'), path.join(OUT, 'icons', 'icon' + s + '.png')));
 

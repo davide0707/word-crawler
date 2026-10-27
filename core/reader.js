@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Word Crawler: il lettore (condiviso tra app desktop ed estensione).
  * Apre un documento, lo mostra, lo fa leggere al ragno e raccoglie i risultati.
