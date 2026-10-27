@@ -74,17 +74,51 @@
     ],
     "fileAssociations": [
       {
-        "ext": [
-          "pdf",
-          "docx",
-          "doc",
-          "odt",
-          "epub",
-          "rtf",
-          "md",
-          "txt"
-        ],
-        "name": "Documento",
+        "ext": "pdf",
+        "name": "Documento PDF",
+        "mimeType": "application/pdf",
+        "role": "Viewer"
+      },
+      {
+        "ext": "docx",
+        "name": "Documento Word",
+        "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "role": "Viewer"
+      },
+      {
+        "ext": "doc",
+        "name": "Documento Word 97-2003",
+        "mimeType": "application/msword",
+        "role": "Viewer"
+      },
+      {
+        "ext": "odt",
+        "name": "Documento OpenDocument",
+        "mimeType": "application/vnd.oasis.opendocument.text",
+        "role": "Viewer"
+      },
+      {
+        "ext": "epub",
+        "name": "Libro EPUB",
+        "mimeType": "application/epub+zip",
+        "role": "Viewer"
+      },
+      {
+        "ext": "rtf",
+        "name": "Documento RTF",
+        "mimeType": "application/rtf",
+        "role": "Viewer"
+      },
+      {
+        "ext": "md",
+        "name": "Testo Markdown",
+        "mimeType": "text/markdown",
+        "role": "Viewer"
+      },
+      {
+        "ext": "txt",
+        "name": "Testo",
+        "mimeType": "text/plain",
         "role": "Viewer"
       }
     ],
