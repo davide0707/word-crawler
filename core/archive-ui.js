@@ -60,8 +60,8 @@
       detail.textContent = '';
       var e = current;
       if (!e) { detail.appendChild(el('p', { class: 'wc-note', text: 'Scegli una lettura dall’elenco.' })); return; }
-      var exportSel = el('select', { 'aria-label': 'Esporta questa lettura' }, [el('option', { value: '', text: 'Esporta…' }), el('option', { value: 'md', text: 'Markdown (.md)' }),
-        el('option', { value: 'txt', text: 'Testo (.txt)' }), el('option', { value: 'html', text: 'Pagina web (.html)' }), el('option', { value: 'json', text: 'Dati (.json)' })]);
+      var exportSel = el('select', { 'aria-label': 'Esporta questa lettura' }, [el('option', { value: '', text: 'Esporta…' })].concat(
+        X.KINDS.filter(function (k) { return !k[2] && (k[0] !== 'anki' || (e.cards && e.cards.length)); }).map(function (k) { return el('option', { value: k[0], text: k[1] }); })));
       var delBtn = el('button', { type: 'button', class: 'wc-btn', text: 'Elimina' });
       var confirmBox = el('div', { class: 'wca-confirm', hidden: 'hidden' }, [el('span', { text: 'Eliminare questa lettura dall’archivio? Non si può annullare.' })]);
       var yes = el('button', { type: 'button', class: 'wc-btn wc-danger', text: 'Sì, elimina' });
@@ -101,6 +101,16 @@
           return ul;
         }));
       });
+      parts.push(section('I tuoi segni', e.userMarks, function (items) {
+        var ul = el('ul', { class: 'wca-hl wc-t-unote' });
+        items.forEach(function (m) { ul.appendChild(el('li', { text: (X.USER[m.type] || m.type) + ': «' + m.text + '»' + (m.note ? ' — ' + m.note : '') + (m.page != null ? ' (p. ' + (m.page + 1) + ')' : '') })); });
+        return ul;
+      }));
+      parts.push(section('Schede di ripasso', e.cards, function (items) {
+        var ul = el('ul', { class: 'wca-hl wc-t-def' });
+        items.forEach(function (c) { ul.appendChild(el('li', {}, [el('strong', { text: c.front }), el('br'), el('span', { text: c.back })])); });
+        return ul;
+      }));
       parts.push(section('Statistiche', X.statsLines(e.stats), function (items) {
         var ul = el('ul', { class: 'wca-stats' });
         items.forEach(function (l) { ul.appendChild(el('li', { text: l })); });

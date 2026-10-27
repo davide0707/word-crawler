@@ -25,6 +25,15 @@
     </div>
     <p class="wc-note" id="msg" role="status"></p>
   </section>
+  <section class="sp-pen" aria-label="Penna">
+    <div class="wc-pen-tools" id="pen" role="group" aria-label="Penna">
+      <button type="button" class="wc-btn" data-tool="hl" aria-pressed="false" disabled><span class="wc-pen-sw hl" aria-hidden="true"></span>Evidenzia</button>
+      <button type="button" class="wc-btn" data-tool="under" aria-pressed="false" disabled><span class="wc-pen-sw under" aria-hidden="true"></span>Sottolinea</button>
+      <button type="button" class="wc-btn" data-tool="note" aria-pressed="false" disabled><span class="wc-pen-sw note" aria-hidden="true"></span>Nota</button>
+      <button type="button" class="wc-btn" data-tool="erase" aria-pressed="false" disabled><span class="wc-pen-sw erase" aria-hidden="true"></span>Gomma</button>
+    </div>
+    <p class="wc-note">Penna: trascina sulle parole della pagina. Esc per posarla.</p>
+  </section>
   <section class="sp-results" id="results"></section>
   <details class="sp-settings" open>
     <summary>Impostazioni</summary>
@@ -32,9 +41,13 @@
   </details>
 
   <script src="core/settings.js"></script>
+  <script src="core/zip.js"></script>
+  <script src="core/annotate.js"></script>
+  <script src="core/docx.js"></script>
   <script src="core/export.js"></script>
   <script src="core/settings-ui.js"></script>
   <script src="core/results-ui.js"></script>
+  <script src="content-list.js"></script>
   <script src="store.js"></script>
   <script src="sidepanel.js"></script>
 </body>

@@ -1,7 +1,8 @@
 /*
- * Word Crawler: lettore ZIP minimale (per DOCX, ODT, PPTX, XLSX, EPUB).
- * Solo lettura. Supporta file "stored" e "deflate", e ZIP64.
- * La decompressione usa DecompressionStream del browser oppure zlib di Node.
+ * Word Crawler: ZIP minimale.
+ * Lettura (per DOCX, ODT, PPTX, XLSX, EPUB): file "stored" e "deflate", e ZIP64.
+ * Scrittura (per esportare i documenti Word): file compressi con deflate quando il browser lo permette.
+ * La (de)compressione usa (De)CompressionStream del browser oppure zlib di Node.
  */
 (function (g) {
   'use strict';
@@ -96,5 +97,69 @@
     };
   }
 
-  g.WCZip = { open: open, isZip: isZip };
+  // ------------------------------------------------------------ scrittura
+  var CRC = null;
+  function crc32(bytes) {
+    if (!CRC) {
+      CRC = new Uint32Array(256);
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        CRC[n] = c >>> 0;
+      }
+    }
+    var crc = 0xffffffff;
+    for (var i = 0; i < bytes.length; i++) crc = CRC[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+  function deflateRaw(bytes) {
+    if (typeof CompressionStream !== 'undefined') {
+      var stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+      return new Response(stream).arrayBuffer().then(function (b) { return new Uint8Array(b); });
+    }
+    if (typeof require === 'function') return Promise.resolve(new Uint8Array(require('zlib').deflateRawSync(bytes)));
+    return Promise.resolve(null);
+  }
+
+  /*
+   * Crea un archivio ZIP. files: [{ name, data: stringa (UTF-8) o Uint8Array }]
+   * Restituisce Promise<Uint8Array>.
+   */
+  function write(files) {
+    var enc = new TextEncoder();
+    var d = new Date();
+    var dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    var dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    return Promise.all(files.map(function (f) {
+      var data = typeof f.data === 'string' ? enc.encode(f.data) : f.data;
+      return (data.length > 64 ? deflateRaw(data) : Promise.resolve(null)).then(function (z) {
+        var use = z && z.length < data.length;
+        return { name: enc.encode(f.name), data: data, comp: use ? z : data, method: use ? 8 : 0, crc: crc32(data) };
+      });
+    })).then(function (items) {
+      var size = 22;
+      items.forEach(function (it) { size += 30 + it.name.length + it.comp.length + 46 + it.name.length; });
+      var out = new Uint8Array(size), v = new DataView(out.buffer), p = 0;
+      function u16(x) { v.setUint16(p, x, true); p += 2; }
+      function u32(x) { v.setUint32(p, x >>> 0, true); p += 4; }
+      items.forEach(function (it) {
+        it.offset = p;
+        u32(0x04034b50); u16(20); u16(0x0800); u16(it.method); u16(dosTime); u16(dosDate);
+        u32(it.crc); u32(it.comp.length); u32(it.data.length); u16(it.name.length); u16(0);
+        out.set(it.name, p); p += it.name.length;
+        out.set(it.comp, p); p += it.comp.length;
+      });
+      var cd = p;
+      items.forEach(function (it) {
+        u32(0x02014b50); u16(20); u16(20); u16(0x0800); u16(it.method); u16(dosTime); u16(dosDate);
+        u32(it.crc); u32(it.comp.length); u32(it.data.length); u16(it.name.length); u16(0); u16(0); u16(0); u16(0); u32(0); u32(it.offset);
+        out.set(it.name, p); p += it.name.length;
+      });
+      var cdSize = p - cd;
+      u32(0x06054b50); u16(0); u16(0); u16(items.length); u16(items.length); u32(cdSize); u32(cd); u16(0);
+      return out;
+    });
+  }
+
+  g.WCZip = { open: open, isZip: isZip, write: write, crc32: crc32 };
 })(globalThis);

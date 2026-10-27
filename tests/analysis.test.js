@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
-['core/settings.js', 'core/text.js', 'core/analysis.js'].forEach((f) => require(path.join(root, f)));
+['core/settings.js', 'core/lang.js', 'core/text.js', 'core/analysis.js'].forEach((f) => require(path.join(root, f)));
 const { WCText, WCAnalysis, WCSettings } = globalThis;
 
 function tokensFromPlain(text) {
@@ -123,6 +123,105 @@ check('testo inglese: parole chiave e sunto', () => {
   ['Odysseus', 'Calypso', 'Poseidon', 'Zeus', 'Ithaca'].forEach((w) => assert.ok(words.includes(w), 'manca ' + w + ' in ' + words.join(', ')));
   assert.strictEqual(results.stats.readabilityScale, 'Flesch');
   assert.ok(results.summary.every((s) => /[.!?]$/.test(s.text)), 'frasi senza punto finale');
+});
+
+// ------------------------------------------------------------ lingue (versione 2.1)
+const { WCLang } = globalThis;
+const LANGTXT = {};
+['fr', 'es', 'de', 'pt'].forEach((l) => { LANGTXT[l] = fs.readFileSync(path.join(__dirname, 'fixtures/lang', l + '.txt'), 'utf8'); });
+LANGTXT.it = it;
+
+check('sei lingue riconosciute', () => {
+  Object.keys(LANGTXT).forEach((l) => assert.strictEqual(WCLang.detect(tokensFromPlain(LANGTXT[l])), l, 'testo ' + l));
+  assert.strictEqual(WCLang.detect('The war was over and the soldiers went home to their families.'), 'en');
+  assert.strictEqual(WCLang.detect('Os soldados voltaram para casa depois da guerra, mas a cidade não era mais a mesma.'), 'pt');
+  assert.strictEqual(WCLang.detect('Los soldados volvieron a casa después de la guerra, pero la ciudad ya no era la misma.'), 'es');
+});
+
+check('frequenze delle parole: si caricano e le parole comuni pesano meno', () => {
+  ['it', 'en', 'fr', 'es', 'de', 'pt'].forEach((l) => { WCLang.ensure(l); assert.ok(WCLang.hasFreq(l), 'frequenze ' + l); });
+  assert.ok(WCLang.rarity('it', 'casa') < WCLang.rarity('it', 'deterrenza'));
+  assert.ok(WCLang.rarity('en', 'house') < WCLang.rarity('en', 'deterrence'));
+  assert.ok(WCLang.rarity('de', 'haus') < WCLang.rarity('de', 'abschreckung'));
+  const { results } = WCAnalysis.analyze(tokensFromPlain(it), WCSettings.defaults());
+  assert.strictEqual(results.frequencies, true);
+  const words = results.keywords.map((k) => k.word.toLowerCase());
+  ['guerra fredda', 'unione sovietica', 'berlino', 'nato'].forEach((w) => assert.ok(words.some((x) => x.indexOf(w) === 0), 'manca ' + w));
+});
+
+const L21 = {};
+check('definizioni in francese, spagnolo, tedesco e portoghese', () => {
+  const want = {
+    fr: [/^On appelle rideau de fer/, /^L'OTAN est une alliance/, /^La dissuasion nucléaire est/],
+    es: [/^Se denomina telón de acero/, /^La OTAN es una alianza/, /^La disuasión nuclear es/],
+    de: [/^Als Eiserner Vorhang bezeichnet man/, /^Die NATO ist ein/, /^Unter nuklearer Abschreckung versteht man/],
+    pt: [/^Chama-se cortina de ferro/, /^A OTAN é uma aliança/, /^A dissuasão nuclear é/]
+  };
+  Object.keys(want).forEach((l) => {
+    const r = WCAnalysis.analyze(tokensFromPlain(LANGTXT[l]), WCSettings.defaults()).results;
+    L21[l] = r;
+    assert.strictEqual(r.lang, l);
+    const defs = r.highlights.filter((h) => h.type === 'def').map((h) => h.text);
+    want[l].forEach((re) => assert.ok(defs.some((d) => re.test(d)), l + ': manca ' + re + ' in ' + JSON.stringify(defs)));
+  });
+});
+
+check('tedesco: i nomi comuni (con la maiuscola) non diventano nomi propri', () => {
+  const r = L21.de;
+  const names = r.highlights.filter((h) => h.type === 'name').map((h) => h.text);
+  ['Krieg', 'Wettrüsten', 'Blöcke', 'Luftbrücke', 'Kubakrise', 'Supermächten'].forEach((w) => assert.ok(!names.includes(w), w + ' segnato come nome'));
+  assert.ok(names.includes('NATO'));
+  assert.ok(r.keywords.some((k) => k.word === 'Kalte Krieg'), 'manca "Kalte Krieg": ' + r.keywords.map((k) => k.word).join(', '));
+  const toks = WCText.prepare(WCText.tokenizeString('Die Mauer fiel am 9. November 1989. Danach kam die Einheit.'), 'de');
+  assert.deepStrictEqual(WCText.sentences(toks, 'de').map((x) => x.text), ['Die Mauer fiel am 9. November 1989.', 'Danach kam die Einheit.']);
+});
+
+check('leggibilità con la formula di ogni lingua', () => {
+  const scales = { fr: 'Kandel-Moles', es: 'Szigriszt-Pazos', de: 'Amstad', pt: 'Flesch (Martins)' };
+  Object.keys(scales).forEach((l) => {
+    const st = L21[l].stats;
+    assert.strictEqual(st.readabilityScale, scales[l]);
+    assert.ok(st.readability > 20 && st.readability < 95, l + ' ' + st.readability);
+  });
+});
+
+check('sunto più scorrevole: niente connettivi iniziali né frasi che rimandano indietro', () => {
+  assert.strictEqual(WCLang.smooth('it', 'Inoltre, la Germania fu divisa in due stati.'), 'La Germania fu divisa in due stati.');
+  assert.strictEqual(WCLang.smooth('en', 'However the war ended in 1945 with a treaty.'), 'The war ended in 1945 with a treaty.');
+  assert.strictEqual(WCLang.smooth('es', 'Sin embargo, la crisis de los misiles llevó al mundo al borde.'), 'La crisis de los misiles llevó al mundo al borde.');
+  assert.strictEqual(WCLang.smooth('de', 'Außerdem war die Stadt geteilt.'), 'Außerdem war die Stadt geteilt.', 'in tedesco "Außerdem" sposta il verbo');
+  const txt = 'Il Trattato di Roma\n\nIl Trattato di Roma fondò la Comunità economica europea nel 1957 tra sei paesi fondatori. ' +
+    'Tuttavia, il Trattato di Roma non creò subito un mercato comune completo tra i paesi fondatori. Questo richiese molti anni di negoziati tra i governi.';
+  const r = WCAnalysis.analyze(tokensFromPlain(txt), Object.assign(WCSettings.defaults(), { mode: 'summary', summaryLength: 60 })).results;
+  assert.ok(r.summary.every((s) => !/^(Tuttavia|Inoltre)\b/.test(s.text)), JSON.stringify(r.summary.map((s) => s.text)));
+  assert.ok(WCLang.isAnaphoric('it', { text: 'Questo' }) && !WCLang.isAnaphoric('it', { text: 'Il' }));
+});
+
+check('ripasso: schede delle definizioni, frasi da completare e quiz', () => {
+  const r = WCAnalysis.analyze(tokensFromPlain(it), WCSettings.defaults()).results;
+  const defs = r.cards.filter((c) => c.type === 'def');
+  const fronts = defs.map((c) => c.front);
+  ['Che cos’è «cortina di ferro»?', 'Che cos’è «NATO»?', 'Che cos’è «deterrenza nucleare»?'].forEach((f) => assert.ok(fronts.includes(f), 'manca ' + f + ' in ' + JSON.stringify(fronts)));
+  const cloze = r.cards.filter((c) => c.type === 'cloze');
+  assert.ok(cloze.length >= 2, 'poche frasi da completare');
+  r.cards.forEach((c) => {
+    assert.ok(c.cloze.includes(WCAnalysis.BLANK), 'scheda senza buco: ' + c.cloze);
+    assert.ok(!c.cloze.includes(c.answer + ' ') || c.cloze.split(c.answer).length <= 2);
+    if (c.choices) {
+      assert.strictEqual(c.choices.length, 4);
+      assert.strictEqual(new Set(c.choices).size, 4, 'risposte doppie: ' + c.choices);
+      assert.strictEqual(c.choices[c.correct], c.answer);
+    }
+  });
+  assert.ok(r.cards.filter((c) => c.choices).length >= 4, 'poche domande da quiz');
+  // "l'Unione Sovietica": l'articolo resta fuori dal buco
+  assert.ok(r.cards.every((c) => !/^l'/.test(c.answer)), 'articolo nella risposta');
+  // stesso documento = stesso quiz
+  const again = WCAnalysis.analyze(tokensFromPlain(it), WCSettings.defaults()).results;
+  assert.deepStrictEqual(again.cards.map((c) => c.choices), r.cards.map((c) => c.choices));
+  ['fr', 'es', 'de', 'pt'].forEach((l) => assert.ok(L21[l].cards.length >= 3, l + ': poche schede'));
+  assert.ok(L21.de.cards.some((c) => c.front === 'Was ist „Eiserner Vorhang“?'));
+  assert.ok(L21.fr.cards.some((c) => c.front === 'Qu’est-ce que « rideau de fer » ?'));
 });
 
 if (process.argv.includes('--show')) {

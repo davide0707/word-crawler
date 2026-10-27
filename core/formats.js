@@ -5,7 +5,8 @@
  * runs (facoltativo): [{ t: testo, b: grassetto, i: corsivo }]
  *
  * Formati: PDF (a parte, con PDF.js), DOCX/DOCM/DOTX, DOC (Word 97-2003), ODT/ODP/ODS, PPTX, XLSX,
- * EPUB, RTF, HTML/XHTML, Markdown, TXT, SRT/VTT (sottotitoli), CSV/TSV.
+ * EPUB, RTF, HTML/XHTML, Markdown, TXT, SRT/VTT (sottotitoli), CSV/TSV,
+ * immagini (PNG, JPG, WebP, BMP, GIF: a parte, con l'OCR di Tesseract).
  * Tutto in sola lettura, nel browser, senza inviare nulla a nessuno.
  */
 (function (g) {
@@ -669,6 +670,19 @@
 
   // ------------------------------------------------------------------ riconoscimento
   var SUPPORTED = ['pdf', 'docx', 'docm', 'dotx', 'dotm', 'doc', 'odt', 'ott', 'odp', 'ods', 'pptx', 'pptm', 'ppsx', 'xlsx', 'xlsm', 'epub', 'rtf', 'html', 'htm', 'xhtml', 'md', 'markdown', 'txt', 'text', 'log', 'srt', 'vtt', 'csv', 'tsv'];
+  var IMAGES = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'];
+
+  // immagine riconosciuta dai primi byte -> tipo MIME (o null)
+  function imageType(bytes, name) {
+    var b = bytes;
+    if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
+    if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+    if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return 'image/gif';
+    if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+    if (b[0] === 0x42 && b[1] === 0x4d && ext(name) === 'bmp') return 'image/bmp';
+    if ((b[0] === 0x49 && b[1] === 0x49 && b[2] === 0x2a && b[3] === 0) || (b[0] === 0x4d && b[1] === 0x4d && b[2] === 0 && b[3] === 0x2a)) return 'image/tiff';
+    return null;
+  }
 
   function sniff(bytes, name) {
     var e = ext(name);
@@ -694,6 +708,9 @@
     var kind = sniff(bytes, name);
     var model;
     if (kind === 'pdf') return { format: 'PDF', pdf: true, bytes: bytes, title: (name || '').replace(/\.pdf$/i, ''), blocks: [], warnings: [] };
+    var img = imageType(bytes, name);
+    if (img === 'image/tiff') throw new Error('Le immagini TIFF non si possono mostrare qui: salvale come PNG o JPG (oppure come PDF) e riaprile.');
+    if (img) return { format: 'Immagine', image: true, mime: img, bytes: bytes, title: (name || '').replace(/\.[^.]+$/, ''), blocks: [], warnings: [] };
     if (kind === 'zip') {
       var zip = g.WCZip.open(bytes);
       if (zip.has('word/document.xml') || zip.names().some(function (n) { return /^word\/document\d*\.xml$/.test(n); })) model = await fromDocx(zip);
@@ -716,7 +733,7 @@
   }
 
   g.WCFormats = {
-    open: open, fromHtml: fromHtml, fromPlain: fromPlain, fromMarkdown: fromMarkdown, ext: ext,
-    SUPPORTED: SUPPORTED, accept: SUPPORTED.map(function (e) { return '.' + e; }).join(',')
+    open: open, fromHtml: fromHtml, fromPlain: fromPlain, fromMarkdown: fromMarkdown, ext: ext, imageType: imageType,
+    SUPPORTED: SUPPORTED, IMAGES: IMAGES, accept: SUPPORTED.concat(IMAGES).map(function (e) { return '.' + e; }).join(',')
   };
 })(globalThis);

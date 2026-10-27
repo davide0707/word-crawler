@@ -19,15 +19,17 @@
   }
 
   // Parametri che cambiano i risultati (servono una nuova lettura) e parametri solo grafici
-  var VISUAL = new Set(['speed', 'follow', 'theme', 'veil', 'webDensity', 'hud']);
+  // (OCR e segni ritrovati valgono per il prossimo documento: non serve rileggere)
+  var VISUAL = new Set(['speed', 'follow', 'theme', 'veil', 'webDensity', 'hud', 'ocr', 'ocrLang', 'restoreMarks']);
 
   /*
-   * opts: { values, onChange(values, id), idPrefix, compact }
+   * opts: { values, onChange(values, id), idPrefix, compact, hide?: [id dei parametri da non mostrare] }
    * -> { get(), set(values), root }
    */
   function render(container, opts) {
     var values = S.sanitize(opts.values);
     var prefix = opts.idPrefix || 'wc';
+    var hide = new Set(opts.hide || []);
     container.textContent = '';
     container.classList.add('wc-settings');
 
@@ -98,7 +100,7 @@
         var f = fields[k], v = values[k];
         if (f.p.type === 'toggle') f.input.checked = !!v; else if (document.activeElement !== f.input || f.p.type !== 'text') f.input.value = v;
         if (f.out) f.out.textContent = fmt(f.p, v);
-        f.row.hidden = !!(f.p.modes && f.p.modes.indexOf(values.mode) < 0);
+        f.row.hidden = hide.has(k) || !!(f.p.modes && f.p.modes.indexOf(values.mode) < 0);
       });
       Object.keys(groups).forEach(function (gname) {
         var any = Array.prototype.some.call(groups[gname].querySelectorAll('.wc-field'), function (r) { return !r.hidden; });

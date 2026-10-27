@@ -11,11 +11,13 @@ body.sp > * { min-width: 0; }
 .sp-title { margin: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-run { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .sp-run #run { grid-column: 1 / -1; padding: 11px; }
+.sp-pen { padding: 10px 14px; border-bottom: 1px solid var(--wc-line); display: flex; flex-direction: column; gap: 6px; }
 .sp-results .wc-results { height: auto; }
 .sp-results .wc-results-head { padding: 12px 14px 6px; }
 .sp-results .wc-tabs { padding: 0 8px; }
 .sp-results .wc-panels { max-height: 52vh; padding: 12px 14px; }
 .sp-results .wc-results-foot { padding: 10px 14px 14px; }
 .sp-results .wc-item-side { width: 64px; }
+.sp-results .wc-umarks .wc-edit { margin-left: 72px; }
 .sp-settings { padding: 12px 14px 40px; border-top: 1px solid var(--wc-line); }
 .sp-settings > summary { cursor: pointer; font: 600 11px var(--wc-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--wc-cyan); margin-bottom: 12px; }

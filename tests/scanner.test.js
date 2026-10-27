@@ -135,6 +135,39 @@ async function check(name, fn) {
     const r = await scan({ root: ROOT, legs: 2, duplicates: 'off' }, () => {}, () => ++n > 3);
     assert.strictEqual(r.partial, true);
   });
+  await check('albero delle cartelle per la mappa: totali coerenti', () => {
+    const t = rFast.tree;
+    assert.strictEqual(t.names[0], rFast.root);
+    assert.strictEqual(t.total[0], rFast.totals.bytes);
+    for (let i = 1; i < t.names.length; i++) assert.ok(t.parent[i] >= 0 && t.parent[i] < i, 'genitore dopo il figlio');
+    // il totale di ogni cartella = file suoi + sottocartelle (quelle sotto soglia restano nel totale)
+    const kids = t.names.map(() => 0);
+    for (let i = 1; i < t.names.length; i++) kids[t.parent[i]] += t.total[i];
+    t.names.forEach((n, i) => assert.ok(t.own[i] + kids[i] <= t.total[i], n));
+    const v = t.names.indexOf('video');
+    assert.ok(v > 0 && t.total[v] === 800000);
+  });
+  await check('mappa a riquadri: i riquadri riempiono lo spazio in proporzione', () => {
+    require('../desktop/ui/scan-report.js');
+    const R = globalThis.WCScanReport;
+    const items = [6, 6, 4, 3, 2, 2, 1].map((v) => ({ value: v }));
+    const rs = R.squarify(items, 0, 0, 600, 400);
+    assert.strictEqual(rs.length, 7);
+    const area = rs.reduce((s, r) => s + r.w * r.h, 0);
+    assert.ok(Math.abs(area - 240000) < 1e-6);
+    rs.forEach((r) => {
+      assert.ok(Math.abs(r.w * r.h - r.it.value * 10000) < 1e-6, 'area non proporzionale');
+      assert.ok(r.x >= -1e-9 && r.y >= -1e-9 && r.x + r.w <= 600 + 1e-6 && r.y + r.h <= 400 + 1e-6, 'fuori dal riquadro');
+    });
+    // esempio dell'articolo di Bruls e colleghi: il primo riquadro è 300×200
+    assert.deepStrictEqual([rs[0].w, rs[0].h], [300, 200]);
+    assert.strictEqual(R.treePath({ names: ['C:\\', 'Utenti', 'anna'], parent: [-1, 0, 1] }, 2), 'C:\\Utenti\\anna');
+  });
+  await check('lettura dell’elenco CSV (virgolette e punti e virgola nei nomi)', () => {
+    const { parseCsvLine } = require('../desktop/scan-tools');
+    assert.deepStrictEqual(parseCsvLine('"/a/b;c.txt";"b;c.txt";txt;Documenti;12;2026-01-01 10:00:00;'), ['/a/b;c.txt', 'b;c.txt', 'txt', 'Documenti', '12', '2026-01-01 10:00:00', '']);
+    assert.deepStrictEqual(parseCsvLine('"/x/il ""vero"".md";x;md;Codice;3;;'), ['/x/il "vero".md', 'x', 'md', 'Codice', '3', '', '']);
+  });
   await check('cartella inesistente: errore chiaro', async () => {
     await assert.rejects(() => scan({ root: path.join(ROOT, 'non-esiste') }), /ENOENT|non è una cartella/);
   });

@@ -2,21 +2,31 @@
  * Word Crawler: il lettore (condiviso tra app desktop ed estensione).
  * Apre un documento, lo mostra, lo fa leggere al ragno e raccoglie i risultati.
  *
- * WCReader.mount(root, host) -> { openBytes(name, bytes, source), openUrl(url), openText(text, title) }
+ * WCReader.mount(root, host) -> { openBytes(name, bytes, source), openUrl(url), openText(text, title), stop(), pause() }
  * host: {
  *   pickFile?(): Promise<{ name, bytes, source }|null>   (se manca: selettore file del browser)
  *   fetchUrl?(url): Promise<{ html, url }>                 (solo app desktop)
- *   saveFile(name, content, mime): Promise<boolean>
+ *   saveFile(name, content, mime): Promise<boolean>        (content: stringa o Uint8Array)
+ *   printPdf?(html, name): Promise<boolean>               (PDF del documento segnato)
  *   archive: { save(entry): Promise<boolean> }
  *   settings: { load(): Promise<object|null>, save(object) }
  *   pdfjs(): Promise<pdfjsLib|null>, pdfHelp: string
- *   copy?(text)
+ *   ocr?: { script, workerPath, corePath, langPath? }      (percorsi di tesseract.js; senza: niente OCR)
+ *   ocrHelp?: string
+ *   exports?: formati di esportazione da offrire
+ *   copy?(text), insetTop?
  * }
+ *
+ * Documenti lunghi: l'analisi va in un thread separato (analysis-worker.js), le pagine dei PDF
+ * si leggono a gruppi in parallelo e le parole delle pagine web non tengono oggetti pesanti in memoria.
  */
 (function (g) {
   'use strict';
   if (g.WCReader) return;
   var el = function (t, a, c) { return g.WCSettingsUI.el(t, a, c); };
+
+  var WORKER_MIN = 6000;       // da quante parole in su l'analisi va nel thread separato
+  var PDF_PARALLEL = 6;        // pagine lette insieme
 
   var SAMPLE_TITLE = 'La guerra fredda in Europa';
   var SAMPLE = 'La guerra fredda è il periodo di tensione politica e militare che oppose gli Stati Uniti e l\'Unione Sovietica dalla fine della seconda guerra mondiale fino al 1991. Non fu mai uno scontro diretto tra le due superpotenze, ma una lunga competizione combattuta con le alleanze, la propaganda, la corsa agli armamenti e le guerre combattute in altri paesi.\n\n' +
@@ -28,16 +38,38 @@
     'Nel 1961 era stato costruito il muro di Berlino, che per quasi trent\'anni divise le famiglie e la città. Il muro impediva ai cittadini della Germania orientale di fuggire verso ovest. La caduta del muro, il 9 novembre 1989, segnò l\'inizio della fine della guerra fredda. Nel 1990 la Germania fu riunificata e l\'anno dopo, nel dicembre del 1991, l\'Unione Sovietica si dissolse.\n\n' +
     'La fine della guerra fredda cambiò profondamente l\'Europa. Molti paesi dell\'Europa orientale entrarono in seguito nella NATO e nell\'Unione Europea. Gli storici discutono ancora sulle cause della fine del conflitto: alcuni sottolineano la crisi economica sovietica, altri le riforme di Gorbačëv, altri ancora la pressione dei movimenti popolari nei paesi del blocco orientale.';
 
+  // esegue fn su ogni elemento, al massimo n alla volta, mantenendo l'ordine dei risultati
+  function mapLimit(list, n, fn) {
+    var out = new Array(list.length), next = 0;
+    function worker() {
+      if (next >= list.length) return Promise.resolve();
+      var i = next++;
+      return Promise.resolve(fn(list[i], i)).then(function (v) { out[i] = v; return worker(); });
+    }
+    var ws = [];
+    for (var k = 0; k < Math.min(n, list.length); k++) ws.push(worker());
+    return Promise.all(ws).then(function () { return out; });
+  }
+
+  function loadImage(url) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { reject(new Error('immagine non leggibile')); };
+      img.src = url;
+    });
+  }
+
   function mount(root, host) {
     var settings = g.WCSettings.defaults();
-    var doc = null;          // { title, format, source, model? , pdf? }
+    var doc = null;          // { title, format, source }
     var tokens = [], plan = null, results = null, engine = null, pages = [], io = null, offVer = 0, headings = [];
-    var dirty = false;
+    var dirty = false, openSeq = 0, runSeq = 0, userMarks = [], ocrEngine = null, objectUrls = [];
 
     // ------------------------------------------------------------ struttura
     root.textContent = '';
     root.classList.add('wc-app');
-    var fileInput = el('input', { type: 'file', accept: g.WCFormats.accept + ',application/pdf', hidden: 'hidden', id: 'wc-file' });
+    var fileInput = el('input', { type: 'file', accept: g.WCFormats.accept + ',application/pdf,image/*', hidden: 'hidden', id: 'wc-file' });
     var openBtn = el('button', { type: 'button', class: 'wc-btn wc-primary wc-wide', text: 'Apri un file' });
     var urlInput = el('input', { type: 'url', id: 'wc-url', placeholder: 'https://…', autocomplete: 'off', spellcheck: 'false' });
     var urlForm = el('form', { class: 'wc-url' }, [el('label', { for: 'wc-url', class: 'wc-label', text: 'Pagina web' }), el('div', { class: 'wc-inline' }, [urlInput, el('button', { type: 'submit', class: 'wc-btn', text: 'Leggi' })])]);
@@ -53,12 +85,26 @@
     var dirtyNote = el('p', { class: 'wc-dirty', hidden: 'hidden' }, [el('span', { text: 'Queste impostazioni cambiano i risultati: valgono dalla prossima lettura. ' })]);
     var dirtyBtn = el('button', { type: 'button', class: 'wc-link', text: 'Rileggi ora' });
     dirtyNote.appendChild(dirtyBtn);
+    var progress = el('div', { class: 'wc-progress', hidden: 'hidden', role: 'progressbar', 'aria-label': 'Avanzamento', 'aria-valuemin': '0', 'aria-valuemax': '100' }, [el('span')]);
     var settingsBox = el('div', { class: 'wc-settings-box' });
+
+    // penna
+    var penBtns = {};
+    var penTools = el('div', { class: 'wc-pen-tools', role: 'group', 'aria-label': 'Penna' });
+    [['hl', 'Evidenzia'], ['under', 'Sottolinea'], ['note', 'Nota'], ['erase', 'Gomma']].forEach(function (t) {
+      var b = el('button', { type: 'button', class: 'wc-btn', 'aria-pressed': 'false', disabled: 'disabled', title: t[1] + ': trascina sulle parole del documento' }, [el('span', { class: 'wc-pen-sw ' + t[0], 'aria-hidden': 'true' }), el('span', { text: t[1] })]);
+      b.addEventListener('click', function () { pickTool(pen.tool() === t[0] ? null : t[0]); });
+      penTools.appendChild(b);
+      penBtns[t[0]] = b;
+    });
+    var penClear = el('button', { type: 'button', class: 'wc-link', text: 'Togli tutti i miei segni', hidden: 'hidden' });
+    var penNote = el('p', { class: 'wc-note', text: 'Scegli uno strumento e trascina sulle parole (anche nei PDF). Esc per posare la penna. I segni finiscono nei risultati, nell’archivio e nelle esportazioni.' });
 
     var left = el('aside', { class: 'wc-side wc-left', 'aria-label': 'Documento e impostazioni' }, [
       el('section', { class: 'wc-open' }, [el('h2', { text: 'Apri' }), openBtn, fileInput, urlForm, pasteBox,
-        el('p', { class: 'wc-note', text: 'PDF, Word (.docx e .doc), OpenDocument, PowerPoint, Excel, EPUB, RTF, HTML, Markdown, testo, sottotitoli, CSV. Puoi anche trascinare il file qui.' })]),
-      el('section', { class: 'wc-run' }, [el('h2', { text: 'Ragno' }), el('div', { class: 'wc-run-btns' }, [runBtn, pauseBtn, finishBtn, stopBtn]), dirtyNote]),
+        el('p', { class: 'wc-note', text: 'PDF (anche scansionati), Word (.docx e .doc), OpenDocument, PowerPoint, Excel, EPUB, RTF, HTML, Markdown, testo, sottotitoli, CSV, immagini (PNG, JPG). Puoi anche trascinare il file qui.' })]),
+      el('section', { class: 'wc-run' }, [el('h2', { text: 'Ragno' }), el('div', { class: 'wc-run-btns' }, [runBtn, pauseBtn, finishBtn, stopBtn]), progress, dirtyNote]),
+      el('section', { class: 'wc-penbox' }, [el('h2', { text: 'Penna' }), penTools, penNote, penClear]),
       el('section', {}, [el('h2', { text: 'Impostazioni' }), settingsBox])
     ]);
 
@@ -69,7 +115,7 @@
     var empty = el('div', { class: 'wc-empty' }, [
       el('div', { class: 'wc-empty-mark', 'aria-hidden': 'true' }),
       el('h1', { text: 'Dagli qualcosa da leggere' }),
-      el('p', { text: 'Apri un file, incolla un testo o trascina qui un documento. Il ragno lo legge, sottolinea, cerchia e alla fine ti lascia il sunto.' }),
+      el('p', { text: 'Apri un file, incolla un testo o trascina qui un documento. Il ragno lo legge, sottolinea, cerchia e alla fine ti lascia il sunto e le schede per ripassare.' }),
       el('div', { class: 'wc-inline' }, [sampleBtn]),
       el('p', { class: 'wc-note', text: 'Tutto resta sul tuo computer: nessun file viene inviato a nessuno e non c’è intelligenza artificiale.' })
     ]);
@@ -84,7 +130,7 @@
     // ------------------------------------------------------------ impostazioni
     var saveTimer = 0;
     var sui = g.WCSettingsUI.render(settingsBox, {
-      values: settings, idPrefix: 'wcs',
+      values: settings, idPrefix: 'wcs', hide: (host.hideSettings || []).concat(['restoreMarks']).concat(host.ocr ? [] : ['ocr', 'ocrLang']),
       onChange: function (v, id) {
         var prev = settings;
         settings = v;
@@ -111,34 +157,84 @@
     }
     applyTheme();
 
-    // ------------------------------------------------------------ risultati
+    // ------------------------------------------------------------ risultati ed esportazioni
+    function annotated() { return g.WCAnnotate.capture(tokens, plan ? plan.sentences : [], userMarks); }
     var rui = g.WCResultsUI.render(right, {
       idPrefix: 'wcr',
+      exports: host.exports || ['md', 'txt', 'html', 'anki', 'docx', 'ahtml'].concat(host.printPdf ? ['pdf'] : []).concat(['json']),
       onJump: jumpTo,
       onSave: function (entry) { return host.archive ? host.archive.save(entry) : false; },
       onExport: function (kind, entry) {
-        var f = g.WCExport.build(kind, entry);
-        return host.saveFile(f.name, f.content, f.mime);
+        var needsDoc = g.WCExport.KINDS.some(function (k) { return k[0] === kind && k[2]; });
+        var model = needsDoc ? annotated() : null;
+        if (kind === 'pdf') {
+          if (!host.printPdf) return false;
+          return host.printPdf(g.WCAnnotate.html(entry, model), g.WCExport.safeName(entry.title) + ' - segnato.pdf');
+        }
+        return Promise.resolve(g.WCExport.build(kind, entry, model)).then(function (f) { return host.saveFile(f.name, f.content, f.mime); });
       },
-      onCopy: host.copy
+      onCopy: host.copy,
+      onRemoveMark: function (id) { pen.remove(id); },
+      onEditMark: function (id, x, y) { pen.edit(id, x, y); }
     });
+
+    // ------------------------------------------------------------ penna
+    var pen = g.WCPen.attach({
+      area: docEl,
+      engine: function () { return engine && engine.isActive() ? engine : null; },
+      tokens: function () { return tokens; },
+      onChange: function (marks) {
+        userMarks = marks;
+        rui.setUserMarks(marks);
+        penClear.hidden = !marks.length;
+      },
+      onTool: function (t) {
+        Object.keys(penBtns).forEach(function (k) { penBtns[k].setAttribute('aria-pressed', k === t ? 'true' : 'false'); });
+      }
+    });
+    function pickTool(t) {
+      if (t) {
+        if (!plan) return;
+        // la penna lavora sui segni: se il ragno è stato tolto, i segni tornano senza animazione
+        if (!engine || !engine.isActive()) startEngine(true);
+        else if (engine.isRunning()) { engine.pause(); setButtons(); }
+      }
+      pen.setTool(t);
+    }
+    penClear.addEventListener('click', function () { pen.clear(); });
 
     // ------------------------------------------------------------ apertura
     function busy(msg) { rui.message(msg); }
+    function setProgress(frac) {
+      if (frac == null) { progress.hidden = true; return; }
+      progress.hidden = false;
+      var pc = Math.round(Math.max(0, Math.min(1, frac)) * 100);
+      progress.firstChild.style.width = pc + '%';
+      progress.setAttribute('aria-valuenow', String(pc));
+    }
     function showError(msg) {
+      setProgress(null);
       docMsg.textContent = msg;
       docMsg.hidden = false;
       busy(msg);
     }
     function resetDoc() {
+      openSeq++;
+      runSeq++;
       if (engine && engine.isActive()) engine.stop();
       engine = null;
+      pen.setTool(null);
       if (io) { io.disconnect(); io = null; }
+      objectUrls.forEach(function (u) { URL.revokeObjectURL(u); });
+      objectUrls = [];
       tokens = []; plan = null; results = null; pages = []; headings = [];
+      userMarks = [];
+      pen.setMarks([]);
       article.textContent = ''; pagesBox.textContent = '';
       article.hidden = true; pagesBox.hidden = true; docHead.hidden = true; docMsg.hidden = true;
       empty.hidden = false;
       dirty = false; dirtyNote.hidden = true;
+      setProgress(null);
       rui.clear();
       setButtons();
     }
@@ -151,6 +247,7 @@
       catch (e) { showError('Non riesco ad aprire “' + name + '”: ' + e.message); return; }
       model.source = source || name;
       if (model.pdf) return openPdf(model, bytes);
+      if (model.image) return openImage(model, bytes);
       showModel(model);
     }
     async function openUrl(url) {
@@ -214,6 +311,7 @@
     }
 
     function showModel(model) {
+      var my = openSeq;
       doc = { title: model.title, format: model.format, source: model.source };
       empty.hidden = true;
       renderBlocks(model);
@@ -221,8 +319,10 @@
       header(model.format, model.warnings);
       window.scrollTo(0, 0);
       requestAnimationFrame(function () {
+        if (my !== openSeq) return;
         tokens = g.WCDom.collect(article);
         if (!tokens.length) { showError('Nel documento non c’è testo da leggere.'); return; }
+        if (tokens.truncated) header(model.format, (model.warnings || []).concat(['Documento lunghissimo: il ragno legge le prime ' + tokens.length.toLocaleString('it-IT') + ' parole.']));
         run();
       });
     }
@@ -236,31 +336,114 @@
       docHead.hidden = false;
     }
 
+    // ------------------------------------------------------------ OCR
+    function ocrOn() { return !!(host.ocr && settings.ocr); }
+    function ocrHelp() {
+      return host.ocr ? 'Il riconoscimento del testo (OCR) è spento: attivalo nelle impostazioni, nel gruppo OCR.'
+        : (host.ocrHelp || 'Qui l’OCR non è disponibile.');
+    }
+    function recognize(source, label) {
+      if (!ocrEngine) ocrEngine = g.WCOcr.create(host.ocr);
+      return ocrEngine.recognize(source, g.WCOcr.langsFor(settings), function (phase, p) {
+        busy(label + ' · ' + phase + (p ? ' ' + Math.round(p * 100) + '%' : '') + '…');
+      });
+    }
+    // immagine pronta per Tesseract: le immagini piccole si ingrandiscono, quelle enormi si riducono
+    function ocrSource(img, w, h) {
+      var target = w < 1400 ? Math.min(2, 2000 / w) : (w > 3600 ? 3600 / w : 1);
+      if (target === 1) return { src: img, w: w, h: h };
+      var c = document.createElement('canvas');
+      c.width = Math.round(w * target); c.height = Math.round(h * target);
+      var cx = c.getContext('2d');
+      cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+      cx.drawImage(img, 0, 0, c.width, c.height);
+      return { src: c, w: c.width, h: c.height };
+    }
+
+    async function openImage(model, bytes) {
+      var my = openSeq;
+      doc = { title: model.title, format: 'Immagine', source: model.source };
+      empty.hidden = true;
+      header('Immagine', [], 'OCR');
+      if (!ocrOn()) { showError('Per leggere il testo in un’immagine serve l’OCR. ' + ocrHelp()); return; }
+      var url = URL.createObjectURL(new Blob([bytes], { type: model.mime }));
+      objectUrls.push(url);
+      var img;
+      try { img = await loadImage(url); } catch (e) { showError('Non riesco a mostrare questa immagine: ' + e.message); return; }
+      if (my !== openSeq) return;
+      var width = Math.max(320, Math.min(900, docEl.clientWidth - 48));
+      var scale = width / img.naturalWidth;
+      var d = el('div', { class: 'wc-page', 'aria-label': 'Immagine' }, [el('span', { class: 'wc-ocr-badge', text: 'OCR' })]);
+      d.style.width = width + 'px';
+      d.style.height = (img.naturalHeight * scale) + 'px';
+      img.alt = '';
+      d.appendChild(img);
+      pagesBox.textContent = '';
+      pagesBox.appendChild(d);
+      pagesBox.hidden = false;
+      var P = { vp: { width: width, height: img.naturalHeight * scale, scale: scale }, div: d, ov: -1, ocr: true };
+      pages = [P];
+      try {
+        var s = ocrSource(img, img.naturalWidth, img.naturalHeight);
+        setProgress(0);
+        var res = await recognize(s.src, 'Immagine');
+        if (my !== openSeq) return;
+        P.lines = g.WCOcr.toLines(res.words, width / s.w, width / s.w, scale);
+      } catch (e) { showError('OCR non riuscito: ' + e.message + '. ' + (host.ocr ? '' : ocrHelp())); return; }
+      setProgress(null);
+      offVer++;
+      tokens = g.WCPdf.tokens(pages, pageOffset);
+      if (!tokens.length) { showError('Nell’immagine non ho trovato testo leggibile.'); return; }
+      header('Immagine', [], 'testo riconosciuto con l’OCR (Tesseract)');
+      window.scrollTo(0, 0);
+      run();
+    }
+
+    // ------------------------------------------------------------ PDF
     async function openPdf(model, bytes) {
+      var my = openSeq;
       var lib = host.pdfjs ? await host.pdfjs() : null;
       if (!lib) { showError(host.pdfHelp || 'Per leggere i PDF serve PDF.js.'); return; }
       var pdf;
       try { pdf = await lib.getDocument({ data: bytes.slice ? bytes.slice() : bytes, isEvalSupported: false }).promise; }
       catch (e) { showError(/password/i.test(e.message || '') ? 'Il PDF è protetto da password.' : 'PDF danneggiato o non leggibile: ' + e.message); return; }
+      if (my !== openSeq) return;
       doc = { title: model.title, format: 'PDF', source: model.source };
       empty.hidden = true;
-      header('PDF', [], pdf.numPages + (pdf.numPages === 1 ? ' pagina' : ' pagine'));
+      var nPages = pdf.numPages;
+      var pagesLabel = nPages + (nPages === 1 ? ' pagina' : ' pagine');
+      header('PDF', [], pagesLabel);
       var width = Math.max(320, Math.min(900, docEl.clientWidth - 48));
-      pages = [];
-      for (var p = 1; p <= pdf.numPages; p++) {
-        if (p % 5 === 1) busy('Leggo la pagina ' + p + ' di ' + pdf.numPages + '…');
-        var page = await pdf.getPage(p);
-        var base = page.getViewport({ scale: 1 });
-        var vp = page.getViewport({ scale: width / base.width });
-        var P = { page: page, vp: vp, tc: await page.getTextContent(), rendering: false, ov: -1 };
-        g.WCPdf.buildLines(P);
-        pages.push(P);
+      var nums = [];
+      for (var p = 1; p <= nPages; p++) nums.push(p);
+      var done = 0;
+      setProgress(0);
+      // pagine lette a gruppi in parallelo (con i documenti lunghi è molto più veloce)
+      try {
+        pages = await mapLimit(nums, PDF_PARALLEL, async function (num) {
+          if (my !== openSeq) throw new Error('annullato');
+          var page = await pdf.getPage(num);
+          var base = page.getViewport({ scale: 1 });
+          var vp = page.getViewport({ scale: width / base.width });
+          var P = { page: page, vp: vp, base: base, tc: await page.getTextContent(), rendering: false, ov: -1 };
+          g.WCPdf.buildLines(P);
+          P.tc = null; // il testo grezzo non serve più
+          done++;
+          setProgress(done / nPages);
+          if (done % 10 === 0 || done === nPages) busy('Leggo le pagine: ' + done + ' di ' + nPages + '…');
+          return P;
+        });
+      } catch (e) {
+        if (my === openSeq) showError('Non riesco a leggere il PDF: ' + e.message);
+        return;
       }
+      if (my !== openSeq) return;
       try {
         var meta = await pdf.getMetadata();
         var t = meta && meta.info && meta.info.Title;
-        if (t && String(t).trim().length > 2) { doc.title = String(t).trim(); header('PDF', [], pdf.numPages + (pdf.numPages === 1 ? ' pagina' : ' pagine')); }
+        if (t && String(t).trim().length > 2) doc.title = String(t).trim();
       } catch (e) { /* titolo facoltativo */ }
+      header('PDF', [], pagesLabel);
       pagesBox.textContent = '';
       pages.forEach(function (P, i) {
         var d = el('div', { class: 'wc-page', 'aria-label': 'Pagina ' + (i + 1) });
@@ -277,11 +460,50 @@
         });
       }, { rootMargin: '1500px 0px' });
       pages.forEach(function (P) { io.observe(P.div); });
+
+      // pagine senza testo: scansioni. Si riconosce il testo con l'OCR.
+      var scanned = pages.filter(function (P) { return !P.lines.some(function (l) { return /[\p{L}\p{N}]{2}/u.test(l.str); }); });
+      if (scanned.length) {
+        if (!ocrOn()) {
+          if (scanned.length === pages.length) { showError('Questo PDF non contiene testo: è una scansione (solo immagini). ' + ocrHelp()); return; }
+          header('PDF', [scanned.length + ' pagine sono scansioni senza testo: le salto. ' + ocrHelp()], pagesLabel);
+        } else {
+          for (var k = 0; k < scanned.length; k++) {
+            if (my !== openSeq) return;
+            var S = scanned[k];
+            var label = 'OCR pagina ' + (pages.indexOf(S) + 1) + ' (' + (k + 1) + ' di ' + scanned.length + ')';
+            busy(label + '…');
+            setProgress(k / scanned.length);
+            try {
+              var c = await renderForOcr(S);
+              var res = await recognize(c, label);
+              S.lines = g.WCOcr.toLines(res.words, S.vp.width / c.width, S.vp.width / c.width, S.vp.scale);
+              S.ocr = true;
+              S.div.appendChild(el('span', { class: 'wc-ocr-badge', text: 'OCR' }));
+            } catch (e) {
+              showError('OCR non riuscito: ' + e.message);
+              return;
+            }
+          }
+          header('PDF', [], pagesLabel + ' · ' + scanned.length + (scanned.length === 1 ? ' pagina riconosciuta' : ' pagine riconosciute') + ' con l’OCR');
+        }
+      }
+      setProgress(null);
       offVer++;
       tokens = g.WCPdf.tokens(pages, pageOffset);
-      if (!tokens.length) { showError('Questo PDF non contiene testo: probabilmente è una scansione (solo immagini).'); return; }
+      if (!tokens.length) { showError('In questo PDF non ho trovato testo da leggere.'); return; }
       window.scrollTo(0, 0);
       run();
+    }
+    // pagina disegnata a circa 200 dpi per l'OCR
+    function renderForOcr(P) {
+      var scale = Math.min(3, 2200 / P.base.width);
+      var vp = P.page.getViewport({ scale: scale });
+      var c = document.createElement('canvas');
+      c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+      var cx = c.getContext('2d');
+      cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+      return P.page.render({ canvasContext: cx, canvas: c, viewport: vp }).promise.then(function () { return c; });
     }
     function pageOffset(P) {
       if (P.ov !== offVer) {
@@ -291,33 +513,84 @@
       return [P.ox, P.oy];
     }
     function renderPage(P) {
-      if (P.rendering) return;
+      if (P.rendering || !P.page) return;
       P.rendering = true;
       var dpr = Math.min(2, window.devicePixelRatio || 1);
       var c = document.createElement('canvas');
       c.width = Math.floor(P.vp.width * dpr); c.height = Math.floor(P.vp.height * dpr);
-      P.div.appendChild(c);
+      P.div.insertBefore(c, P.div.firstChild);
       P.page.render({ canvasContext: c.getContext('2d'), canvas: c, viewport: P.vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined })
         .promise.catch(function () { /* pagina non disegnata: il testo resta leggibile dal ragno */ });
     }
 
+    // ------------------------------------------------------------ analisi (nel thread separato per i testi lunghi)
+    function analyzeInWorker(list, s) {
+      return new Promise(function (resolve, reject) {
+        var w;
+        try { w = new Worker(g.WCLang.base() + 'analysis-worker.js'); } catch (e) { reject(e); return; }
+        var timer = setTimeout(function () { w.terminate(); reject(new Error('analisi troppo lunga')); }, 180000);
+        w.onmessage = function (e) {
+          clearTimeout(timer);
+          w.terminate();
+          var d = e.data;
+          if (!d || d.error) { reject(new Error(d ? d.error : 'errore')); return; }
+          var m = d.marks, groups = new Map();
+          for (var i = 0; i < list.length; i++) {
+            var t = list[i];
+            t.mk = m.mk[i]; t.kid = m.kid[i]; t.sid = m.sid[i];
+            if (m.gf[i] >= 0) {
+              var key = m.gf[i] * 4294967296 + m.gt[i];
+              var grp = groups.get(key);
+              if (!grp) { grp = { from: m.gf[i], to: m.gt[i] }; groups.set(key, grp); }
+              t.grp = grp;
+            } else t.grp = null;
+          }
+          var sents = d.sents.map(function (a, k) { return { id: k, from: a[0], to: a[1], mk: a[2] }; });
+          resolve({ plan: { sentences: sents, display: function (id) { return d.display[id] || id; } }, results: d.results });
+        };
+        w.onerror = function (e) { clearTimeout(timer); w.terminate(); reject(new Error(e.message || 'thread di analisi non disponibile')); };
+        w.postMessage({
+          id: Date.now(), settings: s, tail: list[list.length - 1].tail || '',
+          tokens: list.map(function (t) { return [t.text, t.gap, t.blk, t.w, t.page == null ? null : t.page]; })
+        });
+      });
+    }
+    function analyze(list, s) {
+      var lang = s.language && s.language !== 'auto' ? s.language : g.WCLang.detect(list);
+      function inline() { return g.WCLang.ensure(lang).then(function () { return g.WCAnalysis.analyze(list, s); }); }
+      if (list.length >= WORKER_MIN && typeof Worker !== 'undefined' && !host.noWorker && g.WCLang.base()) {
+        return analyzeInWorker(list, s).catch(inline);
+      }
+      return inline();
+    }
+
     // ------------------------------------------------------------ lettura
-    function run() {
+    async function run() {
       if (!tokens.length) return;
+      var my = ++runSeq;
       if (engine && engine.isActive()) engine.stop();
       dirty = false; dirtyNote.hidden = true;
-      busy('Analizzo il testo…');
-      var res = g.WCAnalysis.analyze(tokens, settings);
+      busy('Analizzo il testo' + (tokens.length >= WORKER_MIN ? ' (' + tokens.length.toLocaleString('it-IT') + ' parole)' : '') + '…');
+      var res;
+      try { res = await analyze(tokens, settings); }
+      catch (e) { if (my === runSeq) showError('Analisi non riuscita: ' + e.message); return; }
+      if (my !== runSeq) return;
       plan = res.plan; results = res.results;
       headings = [];
       tokens.forEach(function (t, i) { if (t.w > 1 && (i === 0 || tokens[i - 1].blk !== t.blk)) headings.push(i); });
       rui.show(results, doc, tokens);
+      rui.setUserMarks(userMarks);
+      startEngine(false);
+    }
+
+    function startEngine(isStatic) {
       var summaryTotal = results.summary.length;
       engine = g.WCEngine.start({
         tokens: tokens, sentences: plan.sentences, display: plan.display, settings: visualSettings(),
-        container: docEl, keys: true, insetTop: host.insetTop || 0,
+        container: docEl, keys: true, insetTop: host.insetTop || 0, static: isStatic, userMarks: userMarks,
+        hint: isStatic ? 'PENNA · trascina sulle parole · ESC posa la penna' : undefined,
         label: function (n) {
-          if (doc.format === 'PDF') {
+          if (doc.format === 'PDF' || doc.format === 'Immagine') {
             var t = tokens[Math.max(0, n - 1)];
             var p = t && t.page != null ? t.page + 1 : 1;
             return 'PAGE -- ' + String(p).padStart(2, '0') + ' / ' + String(pages.length).padStart(2, '0');
@@ -337,7 +610,7 @@
         },
         onProgress: function (n) { rui.progress(n); },
         onEnd: function () { rui.done(); setButtons(); },
-        onStop: function () { setButtons(); },
+        onStop: function () { pen.setTool(null); setButtons(); },
         onSettings: function (s) { settings.speed = s.speed; sui.set(settings); }
       });
       setButtons();
@@ -352,6 +625,7 @@
       pauseBtn.textContent = live && !engine.isRunning() && !engine.isEnded() ? 'Riprendi' : 'Pausa';
       finishBtn.disabled = !live || engine.isEnded();
       stopBtn.disabled = !live;
+      Object.keys(penBtns).forEach(function (k) { penBtns[k].disabled = !plan; });
     }
     setInterval(setButtons, 500);
 
@@ -398,11 +672,16 @@
       var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
       if (f) openBytes(f.name, new Uint8Array(await f.arrayBuffer()), f.path || f.name);
     });
+    window.addEventListener('beforeunload', function () { if (ocrEngine) ocrEngine.terminate(); });
 
     return {
       openBytes: openBytes, openUrl: openUrl, openText: openText,
       stop: function () { if (engine) engine.stop(); },
-      pause: function () { if (engine && engine.isRunning()) { engine.pause(); setButtons(); } }
+      pause: function () { if (engine && engine.isRunning()) { engine.pause(); setButtons(); } },
+      // per i test e l'app: stato attuale
+      state: function () { return { tokens: tokens.length, results: results, userMarks: userMarks.slice(), engine: !!(engine && engine.isActive()), pages: pages.length }; },
+      debug: function () { return { tokens: tokens, plan: plan, pages: pages, engine: engine }; },
+      pen: pen
     };
   }
 

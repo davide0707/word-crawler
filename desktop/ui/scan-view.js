@@ -228,6 +228,8 @@
         active.forEach(function (a) { if (a) hot.push({ id: a.vis, t: now }); });
         if (now - lastLegsPaint > 250) { lastLegsPaint = now; paintLegs(); }
         msg.textContent = 'Sto leggendo: ' + R.num(m.totals.files) + ' file in ' + R.num(m.totals.dirs) + ' cartelle.';
+      } else if (m.type === 'trash-check') {
+        if (trashProgress) trashProgress(m);
       } else if (m.type === 'hash') {
         hashInfo = m;
         active = [];
@@ -247,7 +249,208 @@
     });
 
     // ---------------------------------------------------------------- rapporto
+    function tableOf(s, extraCol) {
+      var table = el('table', { class: 'sc-table' });
+      var thead = el('thead', {}, [el('tr', {}, s.columns.map(function (c) { return el('th', { scope: 'col', text: c }); }).concat(s.paths ? [el('th', { text: '' })] : []))]);
+      var tbody = el('tbody');
+      s.rows.slice(0, 500).forEach(function (row, ri) {
+        var tr = el('tr');
+        row.forEach(function (c, ci) {
+          var td = el('td', { text: c });
+          if (s.bars && ci === 0) {
+            var bar = el('span', { class: 'sc-bar' });
+            bar.style.width = Math.max(1, Math.round(s.bars[ri] * 100)) + '%';
+            td.appendChild(bar);
+          }
+          tr.appendChild(td);
+        });
+        if (s.paths) {
+          var b = el('button', { type: 'button', class: 'wc-link', text: 'Mostra' });
+          b.addEventListener('click', function () { api.showItem(s.paths[ri]); });
+          tr.appendChild(el('td', {}, [b]));
+        }
+        tbody.appendChild(tr);
+      });
+      table.appendChild(thead); table.appendChild(tbody);
+      var box = el('div', {}, [el('div', { class: 'sc-tw' }, [table])]);
+      if (s.rows.length > 500) box.appendChild(el('p', { class: 'wc-note', text: 'Mostrate le prime 500 righe: il rapporto HTML le contiene tutte.' }));
+      return box;
+    }
+    function renderSection(panel, s) {
+      if (s.note) panel.appendChild(el('p', { class: 'wc-note sc-note', text: s.note }));
+      if (!s.rows.length) { panel.appendChild(el('p', { class: 'wc-note', text: 'Nessun elemento.' })); return; }
+      panel.appendChild(tableOf(s));
+    }
+
+    // mappa a riquadri: ogni riquadro è una cartella, grande quanto lo spazio che occupa
+    var tmCleanup = null;
+    function renderTreemap(panel, r) {
+      var tree = r.tree;
+      if (!tree || !tree.names || !tree.names.length) { panel.appendChild(el('p', { class: 'wc-note', text: 'Mappa non disponibile per questa scansione: rifai la scansione con questa versione.' })); return; }
+      var kids = R.treeKids(tree), cur = 0, rects = [], hover = null;
+      var crumbs = el('nav', { class: 'sc-crumbs', 'aria-label': 'Percorso nella mappa' });
+      var upBtn = el('button', { type: 'button', class: 'wc-btn', text: '↑ Su' });
+      var showBtn = el('button', { type: 'button', class: 'wc-btn', text: 'Apri la cartella' });
+      var cv = el('canvas', { class: 'sc-tm', role: 'img', tabindex: '0' });
+      var info = el('p', { class: 'wc-note sc-tm-info', role: 'status', text: 'Passa sopra un riquadro per i dettagli; clic per entrare nella cartella.' });
+      panel.appendChild(el('p', { class: 'wc-note sc-note', text: 'Ogni riquadro è una cartella, grande quanto lo spazio che occupa (sottocartelle comprese). In grigio i file sciolti nella cartella e le cartelle troppo piccole per essere disegnate.' }));
+      panel.appendChild(el('div', { class: 'sc-tm-bar' }, [upBtn, crumbs, showBtn]));
+      panel.appendChild(cv);
+      panel.appendChild(info);
+      var cx2 = cv.getContext('2d');
+      function hue(sname) { var h = 0; for (var i = 0; i < sname.length; i++) h = (h * 31 + sname.charCodeAt(i)) >>> 0; return h % 360; }
+      function items(i) {
+        var list = kids[i].map(function (k) { return { value: tree.total[k], idx: k, name: tree.names[k] }; });
+        if (tree.own[i] > 0) list.push({ value: tree.own[i], idx: -1, name: 'file in questa cartella (' + R.num(tree.files[i]) + ')', grey: true });
+        var shown = list.reduce(function (sm, x) { return sm + x.value; }, 0), other = tree.total[i] - shown;
+        if (other > tree.total[i] * 0.002) list.push({ value: other, idx: -1, name: 'cartelle piccole', grey: true });
+        return list;
+      }
+      function draw() {
+        var w = Math.max(300, panel.clientWidth || 800), h = Math.max(320, Math.min(560, Math.round(w * 0.5)));
+        var d = Math.min(2, window.devicePixelRatio || 1);
+        cv.width = Math.round(w * d); cv.height = Math.round(h * d); cv.style.width = w + 'px'; cv.style.height = h + 'px';
+        cx2.setTransform(d, 0, 0, d, 0, 0);
+        cx2.fillStyle = '#0b0b0e'; cx2.fillRect(0, 0, w, h);
+        rects = R.squarify(items(cur), 0, 0, w, h);
+        rects.forEach(function (rr) {
+          var it = rr.it, on = hover === rr;
+          cx2.fillStyle = it.grey ? (on ? '#4a4a55' : '#34343d') : 'hsl(' + hue(it.name) + ',' + (on ? 62 : 48) + '%,' + (on ? 40 : 30) + '%)';
+          cx2.fillRect(rr.x + 1, rr.y + 1, Math.max(0, rr.w - 2), Math.max(0, rr.h - 2));
+          if (it.idx >= 0 && kids[it.idx].length && rr.w > 24 && rr.h > 24) {
+            cx2.strokeStyle = 'rgba(255,255,255,0.18)'; cx2.lineWidth = 1;
+            cx2.strokeRect(rr.x + 3.5, rr.y + 3.5, rr.w - 7, rr.h - 7);
+          }
+          if (rr.w > 54 && rr.h > 20) {
+            cx2.save();
+            cx2.beginPath(); cx2.rect(rr.x + 4, rr.y + 2, rr.w - 8, rr.h - 4); cx2.clip();
+            cx2.fillStyle = '#ffffff'; cx2.font = '600 12px system-ui, sans-serif'; cx2.textBaseline = 'top';
+            cx2.fillText(it.name, rr.x + 6, rr.y + 5);
+            if (rr.h > 36) { cx2.fillStyle = 'rgba(255,255,255,.75)'; cx2.font = '11px ' + MONO; cx2.fillText(R.bytes(it.value), rr.x + 6, rr.y + 21); }
+            cx2.restore();
+          }
+        });
+        crumbs.textContent = '';
+        var chain = [];
+        for (var k = cur; k >= 0; k = tree.parent[k]) chain.unshift(k);
+        chain.forEach(function (k, i) {
+          if (i) crumbs.appendChild(el('span', { class: 'sc-crumb-sep', text: '›', 'aria-hidden': 'true' }));
+          var b = el('button', { type: 'button', class: 'wc-link', text: i === 0 ? R.treePath(tree, 0) : tree.names[k] });
+          b.addEventListener('click', function () { cur = k; hover = null; draw(); });
+          crumbs.appendChild(b);
+        });
+        upBtn.disabled = cur === 0;
+        cv.setAttribute('aria-label', 'Mappa dello spazio di ' + R.treePath(tree, cur) + ': ' + rects.length + ' riquadri');
+      }
+      function at(e) {
+        var b = cv.getBoundingClientRect(), x = e.clientX - b.left, y = e.clientY - b.top;
+        for (var i = 0; i < rects.length; i++) { var rr = rects[i]; if (x >= rr.x && x < rr.x + rr.w && y >= rr.y && y < rr.y + rr.h) return rr; }
+        return null;
+      }
+      cv.addEventListener('mousemove', function (e) {
+        var rr = at(e);
+        if (rr === hover) return;
+        hover = rr; draw();
+        if (rr) {
+          var it = rr.it, parentTotal = tree.total[cur];
+          info.textContent = it.name + ' — ' + R.bytes(it.value) + ' (' + (parentTotal ? (it.value * 100 / parentTotal).toLocaleString('it-IT', { maximumFractionDigits: 1 }) : '0') + '% di questa cartella)' +
+            (it.idx >= 0 ? ' · ' + R.num(tree.files[it.idx]) + ' file diretti' + (kids[it.idx].length ? ' · clic per entrare' : '') : '');
+        }
+      });
+      cv.addEventListener('mouseleave', function () { hover = null; draw(); });
+      cv.addEventListener('click', function (e) { var rr = at(e); if (rr && rr.it.idx >= 0 && kids[rr.it.idx].length) { cur = rr.it.idx; hover = null; draw(); } });
+      cv.addEventListener('keydown', function (e) { if ((e.key === 'Backspace' || e.key === 'ArrowUp') && cur > 0) { e.preventDefault(); cur = tree.parent[cur]; draw(); } });
+      upBtn.addEventListener('click', function () { if (cur > 0) { cur = tree.parent[cur]; hover = null; draw(); } });
+      showBtn.addEventListener('click', function () { api.showItem(R.treePath(tree, cur)); });
+      var ro2 = new ResizeObserver(function () { draw(); });
+      ro2.observe(panel);
+      tmCleanup = function () { ro2.disconnect(); };
+      draw();
+    }
+
+    // duplicati: si possono scegliere le copie da spostare nel Cestino (mai tutte quelle di un gruppo)
+    var trashProgress = null;
+    function renderDups(panel, r, s) {
+      if (s.note) panel.appendChild(el('p', { class: 'wc-note sc-note', text: s.note }));
+      var groups = (r.duplicates && r.duplicates.groups) || [];
+      if (!groups.length) { panel.appendChild(el('p', { class: 'wc-note', text: 'Nessun duplicato.' })); return; }
+      panel.appendChild(el('p', { class: 'wc-note sc-note sc-trash-note', text: 'Puoi spostare nel Cestino le copie che non ti servono: scegli i file e premi il pulsante. Prima di spostarli il programma controlla che ognuno sia identico byte per byte a una copia che resta, e ti chiede conferma. In ogni gruppo resta sempre almeno una copia. Finiscono nel Cestino: si possono ripristinare.' }));
+      var sel = new Map(), moved = new Set(), boxes = [];
+      var status = el('p', { class: 'wc-note', role: 'status' });
+      var autoBtn = el('button', { type: 'button', class: 'wc-btn', text: 'Scegli le copie (tieni la prima di ogni gruppo)' });
+      var noneBtn = el('button', { type: 'button', class: 'wc-btn', text: 'Nessuna' });
+      var goBtn = el('button', { type: 'button', class: 'wc-btn wc-danger', text: 'Sposta nel Cestino', disabled: 'disabled' });
+      panel.appendChild(el('div', { class: 'wc-inline sc-trash-bar' }, [autoBtn, noneBtn, goBtn]));
+      panel.appendChild(status);
+      function count() {
+        var n = 0, b = 0;
+        sel.forEach(function (set, gi) { n += set.size; b += set.size * groups[gi].size; });
+        goBtn.disabled = !n;
+        goBtn.textContent = n ? 'Sposta nel Cestino ' + R.num(n) + ' file (' + R.bytes(b) + ')' : 'Sposta nel Cestino';
+      }
+      function setChecked(gi, p, on) {
+        var set = sel.get(gi) || new Set();
+        if (on) set.add(p); else set.delete(p);
+        if (set.size) sel.set(gi, set); else sel.delete(gi);
+      }
+      var list = el('ol', { class: 'sc-dups' });
+      groups.slice(0, 300).forEach(function (gr, gi) {
+        var paths = gr.paths.slice().sort(function (a, b) { return a.length - b.length || a.localeCompare(b); });
+        var li = el('li', { class: 'sc-dup' });
+        li.appendChild(el('p', { class: 'sc-dup-head', text: R.num(gr.count) + ' copie da ' + R.bytes(gr.size) + ' · ' + R.bytes(gr.wasted) + ' sprecati · ' + (gr.exact ? 'identici' : 'molto probabili') }));
+        var ul = el('ul');
+        paths.forEach(function (p) {
+          var cb = el('input', { type: 'checkbox', 'aria-label': 'Sposta nel Cestino: ' + p });
+          cb.addEventListener('change', function () {
+            var set = sel.get(gi);
+            var free = gr.paths.length - (set ? set.size : 0) - gr.paths.filter(function (x) { return moved.has(x); }).length;
+            if (cb.checked && free <= 1) { cb.checked = false; status.textContent = 'In ogni gruppo deve restare almeno una copia.'; return; }
+            setChecked(gi, p, cb.checked); count();
+          });
+          var show = el('button', { type: 'button', class: 'wc-link', text: 'Mostra' });
+          show.addEventListener('click', function () { api.showItem(p); });
+          var row = el('li', {}, [el('label', { class: 'wc-check' }, [cb, el('span', { class: 'sc-dup-path', text: p })]), show]);
+          boxes.push({ cb: cb, gi: gi, p: p, row: row, first: p === paths[0] });
+          ul.appendChild(row);
+        });
+        li.appendChild(ul);
+        list.appendChild(li);
+      });
+      panel.appendChild(list);
+      if (groups.length > 300) panel.appendChild(el('p', { class: 'wc-note', text: 'Mostrati i primi 300 gruppi (i più pesanti).' }));
+      autoBtn.addEventListener('click', function () {
+        sel.clear();
+        boxes.forEach(function (b) { if (moved.has(b.p)) return; b.cb.checked = !b.first; if (!b.first) setChecked(b.gi, b.p, true); });
+        count();
+      });
+      noneBtn.addEventListener('click', function () { sel.clear(); boxes.forEach(function (b) { b.cb.checked = false; }); count(); });
+      goBtn.addEventListener('click', function () {
+        if (!api.trash) return;
+        var items = [];
+        sel.forEach(function (set, gi) { items.push({ group: gi, paths: Array.from(set) }); });
+        if (!items.length) return;
+        goBtn.disabled = true; autoBtn.disabled = true; noneBtn.disabled = true;
+        status.textContent = 'Controllo che le copie siano identiche a quella che resta…';
+        trashProgress = function (m) { status.textContent = 'Controllo che le copie siano identiche: ' + m.done + ' di ' + m.total + '…'; };
+        api.trash(r.id, items).then(function (res) {
+          trashProgress = null;
+          (res.moved || []).forEach(function (p) { moved.add(p); });
+          boxes.forEach(function (b) { if (moved.has(b.p)) { b.cb.checked = false; b.cb.disabled = true; b.row.classList.add('sc-moved'); } });
+          sel.clear(); count();
+          var parts = [];
+          if (res.cancelled) parts.push('Annullato: nessun file spostato.');
+          else parts.push('Spostati nel Cestino: ' + R.num((res.moved || []).length) + ' file (' + R.bytes(res.bytes || 0) + ').');
+          if (res.failed && res.failed.length) parts.push(res.failed.length + ' non spostati: ' + res.failed.slice(0, 3).map(function (f) { return f.reason; }).join('; ') + '.');
+          if (res.skipped && res.skipped.length) parts.push(res.skipped.length + ' saltati per sicurezza: ' + res.skipped.slice(0, 3).map(function (f) { return f.reason; }).join('; ') + '.');
+          if (res.log) parts.push('Registro: ' + res.log);
+          status.textContent = parts.join(' ');
+        }).catch(function (e) { trashProgress = null; status.textContent = 'Errore: ' + e.message; })
+          .then(function () { autoBtn.disabled = false; noneBtn.disabled = false; count(); });
+      });
+    }
+
     function showReport(r) {
+      if (tmCleanup) { tmCleanup(); tmCleanup = null; }
       reportBox.textContent = '';
       reportBox.hidden = false;
       var tilesBox = el('div', { class: 'sc-tiles' });
@@ -263,51 +466,61 @@
       addExport('Rapporto completo (.html)', function () { return api.saveFile('scansione ' + stamp + ' - Word Crawler.html', R.html(r), 'text/html'); });
       addExport('Dati (.json)', function () { return api.saveFile('scansione ' + stamp + ' - Word Crawler.json', JSON.stringify(r, null, 2), 'application/json'); });
       if (r.csvPath) addExport('Elenco di tutti i file (.csv, ' + R.num(r.csvRows) + ' righe)', function () { return api.exportCsv(r.csvPath); });
+      // confronto con una scansione precedente della stessa cartella
+      var cmpSel = el('select', { 'aria-label': 'Confronta con una scansione precedente', hidden: 'hidden' }, [el('option', { value: '', text: 'Confronta con una scansione precedente…' })]);
+      exp.appendChild(cmpSel);
+      if (api.history && r.id) {
+        api.history(r.root).then(function (list) {
+          (list || []).filter(function (m) { return m.id !== r.id; }).forEach(function (m) {
+            cmpSel.appendChild(el('option', { value: m.id, text: new Date(m.finishedAt).toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' }) + ' · ' + R.num(m.files) + ' file · ' + R.bytes(m.bytes) + (m.partial ? ' (parziale)' : '') }));
+          });
+          cmpSel.hidden = cmpSel.options.length < 2;
+        }).catch(function () {});
+      }
       reportBox.appendChild(el('header', { class: 'sc-rhead' }, [
         el('div', {}, [el('h2', { text: 'Rapporto' }), el('p', { class: 'wc-note', text: r.root + ' · ' + new Date(r.finishedAt).toLocaleString('it-IT') + (r.partial ? ' · parziale' : '') })]),
         exp]));
       reportBox.appendChild(note);
       reportBox.appendChild(tilesBox);
-      var secs = R.sections(r);
+      var defs = [{ title: 'Mappa', render: function (pn) { renderTreemap(pn, r); } }];
+      R.sections(r).forEach(function (s) {
+        defs.push({ title: s.title, render: function (pn) { if (s.id === 'dup' && api.trash && r.id) renderDups(pn, r, s); else renderSection(pn, s); } });
+      });
       var tabs = el('div', { class: 'wc-tabs', role: 'tablist' });
       var panel = el('div', { class: 'sc-panel', role: 'tabpanel', tabindex: '0' });
       reportBox.appendChild(tabs);
       reportBox.appendChild(panel);
       function select(i) {
+        if (tmCleanup) { tmCleanup(); tmCleanup = null; }
         Array.prototype.forEach.call(tabs.children, function (b, k) { b.setAttribute('aria-selected', k === i ? 'true' : 'false'); });
-        var s = secs[i];
         panel.textContent = '';
-        if (s.note) panel.appendChild(el('p', { class: 'wc-note sc-note', text: s.note }));
-        if (!s.rows.length) { panel.appendChild(el('p', { class: 'wc-note', text: 'Nessun elemento.' })); return; }
-        var table = el('table', { class: 'sc-table' });
-        var thead = el('thead', {}, [el('tr', {}, s.columns.map(function (c) { return el('th', { scope: 'col', text: c }); }).concat(s.paths ? [el('th', { text: '' })] : []))]);
-        var tbody = el('tbody');
-        s.rows.slice(0, 500).forEach(function (row, ri) {
-          var tr = el('tr');
-          row.forEach(function (c, ci) {
-            var td = el('td', { text: c });
-            if (s.bars && ci === 0) {
-              var bar = el('span', { class: 'sc-bar' });
-              bar.style.width = Math.max(1, Math.round(s.bars[ri] * 100)) + '%';
-              td.appendChild(bar);
-            }
-            tr.appendChild(td);
-          });
-          if (s.paths) {
-            var b = el('button', { type: 'button', class: 'wc-link', text: 'Mostra' });
-            b.addEventListener('click', function () { api.showItem(s.paths[ri]); });
-            tr.appendChild(el('td', {}, [b]));
-          }
-          tbody.appendChild(tr);
-        });
-        table.appendChild(thead); table.appendChild(tbody);
-        panel.appendChild(el('div', { class: 'sc-tw' }, [table]));
-        if (s.rows.length > 500) panel.appendChild(el('p', { class: 'wc-note', text: 'Mostrate le prime 500 righe: il rapporto HTML le contiene tutte.' }));
+        defs[i].render(panel);
       }
-      secs.forEach(function (s, i) {
-        var b = el('button', { type: 'button', role: 'tab', class: 'wc-tab', text: s.title });
+      function addTab(d) {
+        defs.push(d);
+        var i = defs.length - 1;
+        var b = el('button', { type: 'button', role: 'tab', class: 'wc-tab', text: d.title });
         b.addEventListener('click', function () { select(i); });
         tabs.appendChild(b);
+        return i;
+      }
+      var initial = defs.slice();
+      defs = [];
+      initial.forEach(addTab);
+      var cmpTab = -1;
+      cmpSel.addEventListener('change', function () {
+        var id = cmpSel.value;
+        if (!id) return;
+        note.textContent = 'Confronto le due scansioni…';
+        api.compare(id, r.id).then(function (c) {
+          note.textContent = '';
+          var secs = R.compareSections(c);
+          var d = { title: 'Confronto', render: function (pn) {
+            secs.forEach(function (s) { pn.appendChild(el('h3', { class: 'sc-subhead', text: s.title })); renderSection(pn, s); });
+          } };
+          if (cmpTab < 0) cmpTab = addTab(d); else defs[cmpTab] = d;
+          select(cmpTab);
+        }).catch(function (e) { note.textContent = 'Confronto non riuscito: ' + e.message; });
       });
       select(0);
       reportBox.scrollIntoView({ behavior: 'smooth', block: 'start' });

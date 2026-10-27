@@ -9,8 +9,11 @@
  *
  * WCEngine.start({
  *   tokens, sentences, display(id), settings, label(), container?,
- *   onProgress(processed, total), onEnd(), onStop(), keys: true|false
- * }) -> { stop, pause, resume, toggle, finish, setSettings, isActive, isRunning, invalidate }
+ *   onProgress(processed, total), onEnd(), onStop(), keys: true|false,
+ *   static?: true        mostra subito tutti i segni, senza ragno né animazione (segni ritrovati)
+ *   userMarks?: [...]    segni fatti a mano: { type: 'hl'|'under'|'note', from, to, n? }
+ * }) -> { stop, pause, resume, toggle, finish, setSettings, isActive, isRunning, invalidate,
+ *         setUserMarks(list), setPreview({from, to, type}|null), hitTest(clientX, clientY) -> indice|-1 }
  *
  * token: { text, rect() -> {x,y,w,h} in coordinate del documento | null, mk, kid, grp, sid, link?, el?, font?() }
  */
@@ -36,6 +39,7 @@
     var tokens = o.tokens || [];
     var sents = o.sentences || [];
     var S = Object.assign({ speed: 14, legs: 8, webDensity: 5, veil: true, theme: 'night', hud: true, follow: true }, o.settings || {});
+    if (o.static) { S.veil = false; S.hud = false; S.follow = false; S.webDensity = 0; }
     var C = THEMES[S.theme] || THEMES.night;
 
     var cv = document.createElement('canvas');
@@ -91,7 +95,7 @@
     var crawler = null, cur = null, followPausedUntil = 0, lastVerCheck = 0;
     var nodes = [], edges = [], lastByKid = new Map(), kwOrder = [], seenKid = new Set(), links = new WeakSet();
     var counts = { key: 0, def: 0, term: 0, kw: 0 };
-    var hint = { text: o.hint || (touch ? 'WORD CRAWLER · TOCCA × PER FERMARE' : 'WORD CRAWLER · ESC esci · SPAZIO pausa · +/− velocità · INVIO completa'), until: performance.now() + 4500 };
+    var hint = { text: o.hint || (touch ? 'WORD CRAWLER · TOCCA × PER FERMARE' : 'WORD CRAWLER · ESC esci · SPAZIO pausa · +/− velocità · INVIO completa'), until: o.static && !o.hint ? 0 : performance.now() + 4500 };
     var fontCache = new WeakMap();
     tokens.forEach(function (t) { t._v = -1; t.at = 0; });
 
@@ -167,6 +171,86 @@
       ctx.fillText(t.text, x, y + (r.h - (asc + desc)) / 2 + asc);
     }
     function sameLine(a, b) { return a && b && Math.abs(a.y - b.y) < Math.min(a.h, b.h) * 0.5; }
+
+    // ---------------------------------------------------------------- segni fatti a mano
+    var umarks = [], umAt = null, preview = null;
+    function setUserMarks(list) {
+      umarks = (list || []).slice();
+      umAt = new Int32Array(tokens.length).fill(-1);
+      umarks.forEach(function (m, mi) {
+        for (var k = Math.max(0, m.from); k < Math.min(tokens.length, m.to); k++) umAt[k] = mi;
+      });
+    }
+    setUserMarks(o.userMarks);
+    function setPreview(p) { preview = p && p.to > p.from ? p : null; }
+    function wavy(x1, x2, y, amp) {
+      ctx.beginPath();
+      var step = Math.max(3, amp * 1.6), up = true;
+      ctx.moveTo(x1, y);
+      for (var xx = x1 + step; xx <= x2 + 0.5; xx += step) { ctx.lineTo(xx, y + (up ? -amp : amp)); up = !up; }
+      ctx.stroke();
+    }
+    function drawUserMarks(sx, sy) {
+      if (!umarks.length && !preview) return;
+      var vf = firstVisible(sy, tokens.length), over = 0, noteN = 0;
+      for (var k = vf; k < tokens.length; k++) {
+        var mi = umAt[k], pv = preview && k >= preview.from && k < preview.to;
+        if (mi < 0 && !pv) continue;
+        var r = rectOf(tokens[k]);
+        if (!r) continue;
+        var y = r.y - sy;
+        if (y > H + 60) { if (++over > 400) break; continue; }
+        if (y + r.h < -60) continue;
+        var x = r.x - sx;
+        var nx = k + 1 < tokens.length && ((mi >= 0 && umAt[k + 1] === mi) || (pv && k + 1 < preview.to)) ? rectOf(tokens[k + 1]) : null;
+        var w = sameLine(r, nx) ? nx.x - r.x : r.w;
+        if (pv) {
+          ctx.strokeStyle = C.orange; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+          ctx.strokeRect(x - 2, y - 2, w + 4, r.h + 4);
+          ctx.setLineDash([]);
+        }
+        if (mi < 0) continue;
+        var m = umarks[mi];
+        if (m.type === 'hl') {
+          ctx.fillStyle = S.theme === 'paper' ? 'rgba(255,214,0,0.42)' : 'rgba(255,226,64,0.34)';
+          ctx.fillRect(x - 1, y, w + 2, r.h);
+        } else if (m.type === 'under') {
+          ctx.strokeStyle = C.red; ctx.lineWidth = Math.max(1.4, r.h * 0.07);
+          wavy(x, x + w, y + r.h + 2, Math.max(1.5, r.h * 0.09));
+        } else if (m.type === 'note') {
+          ctx.fillStyle = S.theme === 'paper' ? 'rgba(234,88,12,0.16)' : 'rgba(255,138,61,0.22)';
+          ctx.fillRect(x - 1, y, w + 2, r.h);
+          ctx.strokeStyle = C.orange; ctx.lineWidth = 1.6; ctx.setLineDash([2, 3]);
+          ctx.beginPath(); ctx.moveTo(x, y + r.h + 1.5); ctx.lineTo(x + w, y + r.h + 1.5); ctx.stroke();
+          ctx.setLineDash([]);
+          if (k === m.to - 1) {
+            // numero della nota alla fine del testo segnato
+            var label = String(m.n || ++noteN), fs = Math.max(10, Math.min(14, r.h * 0.6));
+            ctx.font = '700 ' + fs + 'px ' + MONO;
+            var bw = ctx.measureText(label).width + fs * 0.8;
+            ctx.fillStyle = C.orange; ctx.fillRect(x + r.w + 2, y - fs * 0.6, bw, fs * 1.3);
+            ctx.fillStyle = '#ffffff'; ctx.textBaseline = 'top'; ctx.fillText(label, x + r.w + 2 + fs * 0.4, y - fs * 0.6 + fs * 0.15);
+            ctx.textBaseline = 'alphabetic';
+          }
+        }
+      }
+    }
+    // parola sotto il puntatore (coordinate della finestra)
+    function hitTest(cx, cy) {
+      var px = cx + window.scrollX, py = cy + window.scrollY, sy = window.scrollY + BY;
+      var vf = firstVisible(sy, tokens.length), best = -1, bestD = 1e9, over = 0;
+      for (var k = vf; k < tokens.length; k++) {
+        var r = rectOf(tokens[k]);
+        if (!r) continue;
+        if (r.y - sy > H + 60) { if (++over > 400) break; continue; }
+        if (py >= r.y - 2 && py <= r.y + r.h + 2) {
+          var dx = px < r.x ? r.x - px : (px > r.x + r.w ? px - r.x - r.w : 0);
+          if (dx === 0) return k;
+          if (dx < bestD) { bestD = dx; best = k; }
+        }
+      }
+      return bestD <= 14 ? best : -1;
+    }
 
     // primo token visibile (i token sono in ordine di lettura, quindi quasi sempre dall'alto in basso)
     function firstVisible(sy, limit) {
@@ -274,7 +358,9 @@
         }
       }
 
-      if (!crawler) return;
+      drawUserMarks(sx, sy);
+
+      if (!crawler || o.static) return;
       var cx = crawler[0] - sx, cy = crawler[1] - sy;
       var unit = Math.max(9, Math.min(16, Math.min(W, H) * 0.028));
 
@@ -428,7 +514,8 @@
           crawler[1] += (c[1] - crawler[1]) * k;
         }
       }
-      if (S.follow && crawler && running && now > followPausedUntil) {
+      // si segue il ragno solo mentre legge (finita la lettura la pagina resta dove la lascia l'utente)
+      if (S.follow && crawler && running && !ended && now > followPausedUntil) {
         var sy = window.scrollY;
         var target = crawler[1] - BY - H * 0.45;
         var maxY = document.documentElement.scrollHeight - window.innerHeight;
@@ -461,6 +548,8 @@
     window.addEventListener('wheel', userScroll, { passive: true });
     window.addEventListener('touchmove', userScroll, { passive: true });
     window.addEventListener('resize', onResize);
+    // segni ritrovati: tutto subito, senza ragno
+    if (o.static) { processed = prog = tokens.length; ended = true; if (o.onEnd) setTimeout(o.onEnd, 0); }
     raf = requestAnimationFrame(frame);
 
     function pause() { if (running) { running = false; say('PAUSA', 1000); } }
@@ -489,6 +578,7 @@
 
     return {
       stop: stop, pause: pause, resume: resume, toggle: toggle, finish: finish, setSettings: setSettings,
+      setUserMarks: setUserMarks, setPreview: setPreview, hitTest: hitTest,
       invalidate: function () { ver++; },
       isActive: function () { return active; },
       isRunning: function () { return active && running && !ended; },

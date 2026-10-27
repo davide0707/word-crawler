@@ -50,6 +50,27 @@ body { padding-top: var(--wc-top, 52px); }
 .sc-table td { overflow-wrap: anywhere; white-space: pre-line; font-variant-numeric: tabular-nums; position: relative; }
 .sc-table .wc-link { white-space: nowrap; }
 .sc-bar { display: block; height: 3px; background: var(--wc-crawl-hi); margin-top: 5px; border-radius: 2px; }
+.sc-export select { width: auto; max-width: 360px; }
+.sc-subhead { margin: 22px 0 6px; font: 600 11px var(--wc-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--wc-cyan); }
+
+/* mappa a riquadri */
+.sc-tm-bar { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; flex-wrap: wrap; }
+.sc-crumbs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; flex: 1; min-width: 0; font-size: 13px; }
+.sc-crumbs .wc-link { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-crumb-sep { color: var(--wc-mute); }
+.sc-tm { display: block; border-radius: 8px; border: 1px solid var(--wc-line); cursor: pointer; }
+.sc-tm-info { margin-top: 8px; min-height: 1.4em; }
+
+/* duplicati da spostare nel Cestino */
+.sc-trash-bar { margin: 8px 0 4px; }
+.sc-dups { list-style: decimal; margin: 12px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 12px; }
+.sc-dup-head { margin: 0 0 4px; font: 600 12px var(--wc-mono); color: var(--wc-mute); }
+.sc-dup ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.sc-dup li { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.sc-dup .wc-check { font-weight: 400; min-width: 0; }
+.sc-dup-path { overflow-wrap: anywhere; font: 12.5px/1.45 var(--wc-mono); }
+.sc-moved .sc-dup-path { text-decoration: line-through; color: var(--wc-mute); }
+.sc-moved .sc-dup-path::after { content: "nel Cestino"; display: inline-block; margin-left: 8px; color: var(--wc-orange); }
 
 /* ---------------- guida */
 .guide { padding: 32px clamp(16px, 4vw, 48px) 80px; }

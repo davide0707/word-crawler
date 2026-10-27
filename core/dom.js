@@ -56,12 +56,23 @@
     return 1;
   }
 
-  function makeToken(text, range, el) {
+  /*
+   * Il Range della parola si crea solo quando serve (quando il ragno ci arriva o la pagina scorre lì):
+   * con documenti di centinaia di migliaia di parole risparmia molta memoria e tempo.
+   */
+  function makeToken(text, nodeA, offA, nodeB, offB, el) {
     var a = el && el.closest ? el.closest('a[href]') : null;
+    function range() {
+      var r = document.createRange();
+      try { r.setStart(nodeA, offA); r.setEnd(nodeB, offB); } catch (e) { return null; }
+      return r;
+    }
     return {
       text: text, el: el, link: a, range: range,
       rect: function () {
-        var rs = range.getClientRects();
+        var rg = range();
+        if (!rg) return null;
+        var rs = rg.getClientRects();
         var r = null;
         for (var i = 0; i < rs.length; i++) { if (rs[i].width > 0 && rs[i].height > 0) { r = rs[i]; break; } }
         if (!r) return null;
@@ -73,7 +84,7 @@
   // -> array di token con gap (testo prima della parola), blk (blocco) e w (peso del titolo)
   function collect(root, options) {
     var WORD = new RegExp(g.WCText.WORD.source, 'gu');
-    var max = (options && options.max) || 80000;
+    var max = (options && options.max) || 400000;
     var tw = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
       acceptNode: function (n) {
         if (n.nodeType === 1) return skipEl(n) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
@@ -107,10 +118,7 @@
       while (sj < segs.length - 1 && segs[sj].start + segs[sj].len < e) sj++;
       var A = segs[si], B = segs[sj];
       if (!A || s < A.start || e > B.start + B.len) continue;
-      var range = document.createRange();
-      range.setStart(A.node, s - A.start);
-      range.setEnd(B.node, e - B.start);
-      var tok = makeToken(m[0], range, A.node.parentElement);
+      var tok = makeToken(m[0], A.node, s - A.start, B.node, e - B.start, A.node.parentElement);
       tok.gap = concat.slice(lastEnd, s);
       tok.blk = A.blk;
       tok.w = blkW[A.blk] || 1;

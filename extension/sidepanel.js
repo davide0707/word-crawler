@@ -2,13 +2,14 @@
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
-  var CONTENT = ['core/settings.js', 'core/text.js', 'core/analysis.js', 'core/dom.js', 'core/crawler.js', 'core/export.js', 'content.js'];
+  var CONTENT = globalThis.WC_CONTENT;
+  var CODES = ['it', 'en', 'fr', 'es', 'de', 'pt'];
   var READER = chrome.runtime.getURL('reader.html');
-  var DOC_RE = /\.(pdf|docx?|odt|odp|ods|pptx|xlsx|epub|rtf|md|txt|srt|vtt|csv)(\?|#|$)/i;
-  var tabId = null, tabUrl = '', settings = WCSettings.defaults(), live = { active: false, running: false, ended: false };
+  var DOC_RE = /\.(pdf|docx?|odt|odp|ods|pptx|xlsx|epub|rtf|md|txt|srt|vtt|csv|png|jpe?g|webp|bmp|gif)(\?|#|$)/i;
+  var tabId = null, tabUrl = '', settings = WCSettings.defaults(), live = { active: false, running: false, ended: false }, hasResults = false;
 
   var sui = WCSettingsUI.render($('settings'), {
-    values: settings, idPrefix: 'sp',
+    values: settings, idPrefix: 'sp', hide: ['ocr', 'ocrLang'],
     onChange: function (v, id) {
       settings = v;
       WCStore.saveSettings(v);
@@ -20,17 +21,40 @@
   });
   WCStore.loadSettings().then(function (v) { if (v) { settings = WCSettings.sanitize(v); sui.set(settings); } });
 
+  function toTab(msg) { return tabId === null ? Promise.resolve(null) : chrome.tabs.sendMessage(tabId, msg).catch(function () { return null; }); }
   var rui = WCResultsUI.render($('results'), {
     idPrefix: 'spr',
-    onJump: function (idx) { if (tabId !== null) chrome.tabs.sendMessage(tabId, { type: 'wc:jump', idx: idx }).catch(function () {}); },
+    exports: ['md', 'txt', 'html', 'anki', 'docx', 'ahtml', 'pdf', 'json'],
+    onJump: function (idx) { toTab({ type: 'wc:jump', idx: idx }); },
     onSave: function (entry) { return WCStore.save(entry); },
-    onExport: function (kind, entry) { var f = WCExport.build(kind, entry); return WCStore.download(f.name, f.content, f.mime); }
+    onExport: function (kind, entry) {
+      var needsDoc = WCExport.KINDS.some(function (k) { return k[0] === kind && k[2]; });
+      // il documento segnato lo prepara la pagina (ha le parole e i segni)
+      return (needsDoc ? toTab({ type: 'wc:annotated' }) : Promise.resolve(null)).then(function (model) {
+        if (kind === 'pdf') return WCStore.printPdf(WCAnnotate.html(entry, model));
+        return Promise.resolve(WCExport.build(kind, entry, model)).then(function (f) { return WCStore.download(f.name, f.content, f.mime); });
+      });
+    },
+    onRemoveMark: function (id) { toTab({ type: 'wc:mark-remove', id: id }); },
+    onEditMark: function (id) { toTab({ type: 'wc:mark-edit', id: id }); }
+  });
+
+  // penna
+  var penBtns = Array.prototype.slice.call(document.querySelectorAll('#pen [data-tool]'));
+  function paintPen(tool) { penBtns.forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.tool === tool ? 'true' : 'false'); }); }
+  penBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      var on = b.getAttribute('aria-pressed') === 'true';
+      toTab({ type: 'wc:pen', tool: on ? null : b.dataset.tool, settings: settings });
+      paintPen(on ? null : b.dataset.tool);
+    });
   });
 
   function say(m) { $('msg').textContent = m || ''; }
   function buttons() {
     $('run').textContent = live.active || live.ended ? 'Leggi di nuovo' : 'Leggi questa pagina';
     $('pause').disabled = !live.active || live.ended;
+    penBtns.forEach(function (b) { b.disabled = !hasResults; });
     $('pause').textContent = live.active && !live.running && !live.ended ? 'Riprendi' : 'Pausa';
     $('finish').disabled = !live.active || live.ended;
     $('stop').disabled = !live.active;
@@ -44,6 +68,8 @@
     tabUrl = tab ? tab.url || '' : '';
     $('page-title').textContent = tab ? (tab.title || tabUrl) : '—';
     live = { active: false, running: false, ended: false };
+    hasResults = false;
+    paintPen(null);
     rui.clear();
     say('');
     if (tabId === null) return;
@@ -54,9 +80,12 @@
       var st = await chrome.tabs.sendMessage(tabId, { type: 'wc:state' });
       if (st) {
         rui.show(st.results, st.doc, { total: st.total, firstIdx: st.firstIdx });
+        rui.setUserMarks(st.userMarks || []);
         rui.progress(st.processed);
         if (st.ended) rui.done();
         live = { active: st.active, running: st.running, ended: st.ended };
+        hasResults = true;
+        if (st.restored) say('Su questa pagina ci sono i segni di una lettura salvata.');
       }
     } catch (e) { /* il ragno non è ancora stato su questa pagina */ }
     buttons();
@@ -68,8 +97,16 @@
     say('Il ragno entra nella pagina…');
     try {
       var r = await chrome.scripting.executeScript({ target: { tabId: tabId }, func: function () { return document.contentType; } });
-      if (r && r[0] && r[0].result === 'application/pdf') { chrome.tabs.update(tabId, { url: READER + '?file=' + encodeURIComponent(tabUrl) }); return; }
+      var ct = r && r[0] && r[0].result;
+      if (ct === 'application/pdf' || /^image\//.test(ct || '')) { chrome.tabs.update(tabId, { url: READER + '?file=' + encodeURIComponent(tabUrl) }); return; }
       await chrome.scripting.executeScript({ target: { tabId: tabId }, files: CONTENT });
+      // frequenze delle parole della lingua della pagina (servono all'analisi)
+      var lang = settings.language !== 'auto' ? settings.language : null;
+      if (!lang) {
+        var d = await chrome.scripting.executeScript({ target: { tabId: tabId }, func: function () { return self.WCLang ? self.WCLang.detect((document.body && document.body.innerText || '').slice(0, 30000)) : 'it'; } });
+        lang = (d && d[0] && d[0].result) || 'it';
+      }
+      if (CODES.indexOf(lang) >= 0) await chrome.scripting.executeScript({ target: { tabId: tabId }, files: ['core/freq/' + lang + '.js'] }).catch(function () {});
       await chrome.tabs.sendMessage(tabId, { type: 'wc:start', settings: settings });
     } catch (e) {
       say('Su questa pagina il browser non permette alle estensioni di entrare (pagine interne, Web Store, PDF di sistema).');
@@ -85,11 +122,15 @@
     if (!sender.tab || sender.tab.id !== tabId || !msg) return;
     if (msg.type === 'wc:begin') {
       rui.show(msg.results, msg.doc, { total: msg.total, firstIdx: msg.firstIdx });
-      live = { active: true, running: true, ended: false };
-      say('');
+      rui.setUserMarks(msg.userMarks || []);
+      live = { active: true, running: !msg.restored, ended: !!msg.restored };
+      hasResults = true;
+      say(msg.restored ? 'Segni ritrovati da una lettura salvata.' : '');
     } else if (msg.type === 'wc:progress') rui.progress(msg.processed);
+    else if (msg.type === 'wc:marks') rui.setUserMarks(msg.marks || []);
+    else if (msg.type === 'wc:pen-tool') paintPen(msg.tool);
     else if (msg.type === 'wc:end') { rui.done(); live.ended = true; live.running = false; }
-    else if (msg.type === 'wc:stopped') { live.active = false; live.running = false; }
+    else if (msg.type === 'wc:stopped') { live.active = false; live.running = false; paintPen(null); }
     else if (msg.type === 'wc:error') say(msg.message);
     buttons();
   });

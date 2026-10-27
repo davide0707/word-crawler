@@ -65,6 +65,84 @@
 
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
+  // ---------------------------------------------------------------- mappa a riquadri (treemap "squarified")
+  /*
+   * items: [{ value, ... }] (valori > 0). Restituisce [{ it, x, y, w, h }] che riempiono il rettangolo,
+   * con riquadri il più possibile quadrati (Bruls, Huizing e van Wijk, 2000).
+   */
+  function squarify(items, x, y, w, h) {
+    var out = [];
+    var total = 0;
+    items.forEach(function (it) { if (it.value > 0) total += it.value; });
+    if (!total || w <= 0 || h <= 0) return out;
+    var scale = w * h / total;
+    var rest = items.filter(function (it) { return it.value > 0; }).sort(function (a, b) { return b.value - a.value; })
+      .map(function (it) { return { it: it, a: it.value * scale }; });
+    function worst(row, side) {
+      var s = 0, mx = 0, mn = Infinity;
+      row.forEach(function (r) { s += r.a; if (r.a > mx) mx = r.a; if (r.a < mn) mn = r.a; });
+      var s2 = s * s, q = side * side;
+      return Math.max(q * mx / s2, s2 / (q * mn));
+    }
+    while (rest.length) {
+      var side = Math.min(w, h), row = [], best = Infinity, i = 0;
+      while (i < rest.length) {
+        var cand = row.concat([rest[i]]), wr = worst(cand, side);
+        if (row.length && wr > best) break;
+        row = cand; best = wr; i++;
+      }
+      var area = row.reduce(function (s2, r) { return s2 + r.a; }, 0), thick = area / side, pos = 0;
+      row.forEach(function (r) {
+        var len = r.a / thick;
+        if (w >= h) out.push({ it: r.it, x: x, y: y + pos, w: thick, h: len });
+        else out.push({ it: r.it, x: x + pos, y: y, w: len, h: thick });
+        pos += len;
+      });
+      if (w >= h) { x += thick; w -= thick; } else { y += thick; h -= thick; }
+      rest = rest.slice(i);
+    }
+    return out;
+  }
+
+  // figli di ogni cartella nell'albero del rapporto
+  function treeKids(tree) {
+    var kids = tree.names.map(function () { return []; });
+    for (var i = 1; i < tree.names.length; i++) if (tree.parent[i] >= 0) kids[tree.parent[i]].push(i);
+    return kids;
+  }
+  function treePath(tree, i) {
+    var parts = [];
+    for (var k = i; k > 0; k = tree.parent[k]) parts.unshift(tree.names[k]);
+    var root = tree.names[0];
+    var sep = /\\/.test(root) && !/\//.test(root) ? '\\' : '/';
+    return parts.length ? root.replace(/[\\/]+$/, '') + sep + parts.join(sep) : root;
+  }
+
+  // ---------------------------------------------------------------- confronto tra due scansioni
+  function signed(n, fmt) { return (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n)); }
+  function compareSections(c) {
+    var out = [];
+    var labels = { files: 'File', dirs: 'Cartelle', bytes: 'Spazio' };
+    out.push({ id: 'cmp-tot', title: 'In totale', note: 'Prima: ' + new Date(c.old.finishedAt).toLocaleString('it-IT') + ' · dopo: ' + new Date(c.new.finishedAt).toLocaleString('it-IT') + '.',
+      columns: ['', 'Prima', 'Dopo', 'Differenza'],
+      rows: c.totals.map(function (t) { var f = t.key === 'bytes' ? bytes : num; return [labels[t.key], f(t.before), f(t.after), signed(t.delta, f)]; }) });
+    out.push({ id: 'cmp-dirs', title: 'Cartelle cambiate', note: c.note || 'Le cartelle che sono cresciute o diminuite di più (sottocartelle comprese).', columns: ['Cartella', 'Prima', 'Dopo', 'Differenza'],
+      rows: c.folders.map(function (f) { return [f.path === '.' ? '(cartella scelta)' : f.path, f.before == null ? 'non c’era' : bytes(f.before), f.after == null ? 'sparita' : bytes(f.after), signed(f.delta, bytes)]; }) });
+    out.push({ id: 'cmp-cat', title: 'Tipi di file', columns: ['Tipo', 'Prima', 'Dopo', 'Differenza'],
+      rows: c.categories.map(function (k) { return [k.category, bytes(k.before), bytes(k.after), signed(k.delta, bytes)]; }) });
+    var f = c.files || {};
+    if (f.skipped) out.push({ id: 'cmp-files', title: 'File', note: f.skipped, columns: [], rows: [] });
+    else {
+      out.push({ id: 'cmp-add', title: 'File nuovi', note: num(f.added.count) + ' file, ' + bytes(f.added.bytes) + '. Elenco dei più grandi.', columns: ['File', 'Dimensione'],
+        rows: f.added.top.map(function (x) { return [x.path, bytes(x.size)]; }), paths: f.added.top.map(function (x) { return x.path; }) });
+      out.push({ id: 'cmp-del', title: 'File spariti', note: num(f.removed.count) + ' file, ' + bytes(f.removed.bytes) + '.', columns: ['File', 'Dimensione'],
+        rows: f.removed.top.map(function (x) { return [x.path, bytes(x.size)]; }) });
+      out.push({ id: 'cmp-mod', title: 'File cambiati', note: num(f.changed.count) + ' file modificati (data o dimensione), ' + signed(f.changed.bytes, bytes) + ' in tutto.', columns: ['File', 'Prima', 'Dopo'],
+        rows: f.changed.top.map(function (x) { return [x.path, bytes(x.before), bytes(x.size)]; }), paths: f.changed.top.map(function (x) { return x.path; }) });
+    }
+    return out;
+  }
+
   // Rapporto completo in un'unica pagina HTML
   function html(r) {
     var parts = [];
@@ -88,5 +166,5 @@
       '</style></head><body>' + parts.join('\n') + '</body></html>';
   }
 
-  g.WCScanReport = { sections: sections, tiles: tiles, html: html, bytes: bytes, num: num };
+  g.WCScanReport = { sections: sections, tiles: tiles, html: html, bytes: bytes, num: num, squarify: squarify, treeKids: treeKids, treePath: treePath, compareSections: compareSections, esc: esc };
 })(globalThis);

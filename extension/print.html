@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Word Crawler · Stampa</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #fbfaf7; font: 14px system-ui, sans-serif; }
+    .bar { padding: 10px 16px; background: #2f4bff; color: #fff; display: flex; gap: 12px; align-items: center; }
+    .bar button { font: 600 14px system-ui, sans-serif; border: 0; border-radius: 6px; padding: 7px 14px; cursor: pointer; }
+    iframe { border: 0; width: 100%; height: calc(100% - 52px); background: #fff; }
+    @media print { .bar { display: none; } iframe { height: auto; } }
+  </style>
+</head>
+<body>
+  <div class="bar"><span>Per il PDF scegli “Salva come PDF” come stampante.</span><button type="button" id="print">Stampa / Salva come PDF</button></div>
+  <iframe id="doc" title="Documento segnato"></iframe>
+  <script src="print.js"></script>
+</body>
+</html>

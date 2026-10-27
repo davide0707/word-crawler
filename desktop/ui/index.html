@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' https://cdn.jsdelivr.net; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Word Crawler</title>
   <link rel="stylesheet" href="../../core/reader.css">
@@ -31,6 +31,7 @@
   </div>
 
   <script src="../../core/settings.js"></script>
+  <script src="../../core/lang.js"></script>
   <script src="../../core/text.js"></script>
   <script src="../../core/analysis.js"></script>
   <script src="../../core/zip.js"></script>
@@ -39,7 +40,11 @@
   <script src="../../core/dom.js"></script>
   <script src="../../core/pdfcore.js"></script>
   <script src="../../core/crawler.js"></script>
+  <script src="../../core/annotate.js"></script>
+  <script src="../../core/docx.js"></script>
   <script src="../../core/export.js"></script>
+  <script src="../../core/ocr.js"></script>
+  <script src="../../core/pen.js"></script>
   <script src="../../core/settings-ui.js"></script>
   <script src="../../core/results-ui.js"></script>
   <script src="../../core/reader.js"></script>

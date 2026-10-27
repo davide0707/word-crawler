@@ -8,17 +8,18 @@
  *   dei paragrafi, poi scelta con MMR (parametro "Varietà") per non ripetere lo stesso concetto.
  * - Studio: frasi chiave, definizioni, nomi, numeri e date.
  * - Cerca: parole o frasi indicate dall'utente.
- * - Statistiche e leggibilità (Gulpease per l'italiano, Flesch per l'inglese).
+ * - Ripasso: schede (definizioni e frasi da completare) e quiz a scelta multipla.
+ * - Statistiche e leggibilità con la formula adatta a ogni lingua (vedi lang.js).
+ *
+ * Lingue: italiano, inglese, francese, spagnolo, tedesco, portoghese. Se sono state caricate
+ * le frequenze della lingua (WCLang.ensure), le parole comuni pesano meno di quelle rare.
  */
 (function (g) {
   'use strict';
   if (g.WCAnalysis) return;
-  var T = g.WCText;
+  var T = g.WCText, LANG = g.WCLang;
 
   var SEL = [1.7, 1.3, 1, 0.75, 0.55];
-  var MONTHS = new Set(('gennaio febbraio marzo aprile maggio giugno luglio agosto settembre ottobre novembre dicembre ' +
-    'january february march april may june july august september october november december').split(' '));
-  var CENTURY = new Set(['secolo', 'secoli', 'century', 'centuries', 'sec']);
 
   function popcount(n) { var c = 0; while (n) { c += n & 1; n >>>= 1; } return c; }
   function normalize(arr) {
@@ -52,8 +53,9 @@
   }
 
   // ---------------------------------------------------------------- parole chiave
-  function keywordStats(tokens, sents, legs) {
+  function keywordStats(tokens, sents, legs, lang) {
     var N = tokens.length;
+    var L = LANG.get(lang);
     var win = Math.max(1, Math.min(8, Math.round(legs / 2)));
     var S = new Map();
     var list = [];
@@ -62,7 +64,7 @@
       if (t.stop) continue;
       var s = S.get(t.key);
       if (!s) {
-        s = { key: t.key, idx: list.length, tf: 0, head: 0, cap: 0, capN: 0, first: i, segs: 0, L: new Set(), R: new Set(), nL: 0, nR: 0, forms: new Map(), co: new Map(), sents: new Set() };
+        s = { key: t.key, idx: list.length, tf: 0, head: 0, cap: 0, capN: 0, art: 0, first: i, segs: 0, rar: 0, L: new Set(), R: new Set(), nL: 0, nR: 0, forms: new Map(), co: new Map(), sents: new Set() };
         S.set(t.key, s);
         list.push(s);
       }
@@ -73,6 +75,12 @@
       if (t.w === 1) s.segs |= 1 << Math.min(9, Math.floor(i * 10 / Math.max(1, N)));
       s.forms.set(t.base, (s.forms.get(t.base) || 0) + 1);
       s.sents.add(t.sid);
+      s.rar += LANG.rarity(lang, t.f);
+      // tedesco: un articolo o un aggettivo subito prima indica un nome comune ("der Krieg", "kalten Krieg")
+      if (L.nounCaps && i > 0) {
+        var pv = tokens[i - 1];
+        if (L.determinerSet.has(pv.f) || (!pv.stop && pv.f.length > 3 && /(?:e|en|er|es|em)$/.test(pv.f) && !pv.cap)) s.art++;
+      }
       for (var d = 1; d <= win; d++) {
         var a = tokens[i - d], b = tokens[i + d];
         if (a && !a.stop && a.blk === t.blk) {
@@ -116,10 +124,26 @@
       var posF = 1 + 0.25 * (1 - s.first / Math.max(1, N));
       var headF = 1 + Math.min(1, s.head / 2) * 1.2;
       var yake = Math.log2(1 + tf) * (1 + 1.4 * capR) * (0.35 + 0.65 * spread) * lenF * posF * headF / rel;
+      // nome proprio? In tedesco anche i nomi comuni hanno la maiuscola: conta solo se la parola
+      // non è tra quelle d'uso comune e non ha una desinenza da nome comune (-ung, -heit…)
+      var f = T.fold(display);
+      var nameLike = capR >= 0.6 && s.capN >= 1;
+      if (nameLike && L.nounCaps) {
+        var rk = LANG.rank(lang, f);
+        var acro = display.length > 1 && display === display.toUpperCase();
+        var plain = !L.nounSuffix.test(f) && s.art <= 0.34 * tf && !LANG.compoundKnown(lang, f);
+        // parola sconosciuta senza articolo, oppure parola nota ma ripetuta sempre senza articolo (Berlin, Churchill)
+        nameLike = acro || (plain && rk !== -1 && (rk === 0 || (tf >= 2 && s.art === 0)));
+      }
+      // rarità: le parole d'uso comune pesano meno (i nomi propri quasi non vengono toccati)
+      var rar = s.rar / Math.max(1, tf);
+      if (nameLike) rar = Math.max(rar, 0.95);
       s.capR = capR;
+      s.nameLike = nameLike;
+      s.rarity = rar;
       s.tfAll = tf;
       s.display = display;
-      s.score = yake * (0.55 + 0.9 * (s.pr || 0));
+      s.score = yake * (0.55 + 0.9 * (s.pr || 0)) * rar;
       s.co = null; s.L = null; s.R = null;
     });
     list.sort(function (x, y) { return y.score - x.score; });
@@ -177,7 +201,7 @@
     return inter / (a.size + b.size - inter);
   }
 
-  function summarize(sents, opts) {
+  function summarize(sents, opts, tokens, lang) {
     var elig = sents.filter(function (s) { return s.w === 1 && s.content >= 4 && s.len <= 160; });
     if (!elig.length) return [];
     var tr = textRankSentences(elig);
@@ -195,6 +219,9 @@
       var r = 0.45 * tr[i] + 0.55 * kw[i] + 0.6 * leadW * lead;
       if (s.content < 6) r *= 0.6;
       if (s.len > 70) r *= 0.85;
+      // "Questo portò a…", "It was…": da sola la frase si capisce poco
+      s.anaph = s.posInBlk > 0 && LANG.isAnaphoric(lang, tokens[s.from], tokens[s.from + 1]);
+      if (s.anaph) r *= 0.8;
       s.rel = r;
     });
     var m = Math.max(1, Math.round(elig.length * (opts.summaryLength || 20) / 100));
@@ -222,15 +249,11 @@
   }
 
   // ---------------------------------------------------------------- studio
-  var DEF_IT = /^(?:[^,;:]{2,70}?)\s(?:(?:è|e'|sono)\s(?:un|una|uno|un'|il|lo|la|l'|i|gli|le)\b|(?:è|sono|era|erano|fu|furono)\s(?:detto|detta|detti|dette|chiamat[oaie]|definit[oaie]|considerat[oaie])\b)/i;
-  var DEF_IT2 = /\b(?:si definisce|si definiscono|si intende|si intendono|si indica|si indicano|viene definit[oa]|vengono definit[ie]|prende il nome di|prendono il nome di|è detto|è detta|sono detti|sono dette|significa|consiste nel|consiste in|si tratta di)\b/i;
-  var DEF_EN = /^(?:[^,;:]{2,70}?)\s(?:(?:is|are)\s(?:a|an|the)\b|(?:is|are|was|were)\s(?:defined as|called|known as|referred to as)\b)/i;
-  var DEF_EN2 = /\b(?:is defined as|are defined as|refers to|refer to|is called|are called|is known as|means that|consists of|is the term for)\b/i;
-
+  // Modi di scrivere una definizione: in lang.js, per ogni lingua (def1 "X è un…", def2 "si definisce…")
   function isDefinition(s, tokens, lang, kwSet, kwMap) {
-    var txt = s.text;
+    var txt = s.text.replace(/’/g, "'");
     if (s.w !== 1 || s.content < 4) return false;
-    var re1 = lang === 'en' ? DEF_EN : DEF_IT, re2 = lang === 'en' ? DEF_EN2 : DEF_IT2;
+    var L = LANG.get(lang), re1 = L.def1, re2 = L.def2;
     // verbi che definiscono in modo esplicito ("si definisce", "refers to"): basta trovarli all'inizio
     var m2 = re2.exec(txt);
     if (m2 && m2.index < 90) return true;
@@ -246,7 +269,7 @@
   }
 
   // ---------------------------------------------------------------- espressioni di più parole
-  var CONNECT = new Set(['di', 'del', 'della', 'dello', 'dei', 'degli', 'delle', 'of', 'de', 'von', 'van', 'du', 'da']);
+  var CONNECT = LANG.CONNECT;
   function plainGap(gp) { return /^[ \t ]+$/.test(gp); }
 
   /*
@@ -255,12 +278,18 @@
    * stanno quasi sempre insieme (coesione). Le sequenze di nomi propri ("Winston Churchill")
    * valgono anche se compaiono una volta sola.
    */
-  function findPhrases(tokens, kwMap, topTerms, sents) {
+  function findPhrases(tokens, kwMap, topTerms, sents, lang) {
+    var LL = LANG.get(lang), nounCaps = !!LL.nounCaps;
+    // tedesco: un articolo o un aggettivo prima dell'espressione indica un nome comune ("der Kalte Krieg")
+    function articled(i) {
+      var pv = tokens[i - 1];
+      return !!pv && (LL.determinerSet.has(pv.f) || (!pv.stop && pv.f.length > 3 && /(?:e|en|er|es|em)$/.test(pv.f) && !pv.cap));
+    }
     // parola utile per un'espressione: non comune, oppure maiuscola a metà frase ("Stati" in "Stati Uniti")
     function content(i) {
       var t = tokens[i];
       if (!t.stop) return true;
-      return t.cap && t.f.length >= 3 && sents[t.sid].from !== i;
+      return !nounCaps && t.cap && t.f.length >= 3 && sents[t.sid].from !== i;
     }
     var P = new Map();
     function add(idxs) {
@@ -309,6 +338,11 @@
         }
       });
       var isName = allCaps && p.content.length >= 2;
+      if (isName && nounCaps) {
+        isName = stats.some(function (s) { return s.nameLike; }) ||
+          (p.occ.every(function (start) { return !articled(start); }) &&
+           p.content.every(function (k) { return !LL.nounSuffix.test(k) && !LANG.compoundKnown(lang, k); }));
+      }
       var strong = p.content.some(function (k) { return topTerms.has(k); });
       if (!((count >= 2 && coh >= 0.45 && strong) || (isName && (count >= 2 || coh >= 0.5)))) return;
       var display = '', best = -1;
@@ -344,8 +378,9 @@
     return accepted;
   }
 
-  function isNumberToken(tokens, i) {
+  function isNumberToken(tokens, i, L) {
     var t = tokens[i], next = tokens[i + 1];
+    var MONTHS = L.monthSet, CENTURY = L.centurySet;
     if (/^\d{1,4}$/.test(t.f)) {
       var n = +t.f;
       if (next && /^%/.test(next.gap.trim())) return true;
@@ -356,12 +391,13 @@
     }
     if (/^\d[\d.,]*\d$/.test(t.text)) return true;
     if (MONTHS.has(t.f) && ((next && /^\d{1,4}$/.test(next.f)) || (i > 0 && /^\d{1,2}$/.test(tokens[i - 1].f)))) return true;
-    if (/^[IVXLC]{1,6}$/.test(t.text) && next && CENTURY.has(next.f)) return true;
+    // "XIX secolo", "siglo XIX", "XIXe siècle"
+    if (/^[IVXLC]{1,6}(?:e|er|ème)?$/.test(t.text) && ((next && CENTURY.has(next.f)) || (i > 0 && CENTURY.has(tokens[i - 1].f)))) return true;
     return false;
   }
 
   // ---------------------------------------------------------------- cerca
-  function parseTerms(str) {
+  function parseTerms(str, lang) {
     return String(str || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean).map(function (raw) {
       var prefix = /\*$/.test(raw);
       var clean = raw.replace(/\*+$/, '');
@@ -370,7 +406,7 @@
       while ((m = re.exec(clean))) parts.push(m[0]);
       return {
         raw: raw, prefix: prefix,
-        keys: parts.map(function (p) { return T.keyOf(p); }),
+        keys: parts.map(function (p) { return T.keyOf(p, lang); }),
         folds: parts.map(function (p) { return T.fold(T.normPart(p)); })
       };
     }).filter(function (t) { return t.keys.length; });
@@ -395,41 +431,29 @@
   }
 
   // ---------------------------------------------------------------- statistiche
-  function syllablesEn(w) {
-    w = w.toLowerCase().replace(/[^a-z]/g, '');
-    if (w.length <= 3) return 1;
-    w = w.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '').replace(/^y/, '');
-    var m = w.match(/[aeiouy]{1,2}/g);
-    return Math.max(1, m ? m.length : 1);
-  }
   function stats(tokens, sents, lang) {
     var N = tokens.length, letters = 0, uniq = new Set(), content = 0, syl = 0, blks = new Set();
-    tokens.forEach(function (t) {
+    var L = LANG.get(lang), sylFn = lang === 'it' ? null : L.syl;
+    // per i documenti molto lunghi le sillabe si contano su un campione regolare
+    var step = sylFn && N > 60000 ? Math.ceil(N / 60000) : 1, sylN = 0;
+    tokens.forEach(function (t, i) {
       letters += (t.text.match(/\p{L}/gu) || []).length;
       if (!/^\d+$/.test(t.f)) uniq.add(t.f);
       if (!t.stop) content++;
       blks.add(t.blk);
-      if (lang === 'en') syl += syllablesEn(t.text);
+      if (sylFn && i % step === 0) { syl += sylFn(t.text); sylN++; }
     });
     var S = Math.max(1, sents.length), W = Math.max(1, N);
-    var readability, scale, label;
-    if (lang === 'en') {
-      readability = 206.835 - 1.015 * (W / S) - 84.6 * (syl / W);
-      scale = 'Flesch';
-    } else {
-      readability = 89 + (300 * S - 10 * letters) / W;
-      scale = 'Gulpease';
-    }
-    readability = Math.max(0, Math.min(100, readability));
-    if (scale === 'Gulpease') label = readability >= 80 ? 'facile' : readability >= 60 ? 'abbastanza facile' : readability >= 40 ? 'difficile' : 'molto difficile';
-    else label = readability >= 70 ? 'facile' : readability >= 50 ? 'abbastanza facile' : readability >= 30 ? 'difficile' : 'molto difficile';
+    if (sylFn) syl = syl * W / Math.max(1, sylN);
+    var rd = LANG.readability(lang, { W: W, S: S, letters: letters, syl: syl });
+    var readability = rd.value, scale = rd.scale, label = rd.label;
     return {
       words: N,
       uniqueWords: uniq.size,
       sentences: sents.length,
       paragraphs: blks.size,
       avgSentenceWords: +(N / S).toFixed(1),
-      readingMinutes: Math.max(1, Math.round(N / (lang === 'en' ? 230 : 200))),
+      readingMinutes: Math.max(1, Math.round(N / (L.wpm || 200))),
       lexicalDensity: +(content / W).toFixed(3),
       readability: Math.round(readability),
       readabilityScale: scale,
@@ -459,6 +483,182 @@
     return kept;
   }
 
+  // ---------------------------------------------------------------- ripasso
+  var ASK = {
+    it: function (x) { return 'Che cos’è «' + x + '»?'; },
+    en: function (x) { return 'What is “' + x + '”?'; },
+    fr: function (x) { return 'Qu’est-ce que « ' + x + ' » ?'; },
+    es: function (x) { return '¿Qué es «' + x + '»?'; },
+    de: function (x) { return 'Was ist „' + x + '“?'; },
+    pt: function (x) { return 'O que é «' + x + '»?'; }
+  };
+  var BLANK = '_____';
+  function gapAt(tokens, k) { return tokens[k].gap.replace(/\s+/g, ' '); }
+  function span(tokens, a, b) {
+    var out = '';
+    for (var k = a; k < b; k++) { if (k > a) out += gapAt(tokens, k); out += tokens[k].text; }
+    return out;
+  }
+  // La frase con un buco al posto delle parole [bFrom, bTo)
+  function clozeOf(tokens, s, bFrom, bTo) {
+    var before = span(tokens, s.from, bFrom) + (bFrom > s.from ? gapAt(tokens, bFrom) : '');
+    var ans = span(tokens, bFrom, bTo);
+    var at = s.text.indexOf(before + ans);
+    if (at < 0 || at > 3) return null;
+    // "l'Unione Sovietica" -> "l'_____", "Calypso's" -> "_____'s": l'articolo e il genitivo restano
+    var first = tokens[bFrom], last = tokens[bTo - 1];
+    var pre = first.base && first.text !== first.base && first.text.slice(-first.base.length) === first.base ? first.text.slice(0, first.text.length - first.base.length) : '';
+    var post = bTo - 1 > bFrom || !pre ? (last.base && last.text !== last.base && last.text.indexOf(last.base) === 0 ? last.text.slice(last.base.length) : '') : '';
+    var cut = at + before.length + pre.length;
+    var core = ans.slice(pre.length, ans.length - post.length);
+    if (!core) return null;
+    return { text: s.text.slice(0, cut) + BLANK + s.text.slice(cut + core.length), answer: core };
+  }
+  // generatore pseudo-casuale ripetibile (stesso documento = stesso quiz)
+  function rng(seed) {
+    var x = (seed * 2654435761) >>> 0 || 1;
+    return function () { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; };
+  }
+
+  /*
+   * Schede di ripasso, senza AI:
+   *  - definizioni: "Che cos'è «cortina di ferro»?" -> la frase che la definisce;
+   *  - frasi da completare: una frase chiave con un buco al posto del concetto, del nome o della data più importante.
+   * Quando ci sono abbastanza alternative dello stesso tipo, la scheda ha anche 4 risposte per il quiz.
+   */
+  function buildCards(ctx) {
+    var tokens = ctx.tokens, sents = ctx.sents, lang = ctx.lang, L = LANG.get(lang);
+    var score = new Map(ctx.items.map(function (it) { return [it.id, it]; }));
+    var ask = ASK[lang] || ASK.it;
+
+    // cosa si può nascondere in una frase: parole chiave, espressioni, nomi, numeri e date
+    function candidates(s) {
+      var out = [], seen = new Map();
+      for (var i = s.from; i < s.to; i++) {
+        var t = tokens[i], c = null;
+        if (t.grp && t.ph && t.grp.from === i && t.grp.to <= s.to && (ctx.kwSet.has(t.ph) || ctx.namePhrases.has(t.ph))) {
+          c = { id: t.ph, from: i, to: t.grp.to, kind: ctx.namePhrases.has(t.ph) || (score.get(t.ph) || {}).name ? 'name' : 'concept' };
+        } else if (!t.grp && !t.stop && (ctx.kwSet.has(t.key) || (t.cap && ctx.nameSingles.has(t.key)))) {
+          c = { id: t.key, from: i, to: i + 1, kind: (t.cap && ctx.nameSingles.has(t.key)) || (score.get(t.key) || {}).name ? 'name' : 'concept' };
+        } else if (!t.grp && /^\d{3,4}$/.test(t.f) && ctx.isNum(i)) {
+          c = { id: '#' + t.f, from: i, to: i + 1, kind: 'num' };
+        }
+        if (!c) continue;
+        seen.set(c.id, (seen.get(c.id) || 0) + 1);
+        var it = score.get(c.id);
+        c.score = it ? it.score : (c.kind === 'num' ? 0.05 : 0.1);
+        out.push(c);
+      }
+      // una parola ripetuta nella stessa frase darebbe la risposta: non si nasconde
+      return out.filter(function (c) { return seen.get(c.id) === 1; });
+    }
+
+    var pools = { name: [], concept: [], num: [] };
+    ctx.items.forEach(function (it) { pools[it.name ? 'name' : 'concept'].push(it); });
+    // altri nomi propri del testo come alternative nel quiz
+    ctx.names.forEach(function (n) { if (!pools.name.some(function (x) { return x.id === n.id; })) pools.name.push(n); });
+    var years = new Map();
+    tokens.forEach(function (t, i) { if (/^\d{4}$/.test(t.f) && ctx.isNum(i)) years.set(t.f, (years.get(t.f) || 0) + 1); });
+    pools.num = Array.from(years.keys()).map(function (y) { return { id: '#' + y, word: y }; });
+
+    function choicesFor(c, answer, seed, context) {
+      var parts = c.id.split(' ');
+      var list = pools[c.kind].filter(function (it) {
+        if (it.id === c.id) return false;
+        var ks = it.id.split(' ');
+        return !ks.some(function (k) { return parts.indexOf(k) >= 0; });
+      });
+      if (c.kind === 'num') {
+        var y = +answer;
+        list.sort(function (a, b) { return Math.abs(+a.word - y) - Math.abs(+b.word - y); });
+        list = list.filter(function (it) { return it.word !== answer; }).slice(0, 6);
+        // poche date nel testo: si aggiungono anni vicini
+        [3, -4, 7, -9, 12].forEach(function (d) { if (list.length < 3) list.push({ id: '#' + (y + d), word: String(y + d) }); });
+      } else {
+        // alternative di forza simile: né troppo facili né assurde
+        var pos = ctx.items.indexOf(score.get(c.id));
+        list.sort(function (a, b) { return Math.abs(ctx.items.indexOf(a) - pos) - Math.abs(ctx.items.indexOf(b) - pos); });
+      }
+      // un'alternativa che compare già nella frase sarebbe troppo facile da scartare
+      list = list.filter(function (it) { return context.indexOf(it.word) < 0; });
+      var pick = list.slice(0, 3).map(function (it) {
+        var w = it.word;
+        // "Guerra fredda" (scritta così in un titolo) diventa "guerra fredda" se la risposta è minuscola
+        if (lang !== 'de' && c.kind === 'concept' && /^\p{Ll}/u.test(answer) && !it.name && !/^\p{Lu}{2,}/u.test(w) && ctx.capR(it.id.split(' ')[0]) < 0.5) w = w.charAt(0).toLowerCase() + w.slice(1);
+        return w;
+      });
+      if (pick.length < 3) return null;
+      var all = pick.concat([answer]);
+      var r = rng(seed + 7);
+      for (var i = all.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)); var tmp = all[i]; all[i] = all[j]; all[j] = tmp; }
+      return { choices: all, correct: all.indexOf(answer) };
+    }
+
+    var cards = [], used = new Set(), asked = new Map();
+    function add(card, s, c, cl) {
+      var q = choicesFor(c, cl.answer, s.id, cl.text);
+      asked.set(c.id, (asked.get(c.id) || 0) + 1);
+      card.sid = s.id;
+      card.idx = s.to - 1;
+      card.page = ctx.pageOf(s.from);
+      // la frase da sola, senza "Inoltre," o "But" all'inizio
+      card.cloze = cl.text.indexOf(BLANK) > 0 ? LANG.smooth(lang, cl.text) : cl.text;
+      if (card.type === 'cloze') card.front = card.cloze;
+      card.answer = cl.answer;
+      if (q) { card.choices = q.choices; card.correct = q.correct; }
+      cards.push(card);
+      used.add(s.id);
+    }
+
+    // definizioni: il termine si ricava dalla struttura della frase ("X è un…", "si definisce X…");
+    // se non è chiaro, si usa la parola chiave più forte nella prima metà della frase
+    var nDef = 0;
+    sents.forEach(function (s) {
+      if (nDef >= 30 || !ctx.isDef(s)) return;
+      var c = null, cl = null, term = LANG.defTerm(lang, s.text);
+      if (term) {
+        var at = s.text.indexOf(term);
+        if (at >= 0) {
+          var words = term.match(new RegExp(T.WORD.source, 'gu')) || [];
+          var keys = words.map(function (w) { return T.keyOf(w, lang); }).filter(function (k) { return !T.isStop(k, lang); });
+          var named = (lang !== 'de' && words.length && words.every(function (w) { return /^\p{Lu}/u.test(w); })) || /^\p{Lu}{2,}$/u.test(term) ||
+            keys.some(function (k) { return (score.get(k) || {}).name; });
+          c = { id: keys.join(' ') || term, kind: named ? 'name' : 'concept' };
+          cl = { text: s.text.slice(0, at) + BLANK + s.text.slice(at + term.length), answer: term };
+        }
+      }
+      if (!cl) {
+        var cs = candidates(s).filter(function (x) { return x.kind !== 'num'; });
+        if (!cs.length) return;
+        var mid = s.from + (s.to - s.from) / 2;
+        cs.sort(function (a, b) { return (b.score * (b.from < mid ? 2 : 1)) - (a.score * (a.from < mid ? 2 : 1)); });
+        c = cs[0];
+        cl = clozeOf(tokens, s, c.from, c.to);
+        if (!cl) return;
+      }
+      add({ type: 'def', front: ask(cl.answer), back: s.text }, s, c, cl);
+      nDef++;
+    });
+
+    // frasi chiave da completare
+    var nCloze = 0, maxCloze = Math.max(5, Math.min(40, Math.round(ctx.summary.length * 1.2)));
+    ctx.summary.forEach(function (s) {
+      if (nCloze >= maxCloze || used.has(s.id)) return;
+      var cs = candidates(s);
+      if (!cs.length) return;
+      // varietà: una risposta già chiesta vale meno
+      cs.forEach(function (x) { x.score *= Math.pow(0.35, asked.get(x.id) || 0); });
+      cs.sort(function (a, b) { return b.score - a.score; });
+      var c = cs[0], cl = clozeOf(tokens, s, c.from, c.to);
+      if (!cl) return;
+      add({ type: 'cloze', front: cl.text, back: cl.answer + ' — ' + s.text }, s, c, cl);
+      nCloze++;
+    });
+    cards.sort(function (a, b) { return a.sid - b.sid; });
+    cards.forEach(function (c, i) { c.id = i; });
+    return cards;
+  }
+
   // ---------------------------------------------------------------- tutto insieme
   /*
    * tokens: token del documento (vedi text.js); opzionale t.page (numero di pagina, da 0)
@@ -472,23 +672,24 @@
   function analyze(tokens, rawOpts) {
     var opts = g.WCSettings ? g.WCSettings.sanitize(rawOpts) : (rawOpts || {});
     var t0 = Date.now();
-    T.prepare(tokens);
+    var lang = opts.language && opts.language !== 'auto' ? opts.language : LANG.detect(tokens);
+    var L = LANG.get(lang);
+    T.prepare(tokens, lang);
     tokens.forEach(function (t) { t.ph = null; t.grp = null; t.mk = null; t.kid = null; });
-    var lang = opts.language && opts.language !== 'auto' ? opts.language : T.detectLang(tokens);
-    var sents = T.sentences(tokens);
+    var sents = T.sentences(tokens, lang);
     var N = tokens.length;
     var mode = opts.mode || 'study';
     var selMul = SEL[(opts.selectivity || 3) - 1];
 
     // parole singole
-    var kwRes = keywordStats(tokens, sents, opts.legs || 8);
+    var kwRes = keywordStats(tokens, sents, opts.legs || 8, lang);
     var minTF = N < 250 ? 1 : 2;
     var singles = kwRes.ranked.filter(function (s) { return s.tf >= minTF || s.head > 0; });
     var baseK = Math.round(5 + Math.sqrt(singles.length) * 0.9);
     var strongTerms = new Set(singles.slice(0, baseK * 3).map(function (s) { return s.key; }));
 
     // espressioni di più parole
-    var phrases = findPhrases(tokens, kwRes.map, strongTerms, sents);
+    var phrases = findPhrases(tokens, kwRes.map, strongTerms, sents, lang);
     var phraseMap = new Map(phrases.map(function (p) { return [p.key, p]; }));
     var inPhrase = new Map();
     tokens.forEach(function (t) { if (t.ph && !t.stop) inPhrase.set(t.key, (inPhrase.get(t.key) || 0) + 1); });
@@ -497,7 +698,7 @@
     singles.forEach(function (s) {
       var inside = inPhrase.get(s.key) || 0;
       if (inside >= 0.6 * s.tfAll) return; // quasi sempre dentro un'espressione: conta l'espressione
-      items.push({ id: s.key, word: s.display, score: s.score * (1 - 0.5 * inside / s.tfAll), count: s.tfAll - inside, name: s.capR >= 0.6 && s.capN >= 1, head: s.head });
+      items.push({ id: s.key, word: s.display, score: s.score * (1 - 0.5 * inside / s.tfAll), count: s.tfAll - inside, name: s.nameLike, head: s.head });
     });
     phrases.forEach(function (p) {
       if (p.count >= 2) items.push({ id: p.key, word: p.display, score: p.score, count: p.count, name: p.isName, phrase: true });
@@ -512,7 +713,7 @@
     var rejSet = new Set(rej.map(function (it) { return it.id; }));
 
     // nomi propri: parole singole quasi sempre maiuscole a metà frase, e sequenze di nomi
-    var nameSingles = new Set(kwRes.ranked.filter(function (s) { return s.capR >= 0.6 && s.capN >= 1 && s.display.length > 2; }).slice(0, 120).map(function (s) { return s.key; }));
+    var nameSingles = new Set(kwRes.ranked.filter(function (s) { return s.nameLike && s.display.length > 2; }).slice(0, 120).map(function (s) { return s.key; }));
     var namePhrases = new Set(phrases.filter(function (p) { return p.isName; }).map(function (p) { return p.key; }));
 
     function kwIdOf(t) {
@@ -522,7 +723,12 @@
     }
     function nameIdOf(t) {
       if (t.ph && namePhrases.has(t.ph)) return t.ph;
-      if (!t.stop && t.cap && nameSingles.has(t.key)) return t.key;
+      if (!t.stop && t.cap && nameSingles.has(t.key)) {
+        // "Cold" in un titolo, quando di solito compare dentro "Cold War": conta l'espressione, non la parola
+        var st = kwRes.map.get(t.key);
+        if (!t.grp && st && (inPhrase.get(t.key) || 0) >= 0.5 * st.tfAll) return null;
+        return t.key;
+      }
       return null;
     }
     function display(id) {
@@ -544,8 +750,23 @@
     var topTerms = new Set(strongTerms);
     phrases.forEach(function (p) { if (kwSet.has(p.key)) p.content.forEach(function (k) { topTerms.add(k); }); });
     sentenceFeatures(tokens, sents, kwRes.map, topTerms);
-    var summary = summarize(sents, opts);
+    var summary = summarize(sents, opts, tokens, lang);
     var summarySet = new Set(summary.map(function (s) { return s.id; }));
+    function pageOf(i) { return tokens[i] && tokens[i].page != null ? tokens[i].page : null; }
+    var defCache = new Map();
+    function isDef(s) {
+      if (!defCache.has(s.id)) defCache.set(s.id, isDefinition(s, tokens, lang, kwSet, kwRes.map));
+      return defCache.get(s.id);
+    }
+    // schede di ripasso: prima dei segni della modalità, che cambiano i gruppi di parole
+    var cards = buildCards({
+      tokens: tokens, sents: sents, lang: lang, items: cands.slice(0, Math.max(K * 2, 40)), kwSet: kwSet,
+      namePhrases: namePhrases, nameSingles: nameSingles, summary: summary, pageOf: pageOf, isDef: isDef,
+      names: phrases.filter(function (p) { return p.isName; }).map(function (p) { return { id: p.key, word: p.display, name: true }; })
+        .concat(kwRes.ranked.filter(function (x) { return nameSingles.has(x.key) && !inPhrase.get(x.key); }).map(function (x) { return { id: x.key, word: x.display, name: true }; })),
+      isNum: function (i) { return isNumberToken(tokens, i, L); },
+      capR: function (key) { var st = kwRes.map.get(key); return st ? st.capR : 0; }
+    });
 
     var highlights = [];
     var styleMap = new Map(), styleN = 0, STY = ['kw-lav', 'kw-cyan', 'ring-cyan'];
@@ -553,8 +774,6 @@
       if (!styleMap.has(id)) styleMap.set(id, STY[styleN++ % STY.length]);
       return styleMap.get(id);
     }
-    function pageOf(i) { return tokens[i] && tokens[i].page != null ? tokens[i].page : null; }
-
     var search = null;
     if (mode === 'web') {
       tokens.forEach(function (t, i) {
@@ -574,7 +793,7 @@
     } else if (mode === 'study') {
       var seenBlk = new Set(), seenName = new Set(), nNum = 0;
       tokens.forEach(function (t, i) {
-        if (opts.markNumbers && !t.grp && isNumberToken(tokens, i)) {
+        if (opts.markNumbers && !t.grp && isNumberToken(tokens, i, L)) {
           mark(i, 'num', null);
           if (nNum++ < 300) highlights.push({ type: 'num', text: t.text, sid: t.sid, idx: i, page: pageOf(i) });
           return;
@@ -593,12 +812,12 @@
         }
       });
       sents.forEach(function (s) {
-        if (opts.markDefinitions && isDefinition(s, tokens, lang, kwSet, kwRes.map)) s.mk = 'def';
+        if (opts.markDefinitions && isDef(s)) s.mk = 'def';
         else if (opts.markKeySentences && summarySet.has(s.id)) s.mk = 'key';
         if (s.mk) highlights.push({ type: s.mk, text: s.text, sid: s.id, idx: s.to - 1, page: pageOf(s.from) });
       });
     } else if (mode === 'search') {
-      var terms = parseTerms(opts.searchTerms);
+      var terms = parseTerms(opts.searchTerms, lang);
       var hits = findTerms(tokens, terms);
       var counts = terms.map(function () { return 0; });
       var matched = new Map();
@@ -626,10 +845,17 @@
       version: 2,
       mode: mode,
       lang: lang,
+      langName: L.name,
+      frequencies: LANG.hasFreq(lang),
       stats: stats(tokens, sents, lang),
       keywords: kwItems.map(function (it) { return { key: it.id, word: it.word, score: +it.score.toFixed(3), count: it.count, name: !!it.name, phrase: !!it.phrase }; }),
       discarded: rej.map(function (it) { return it.word; }),
-      summary: summary.map(function (s) { return { sid: s.id, text: s.text, page: pageOf(s.from), idx: s.to - 1 }; }),
+      // nel sunto si toglie il connettivo iniziale ("Inoltre, …") se la frase prima non è nel sunto
+      summary: summary.map(function (s) {
+        var prevIn = summarySet.has(s.id - 1);
+        return { sid: s.id, text: prevIn ? s.text : LANG.smooth(lang, s.text), page: pageOf(s.from), idx: s.to - 1 };
+      }),
+      cards: cards,
       highlights: highlights,
       search: search,
       settings: opts,
@@ -642,5 +868,5 @@
     };
   }
 
-  g.WCAnalysis = { analyze: analyze, parseTerms: parseTerms };
+  g.WCAnalysis = { analyze: analyze, parseTerms: parseTerms, BLANK: BLANK };
 })(globalThis);

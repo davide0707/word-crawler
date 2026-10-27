@@ -10,7 +10,7 @@ const { chromium } = require('playwright');
 
 const root = path.join(__dirname, '..');
 const FIX = path.join(__dirname, 'fixtures');
-const CORE = ['text.js', 'zip.js', 'cfb.js', 'formats.js'].map((f) => fs.readFileSync(path.join(root, 'core', f), 'utf8'));
+const CORE = ['lang.js', 'text.js', 'zip.js', 'cfb.js', 'formats.js'].map((f) => fs.readFileSync(path.join(root, 'core', f), 'utf8'));
 
 // frasi che devono esserci in ogni documento creato da sample.docx
 const MUST = ['Unione Sovietica', 'cortina di ferro', 'Gorbačëv', 'Patto di Varsavia'];

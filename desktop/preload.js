@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('wcDesktop', {
   openFile: () => ipcRenderer.invoke('file:open'),
   fetchUrl: (url) => ipcRenderer.invoke('url:fetch', url),
   saveFile: (name, content, mime) => ipcRenderer.invoke('file:save', { name, content, mime }),
+  printPdf: (html, name) => ipcRenderer.invoke('export:pdf', { html, name }),
   settings: {
     load: (key) => ipcRenderer.invoke('settings:load', key),
     save: (key, value) => ipcRenderer.invoke('settings:save', key, value)
@@ -30,6 +31,9 @@ contextBridge.exposeInMainWorld('wcDesktop', {
     start: (opts) => ipcRenderer.invoke('scan:start', opts),
     cancel: () => ipcRenderer.invoke('scan:cancel'),
     exportCsv: (csvPath) => ipcRenderer.invoke('scan:export-csv', csvPath),
+    history: (root) => ipcRenderer.invoke('scan:history', root),
+    compare: (oldId, newId) => ipcRenderer.invoke('scan:compare', oldId, newId),
+    trash: (scanId, items) => ipcRenderer.invoke('scan:trash', scanId, items),
     onEvent: (cb) => listen('scan:event', cb)
   },
   showItem: (p) => ipcRenderer.invoke('shell:show', p),
