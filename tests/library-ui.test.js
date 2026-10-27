@@ -178,6 +178,16 @@ async function check(name, fn) {
     await page.evaluate(() => { const t = document.querySelector('.lb-toast'); if (t) t.hidden = true; });
     await page.screenshot({ path: path.join(SHOTS, name) });
   }
+  // attesa di una condizione nella pagina. Non si usa page.waitForFunction: con alcune versioni di
+  // Playwright valuta una stringa, e la Content Security Policy dell'app (senza 'unsafe-eval') lo vieta.
+  async function waitFor(fn, arg, timeout) {
+    const t0 = Date.now();
+    for (;;) {
+      if (await page.evaluate(fn, arg)) return;
+      if (Date.now() - t0 > (timeout || 30000)) throw new Error('tempo scaduto aspettando: ' + fn.toString().slice(0, 160));
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
   await page.click('#tab-library');
   await page.waitForSelector('.lb-empty:not([hidden])');
   await page.screenshot({ path: path.join(SHOTS, 'lib-01-vuota.png') });
@@ -188,7 +198,7 @@ async function check(name, fn) {
     await page.waitForTimeout(1500);
     await page.screenshot({ path: path.join(SHOTS, 'lib-02-importazione.png') });
     await page.waitForSelector('.lb-import[hidden]', { state: 'attached', timeout: 120000 });
-    await page.waitForFunction((n) => document.querySelectorAll('.lb-doc').length === n, FILES.length, { timeout: 20000 });
+    await waitFor((n) => document.querySelectorAll('.lb-doc').length === n, FILES.length, 20000);
     const docs = await page.evaluate(() => Array.from(window.__lib.docs.values()).map((r) => ({ name: r.name, status: r.status, error: r.error, chunks: r.chunks.length, ocr: r.ocrPages, lang: r.lang, slides: r.chunks.filter((c) => c.slide).length, pages: r.chunks.filter((c) => c.page != null).length })));
     const bad = docs.filter((d) => d.status === 'error');
     assert.strictEqual(bad.length, 0, 'documenti in errore: ' + JSON.stringify(bad));
@@ -223,13 +233,13 @@ async function check(name, fn) {
   await check('apri alla posizione esatta: PDF nel Lettore, passaggio evidenziato', async () => {
     await page.fill('.lb-q', '"cortina di ferro"');
     await page.press('.lb-q', 'Enter');
-    await page.waitForFunction(() => Array.from(document.querySelectorAll('.lb-hit .lb-src b')).some((b) => b.textContent === 'sample.pdf'));
+    await waitFor(() => Array.from(document.querySelectorAll('.lb-hit .lb-src b')).some((b) => b.textContent === 'sample.pdf'));
     const hit = await page.$('.lb-hit:has(.lb-src b:text-is("sample.pdf"))');
     const where = await hit.$eval('.lb-src', (e) => e.textContent);
     assert.ok(/p\. \d/.test(where), 'pagina indicata: ' + where);
     await hit.$eval('button.wc-btn', (b) => b.click());
     await page.waitForSelector('#view-reader:not([hidden])');
-    await page.waitForFunction(() => /Lettura completata|LETTURA COMPLETATA/i.test(document.querySelector('.wc-status').textContent), null, { timeout: 30000 });
+    await waitFor(() => /Lettura completata|LETTURA COMPLETATA/i.test(document.querySelector('.wc-status').textContent), null, 30000);
     await page.waitForTimeout(500);
     const y = await page.evaluate(() => window.scrollY);
     assert.ok(y > 0, 'la pagina scorre fino al passaggio (scrollY ' + y + ')');
@@ -244,7 +254,7 @@ async function check(name, fn) {
     await shot('lib-05-mappa.png');
     await page.fill('.lb-maptools input[type="search"]', 'QAM');
     await page.press('.lb-maptools input[type="search"]', 'Enter');
-    await page.waitForFunction(() => /QAM/.test((document.querySelector('.lb-panel .lb-title') || {}).textContent || ''));
+    await waitFor(() => /QAM/.test((document.querySelector('.lb-panel .lb-title') || {}).textContent || ''));
     const panel = await page.textContent('.lb-panel');
     assert.ok(/Quadrature Amplitude Modulation/.test(panel), 'alias nella scheda');
     assert.ok(/è un tipo di/.test(panel) && /modulazione digitale/.test(panel), 'relazione letta nella definizione');
@@ -261,10 +271,10 @@ async function check(name, fn) {
     assert.ok(ask, 'suggerimento OFDM: ' + (await page.textContent('.lb-panel')).slice(0, 600));
     await shot('lib-07-suggerimenti.png');
     await ask.$eval('button.wc-primary', (b) => b.click());
-    await page.waitForFunction(() => window.__lib.edits && window.__lib.edits.merges && window.__lib.edits.merges.length === 1);
+    await waitFor(() => window.__lib.edits && window.__lib.edits.merges && window.__lib.edits.merges.length === 1);
     await page.fill('.lb-maptools input[type="search"]', 'OFDM');
     await page.press('.lb-maptools input[type="search"]', 'Enter');
-    await page.waitForFunction(() => /Orthogonal Frequency Division Multiplexing/.test(document.querySelector('.lb-panel').textContent));
+    await waitFor(() => /Orthogonal Frequency Division Multiplexing/.test(document.querySelector('.lb-panel').textContent));
     assert.ok(/Cronologia delle modifiche/.test(await page.textContent('.lb-panel')));
   });
 
@@ -272,18 +282,18 @@ async function check(name, fn) {
     await page.click('.lb-actions button:text-is("Rinomina")');
     await page.fill('.lb-form input', 'OFDM (multiplazione)');
     await page.click('.lb-form button[type="submit"]');
-    await page.waitForFunction(() => /OFDM \(multiplazione\)/.test((document.querySelector('.lb-panel .lb-title') || {}).textContent || ''));
+    await waitFor(() => /OFDM \(multiplazione\)/.test((document.querySelector('.lb-panel .lb-title') || {}).textContent || ''));
     await page.click('.lb-actions button:text-is("Collega a…")');
     await page.fill('.lb-form input', 'QAM');
     await page.click('.lb-form button[type="submit"]');
-    await page.waitForFunction(() => window.__lib.edits.links && window.__lib.edits.links.length === 1);
+    await waitFor(() => window.__lib.edits.links && window.__lib.edits.links.length === 1);
     assert.ok(/collegato a/.test(await page.textContent('.lb-rel')));
   });
 
   await check('esportazioni della mappa: immagine e note Markdown', async () => {
     await page.selectOption('.lb-maptools select', 'md');
     await page.selectOption('.lb-maptools select', 'png');
-    await page.waitForFunction(() => window.__saved.length >= 2);
+    await waitFor(() => window.__saved.length >= 2);
     const saved = await page.evaluate(() => window.__saved.map((s) => s.name));
     assert.ok(saved.includes('mappa dei concetti.md') && saved.includes('mappa dei concetti.png'), saved.join(', '));
   });
@@ -294,13 +304,13 @@ async function check(name, fn) {
     const doc = await page.$('.lb-doc:has(.lb-doc-name:text-is("Subnetting.md"))');
     await doc.hover();
     await doc.$eval('.lb-doc-actions button:last-child', (b) => b.click());
-    await page.waitForFunction((k) => window.__lib.docs.size === k - 1, n);
+    await waitFor((k) => window.__lib.docs.size === k - 1, n);
     await page.waitForSelector('.lb-toast:has-text("Annulla")');
     await page.click('.lb-toast button');
-    await page.waitForFunction((k) => window.__lib.docs.size === k, n);
+    await waitFor((k) => window.__lib.docs.size === k, n);
     await page.fill('.lb-q', 'subnetting');
     await page.press('.lb-q', 'Enter');
-    await page.waitForFunction(() => Array.from(document.querySelectorAll('.lb-hit .lb-src b')).some((b) => b.textContent === 'Subnetting.md'));
+    await waitFor(() => Array.from(document.querySelectorAll('.lb-hit .lb-src b')).some((b) => b.textContent === 'Subnetting.md'));
   });
 
   await check('nessun errore nella pagina', () => { assert.deepStrictEqual(errs, []); });
