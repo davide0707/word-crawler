@@ -1,3 +1,4 @@
+/* Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE. */
 /* Word Crawler: stile del lettore e dei pannelli (app desktop ed estensione).
    Layout: tre colonne. A sinistra apertura e impostazioni, al centro il documento su cui cammina il ragno,
    a destra i risultati. Le colonne laterali restano ferme mentre il documento scorre. */
@@ -128,7 +129,7 @@ textarea { resize: vertical; }
 .wc-results-head { padding: 18px 18px 10px; }
 .wc-results-head h2 { margin-bottom: 6px; }
 .wc-status { margin: 0; font-size: 13px; color: var(--wc-mute); }
-.wc-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--wc-line); overflow-x: auto; }
+.wc-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--wc-line); overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--wc-line) transparent; }
 .wc-tab {
   border: 0; background: none; padding: 10px 8px; cursor: pointer; font-weight: 600; font-size: 13px; color: var(--wc-mute);
   border-bottom: 2px solid transparent; display: flex; gap: 6px; align-items: baseline; white-space: nowrap;
