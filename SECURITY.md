@@ -6,8 +6,8 @@ Security fixes are made for the latest release only.
 
 | Version | Supported |
 |---|---|
-| 2.2.x | Yes |
-| < 2.2 | No |
+| 2.3.x | Yes |
+| < 2.3 | No |
 
 ## Reporting a vulnerability
 
@@ -48,6 +48,9 @@ Of particular interest:
 - **Disk scanner**: uses only directory listing, `lstat` and read-only file access; does not follow
   symbolic links or Windows junctions. Moving duplicates to the Trash is a separate, confirmed action
   with the checks described in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#disk-scanner).
+- **Study**: review progress stays in `library/study.json` in the app's data folder, holds only concept
+  stems, dates and counters, and is never sent anywhere. Exports (Anki, CSV) are written only where the user
+  chooses.
 - **Library**: files are only read; the main process serves only files the user added (or already in the
   library), records are written to the app's data folder and must match the id of their path; removing a
   document never touches the file.

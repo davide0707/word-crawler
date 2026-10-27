@@ -1,7 +1,7 @@
 {
   "name": "word-crawler-studio",
   "productName": "Word Crawler",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Reads documents, scanned PDFs and web pages in six languages, builds a searchable local knowledge base with a concept map, underlines, summarises, makes review cards and maps your disk. Statistical text analysis, no AI.",
   "keywords": [
     "reader",
@@ -45,7 +45,7 @@
   },
   "scripts": {
     "start": "electron .",
-    "test": "npm run lint && node tests/analysis.test.js && node tests/library.test.js && node tests/export.test.js && node tests/scanner.test.js && node tests/main.test.js && node tests/formats.test.js && node tests/reader.test.js && node tests/library-ui.test.js",
+    "test": "npm run lint && node tests/analysis.test.js && node tests/library.test.js && node tests/study.test.js && node tests/export.test.js && node tests/scanner.test.js && node tests/main.test.js && node tests/formats.test.js && node tests/reader.test.js && node tests/library-ui.test.js",
     "test:ui": "node tests/desktop-ui.test.js",
     "fixtures": "python3 tests/make-fixtures.py",
     "build:extension": "node scripts/build-extension.js",
@@ -56,7 +56,7 @@
     "test:extension": "node tests/extension.test.js",
     "fixtures:ocr": "python3 tests/make-ocr-fixtures.py",
     "lint": "node scripts/check.js",
-    "test:library": "node tests/library.test.js && node tests/library-ui.test.js"
+    "test:library": "node tests/library.test.js && node tests/study.test.js && node tests/library-ui.test.js"
   },
   "dependencies": {
     "pdfjs-dist": "4.10.38",

@@ -30,7 +30,7 @@ flowchart TB
     pen[pen.js]
     reader[reader.js · results-ui.js · settings-ui.js · archive-ui.js]
     exports[export.js · annotate.js · docx.js]
-    library[library.js · library-worker.js · library-import.js]
+    library[library.js · study.js · library-worker.js · library-import.js]
   end
   subgraph desktop["desktop/ — Electron"]
     main[main.js] --- preload[preload.js]
@@ -78,7 +78,8 @@ by `chrome.scripting.executeScript`, and by `require` in the Node test suites.
 | `core/annotate.js`, `docx.js` | The marked-up document as HTML/PDF and as Word (.docx with comments) |
 | `core/archive-ui.js` | Archive of saved readings |
 | `core/library.js` | Library engine: passages, concepts across documents, acronym merging, concept graph, BM25 search, user edits, Markdown export, map layout |
-| `core/library-worker.js` | Runs the library engine in two Web Workers (one imports documents, one serves search and the graph) |
+| `core/library-worker.js` | Runs the library and study engines in two Web Workers (one imports documents, one serves search, the graph and the questions) |
+| `core/study.js` | Study engine: which concepts are worth knowing, questions from definitions and passages, answer matching, SM-2 schedule, mastery, study path, Anki export |
 | `core/library-import.js` | Reads a file for the library: blocks, PDF words with their box on the page, OCR of scanned pages and images |
 | `desktop/ui/library-view.js` | Library tab: import queue, document list, search results, concept map on canvas, concept page |
 | `desktop/main.js` | Electron main process: window, `app://` protocol, IPC, file dialogs, PDF printing |
@@ -181,6 +182,9 @@ flowchart LR
   S --> W2[Worker 2: open<br/>BM25 index · concept graph · layout]
   E[(library/edits.json<br/>merges · aliases · links · positions)] --> W2
   W2 --> UI[Search · concept map · concept page]
+  W2 --> ST[study.js<br/>questions · SM-2 · study path]
+  P[(library/study.json<br/>ease · interval · due date)] --> ST
+  ST --> UI
   UI -- open at position --> R[Reader]
 ```
 
@@ -235,8 +239,53 @@ positions, each with a history entry.
 grid, so the cost grows almost linearly; pinned nodes stay where the user put them. About 2 s for 5,000
 concepts and 15,000 links.
 
+**A map that keeps moving.** The worker's layout is the starting point, not the final word: the renderer runs
+a light version of the same forces every frame and never lets the simulation freeze (the energy decays to a
+floor instead of to zero, and a per-node sine adds a one-pixel breath). Only the nodes inside the viewport
+are simulated, at most 900 per frame and in rotation beyond that, so a map of thousands of concepts costs the
+same as a small one. Dragging a node pins it and pushes its neighbours; the camera follows a target transform
+with exponential easing and keeps scrolling after a flick. The loop stops when the map is hidden or the window
+is in the background, and `prefers-reduced-motion` (or the system setting changing mid-session) replaces it
+with a static draw.
+
 **Open at the exact position.** The Reader opens the file, completes the reading at once, finds the passage
 by its first words (and page, for PDFs), scrolls to it and highlights it for a few seconds.
+
+## Study
+
+`core/study.js` adds the "how well do I know this" layer on top of the same graph, in the same worker. It
+generates nothing: every question is assembled from text the library already extracted, and carries the
+document, page and slide it came from.
+
+**Which concepts are asked about.** A concept qualifies if it has a definition, is an acronym, is a proper
+name seen in several documents or at least three times, or is a multi-word term seen at least twice; a
+frequent single word qualifies only if it is central and appears in several documents. This keeps verbs and
+chapter titles out of the deck.
+
+**Question types**, in order of preference: *definition* (term → definition), *cloze* (the definition with
+every form of the term blanked out), *is a type of* (from the typed relation of the graph) and *use* (a
+sentence between 50 and 320 characters where the concept appears, with the concept removed). Blanking matches
+on stems, so "modulazioni" is blanked for the concept "modulazione". The card shown is chosen by the number
+of answers already given for that concept, so the same concept rotates through its questions.
+
+**Typed answers** are compared after folding accents and punctuation, then by stem sequence, then by edit
+distance (2 for terms of 8 characters or more, otherwise 1). A match grades *good*, a miss grades *again*;
+the user can still override with "I did know it".
+
+**Schedule (SM-2).** Each concept keeps `ease` (1.3–2.8), `interval` in days, `due`, `reps`, `lapses` and
+`seen`. First correct answers give 1, 2 or 4 days, then 3, 6 or 8, then `interval × ease` adjusted by the
+grade; a lapse resets `reps`, lowers the ease by 0.2 and returns the concept the next day. Mastery is
+`log(1 + interval) / log(1 + 21)` penalised by the share of lapses (at most 60%), floored at 0.02 for
+anything seen at least once — "forgotten" and "never seen" must not look the same on the map.
+
+**Study path.** The *is a type of* edges form a forest; a concept's level is its distance from the root
+(cycles are cut after 12 steps). Concepts are sorted by level, then central first, then by PageRank. The same
+order drives the session (due concepts first, oldest due first, then new ones along the path) and the Anki
+export.
+
+**Identity across edits.** Progress is keyed by concept stem, and a concept is looked up by any of its
+members, so merging, splitting or renaming concepts never loses a review history. State lives in
+`library/study.json`, separate from the map edits, and is written after a short debounce.
 
 ## Desktop app
 
@@ -310,7 +359,8 @@ flowchart LR
 | `tests/scanner.test.js` | Scanner results, read-only guarantee, comparison and every Trash safety rule |
 | `tests/main.test.js` | Electron main process with a stubbed `electron` module: IPC validation, protocol, dialogs |
 | `tests/library.test.js` | Library engine: passages, acronyms, concepts across documents, graph and relations, suggestions, search, every user edit, Markdown export, performance |
-| `tests/library-ui.test.js` | The Library tab in Chromium with the real workers and PDF.js: folder import (Word, PowerPoint, PDF, scanned PDF), search, open at position, map, concept page, merge, rename, links, exports, undo |
+| `tests/study.test.js` | Study engine: blanking with stems, answer matching, SM-2 intervals and mastery, questions with their sources, rotation, study path, per-document filter, survival across merges, reset, Anki export |
+| `tests/library-ui.test.js` | The Library tab in Chromium with the real workers and PDF.js: folder import (Word, PowerPoint, PDF, scanned PDF), search, open at position, map, concept page, merge, rename, links, exports, undo, a full study session (typed answer, grading, keyboard, saved progress), the map coloured by mastery and actually moving, Anki export |
 | `tests/reader.test.js` | The reader in Chromium with the real PDF.js, OCR mapping from recorded Tesseract output, the pen |
 | `tests/extension.test.js` | The real extension loaded in Chromium: side panel, spider on a page, archive, restored marks |
 | `tests/desktop-ui.test.js` | End-to-end run of the desktop UI with a real scan and screenshots |

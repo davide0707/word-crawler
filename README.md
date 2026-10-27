@@ -22,6 +22,7 @@
 
 - [Highlights](#highlights)
 - [Library: your knowledge base](#library-your-knowledge-base)
+- [Study: what you know, and what you don't](#study-what-you-know-and-what-you-dont)
 - [Screenshots](#screenshots)
 - [Download](#download)
 - [How it works](#how-it-works)
@@ -43,6 +44,7 @@
 | **Exports the marked document** | Word (.docx, with your notes as comments), HTML and PDF, plus Markdown, text, JSON and Anki summaries. |
 | **Remembers pages** | The browser extension restores your marks when you reopen a saved page. |
 | **Builds a knowledge base** | The Library reads many files at once — even whole folders — and lets you search all of them together, see how their concepts connect on an interactive map and open every result at the exact page. |
+| **Knows what you know** | Study asks you about the concepts of your own documents, grows the interval between reviews as you get them right, orders them from the general to the specific and colours the map by how well you know each one. |
 | **Maps your disk** | Read-only scanner with a zoomable treemap, duplicates, largest files and folders, scan-to-scan comparison and a safe "move duplicates to Trash". |
 | **Handles long documents** | Analysis runs in a Web Worker and PDF pages are extracted in parallel: about 25,000 words read and analysed in 1.3 s. |
 
@@ -59,6 +61,7 @@ Add your lecture notes, slides, books, scans and saved pages — one by one or a
 - **Concepts merged across files.** Keywords, names, defined terms and acronyms become concepts. Singular and plural, the same term in different files and an acronym written with its long form are one concept. Uncertain cases — an acronym in one file and its long form in another, two nearly identical names — are only suggested: you confirm or reject.
 - **An interactive concept map.** Concepts are linked when they appear in the same passages, and definitions add typed relations (*QAM — is a type of → digital modulation*). Central concepts are blue, concepts found in several documents purple. Zoom, pan, drag nodes into place, filter, and export to PNG, Markdown with `[[links]]` for Obsidian, or JSON.
 - **You stay in control.** Rename concepts, add aliases, merge or split them, add or remove links: every change is kept, logged in the concept's history and re-applied when you add more documents. Removing a document can be undone.
+- **A map that is alive.** The concepts keep settling instead of freezing after the first layout: drag one and its neighbours react, the camera glides instead of jumping, new concepts grow in. Only what is on screen is simulated, so thousands of concepts stay smooth — and `prefers-reduced-motion` turns the movement off.
 
 | | |
 |:---:|:---:|
@@ -66,10 +69,27 @@ Add your lecture notes, slides, books, scans and saved pages — one by one or a
 
 The Library is part of the desktop app. Everything is computed on your computer, without AI and without an internet connection; see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#library) for the algorithms.
 
+## Study: what you know, and what you don't
+
+<img src="docs/images/library-study.webp" alt="Study tab: counts of concepts never seen, learning and solid, and a study path going from the general concepts to the ones that depend on them" width="100%">
+
+Once your documents are in the Library, it can ask you about them. The questions are not written by a model: they are made from what the library already extracted, and every one of them cites the document, page and slide it comes from.
+
+- **Four kinds of question, all from your own material.** A term and its definition; the same definition with the term blanked out; an *is a type of* relation read from a definition; or a sentence where the concept appears, with the concept removed. One question per concept per session, rotating so the same concept doesn't always ask the same thing.
+- **Type the answer, or grade yourself.** Typed answers tolerate accents, case, plurals (using the stems of six languages) and a single typo. Otherwise reveal the answer and grade it with four buttons. Space reveals, 1–4 grade.
+- **Intervals that grow.** An SM-2 schedule keeps an ease, an interval and a next-review date for every concept. Get it right and it comes back later; forget it and it returns tomorrow with a lower ease. A badge on the tab tells you how many are due.
+- **A study path, not a pile of cards.** Concepts are ordered from the most general to the ones that depend on them, following the *is a type of* relations of the graph: *digital modulation* before *QAM*. At the same level, the more central concept comes first.
+- **Only what's worth knowing.** Defined terms, acronyms, proper names and multi-word terms get asked about; frequent single words don't.
+- **On the map.** "Colour by mastery" shades every concept from grey (never seen) through amber to green (solid), and the ones due for review pulse.
+- **Takes it with you.** Export the questions for **Anki** (with the source in the answer and a tag per document) or as a CSV.
+
+Your progress is saved next to the map edits, in the app's data folder, and survives merging, splitting and renaming concepts.
+
 ## Screenshots
 
 | | |
 |:---:|:---:|
+| <img src="docs/images/library-question.webp" alt="A fill-in-the-blank question made from a sentence in the user's own notes, with the typed answer checked and the source shown"><br>**Study: a question from your notes** | <img src="docs/images/library-mastery.webp" alt="Concept map coloured by mastery: grey for never seen, green for solid"><br>**The map coloured by mastery** |
 | <img src="docs/images/review-quiz.webp" alt="Review tab with a multiple-choice quiz"><br>**Review cards and quiz** | <img src="docs/images/pen.webp" alt="Pen tool with a highlight and a numbered note"><br>**Pen: highlights and notes** |
 | <img src="docs/images/ocr.webp" alt="Scanned PDF recognised with OCR, with the marks placed on the scanned words"><br>**OCR on scanned PDFs** | <img src="docs/images/reader-paper.webp" alt="Paper theme for studying"><br>**Paper theme** |
 | <img src="docs/images/scanner-running.webp" alt="Disk scanner: the spider walking the folder map"><br>**Disk scanner** | <img src="docs/images/scanner-treemap.webp" alt="Treemap of folder sizes"><br>**Treemap** |
@@ -192,7 +212,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and [CHANGELOG.md](CHANGE
 
 ## Project status
 
-Version **2.2.0**. Known limitations:
+Version **2.3.0**. Known limitations:
 
 - The OCR engine (tesseract.js) is exercised in tests through recorded Tesseract output; the WebAssembly engine itself runs only in the packaged app and extension.
 - Legacy .ppt/.xls and TIFF images are not supported (save them as .pptx/.xlsx or PNG/PDF).

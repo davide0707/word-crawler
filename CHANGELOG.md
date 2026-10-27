@@ -7,6 +7,25 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-27
+
+### Added
+- **Study** (Library tab): spaced repetition over the whole knowledge base, built from what the library already extracted — no AI, no generated text.
+  - Questions are made mechanically from the material: a term and its definition, the same definition with the term blanked out, an "is a type of" relation read from a definition, or a sentence where the concept appears. Every question cites its document, page and slide, and opens the Reader at that passage.
+  - Answers can be typed (accents, case, plurals and a single typo are tolerated, with the stems of six languages) or revealed and graded by hand with four grades. Keyboard: space reveals, 1–4 grade.
+  - Intervals grow with an SM-2 schedule: each concept keeps its ease, interval and next-review date; forgetting drops it back to one day and lowers its ease. Progress is saved next to the map edits, in the app's data folder.
+  - **Study path**: concepts ordered from the most general to those that depend on them, following the "is a type of" relations of the graph; at the same level the more central concept comes first.
+  - Only concepts worth knowing are asked about: defined terms, acronyms, proper names and multi-word terms — not frequent single words.
+  - Progress survives merging, splitting and renaming concepts: a concept is recognised by any of its stems.
+  - A badge on the tab shows how many concepts are due; counts for never seen, learning, solid and overall mastery.
+  - Export the questions **for Anki** (tab-separated, with the source in the answer and one tag per document) or as a CSV.
+- **Mastery on the map**: "Colour by mastery" shades every concept from grey (never seen) through amber to green (solid), and makes the ones due for review pulse.
+
+### Changed
+- The concept map is alive: a continuous simulation keeps the concepts settling instead of freezing after the first layout, dragging one makes its neighbours react, the camera glides instead of jumping and keeps scrolling after a flick, and new concepts grow in. Only the concepts in view are simulated, so thousands still run smoothly. **Reorder** (button or R) reshuffles everything that isn't pinned.
+- Everything stops when the map is hidden or the window is in the background, and `prefers-reduced-motion` turns the movement off entirely.
+- Menu: "Study the library" (Ctrl+Shift+S).
+
 ## [2.2.0] - 2026-10-27
 
 ### Added
@@ -57,7 +76,8 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Browser extension (Manifest V3) with side panel, document reader and archive.
 - Automated tests and a multi-platform build workflow.
 
-[Unreleased]: https://github.com/davide0707/word-crawler/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/davide0707/word-crawler/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/davide0707/word-crawler/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/davide0707/word-crawler/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/davide0707/word-crawler/releases/tag/v2.1.0
 [2.0.0]: https://github.com/davide0707/word-crawler/commits/main

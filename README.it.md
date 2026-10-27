@@ -22,6 +22,7 @@
 
 - [In breve](#in-breve)
 - [Libreria: la tua base di conoscenza](#libreria-la-tua-base-di-conoscenza)
+- [Studio: quello che sai e quello che non sai](#studio-quello-che-sai-e-quello-che-non-sai)
 - [Immagini](#immagini)
 - [Scaricare](#scaricare)
 - [Come funziona](#come-funziona)
@@ -43,6 +44,7 @@
 | **Esporta il documento segnato** | Word (.docx, con le note come commenti), pagina web e PDF, più riepiloghi in Markdown, testo, JSON e Anki. |
 | **Ricorda le pagine** | L'estensione rimette i segni quando riapri una pagina salvata. |
 | **Costruisce una base di conoscenza** | La Libreria legge tanti file insieme, anche cartelle intere: cerchi in tutti i documenti insieme, vedi come si collegano i concetti su una mappa interattiva e apri ogni risultato alla pagina giusta. |
+| **Sa quanto sai** | Lo Studio ti interroga sui concetti dei tuoi documenti, allunga l'intervallo tra un ripasso e l'altro man mano che li sai, li mette in ordine dal generale allo specifico e colora la mappa in base a quanto conosci ognuno. |
 | **Fa la mappa del disco** | Scanner in sola lettura con mappa a riquadri, duplicati, file e cartelle più grandi, confronto tra scansioni e spostamento sicuro dei duplicati nel Cestino. |
 | **Regge i documenti lunghi** | L'analisi gira in un Web Worker e le pagine dei PDF si leggono in parallelo: circa 25.000 parole lette e analizzate in 1,3 s. |
 
@@ -59,6 +61,7 @@ Aggiungi dispense, slide, libri, scansioni e pagine salvate — uno alla volta o
 - **Concetti uniti tra i file.** Parole chiave, nomi, termini definiti e sigle diventano concetti. Singolare e plurale, lo stesso termine in file diversi e una sigla scritta con la sua forma estesa sono un concetto solo. I casi incerti — una sigla in un file e la forma estesa in un altro, due nomi quasi uguali — sono solo suggeriti: decidi tu.
 - **Una mappa dei concetti interattiva.** I concetti sono collegati quando compaiono negli stessi passaggi, e le definizioni aggiungono relazioni con un nome (*QAM — è un tipo di → modulazione digitale*). I concetti centrali sono blu, quelli presenti in più documenti viola. Ingrandisci, spostati, trascina i nodi, filtra ed esporta in PNG, in Markdown con i `[[collegamenti]]` per Obsidian o in JSON.
 - **L'ultima parola è tua.** Rinomina i concetti, aggiungi alias, unisci o separa, aggiungi o togli collegamenti: ogni modifica resta, finisce nella cronologia del concetto e si riapplica quando aggiungi altri documenti. Un documento tolto si può rimettere.
+- **Una mappa viva.** I concetti continuano ad assestarsi invece di bloccarsi dopo la prima disposizione: ne trascini uno e i vicini reagiscono, la telecamera scorre invece di saltare, i concetti nuovi crescono al loro posto. Si simula solo quello che è inquadrato, così anche migliaia di concetti restano fluidi — e con `prefers-reduced-motion` il movimento si spegne.
 
 | | |
 |:---:|:---:|
@@ -66,10 +69,27 @@ Aggiungi dispense, slide, libri, scansioni e pagine salvate — uno alla volta o
 
 La Libreria fa parte dell'app desktop. Tutto si calcola sul tuo computer, senza intelligenza artificiale e senza internet; gli algoritmi sono descritti in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#library) (in inglese).
 
+## Studio: quello che sai e quello che non sai
+
+<img src="docs/images/library-study.webp" alt="Scheda Studio: quanti concetti sono mai visti, in corso e saldi, e il percorso di studio che va dai concetti generali a quelli che ne dipendono" width="100%">
+
+Quando i documenti sono nella Libreria, può interrogarti. Le domande non le scrive un modello: nascono da quello che la libreria ha già estratto, e ognuna cita il documento, la pagina e la slide da cui viene.
+
+- **Quattro tipi di domanda, tutte dai tuoi appunti.** Un termine e la sua definizione; la stessa definizione col termine oscurato; una relazione *è un tipo di* letta in una definizione; oppure una frase dove il concetto compare, con il concetto tolto. Una domanda per concetto a sessione, a rotazione, così lo stesso concetto non chiede sempre la stessa cosa.
+- **Scrivi la risposta, o giudicati da solo.** La risposta scritta tollera accenti, maiuscole, plurali (con le radici di sei lingue) e un errore di battitura. Altrimenti riveli la risposta e la voti con quattro bottoni. Barra spaziatrice per vedere, da 1 a 4 per il voto.
+- **Intervalli che crescono.** Uno schema SM-2 tiene per ogni concetto una facilità, un intervallo e la data del prossimo ripasso. Se lo sai torna più tardi; se lo dimentichi torna domani, con la facilità più bassa. Una pastiglia sulla scheda dice quanti sono scaduti.
+- **Un percorso, non un mucchio di schede.** I concetti sono ordinati dai più generali a quelli che ne dipendono, seguendo le relazioni *è un tipo di* del grafo: prima *modulazione digitale*, poi *QAM*. A pari livello viene prima il concetto più centrale.
+- **Solo quello che vale sapere.** Si chiede dei termini definiti, delle sigle, dei nomi propri e dei termini di più parole; non delle parole singole frequenti.
+- **Sulla mappa.** «Colora per padronanza» sfuma ogni concetto dal grigio (mai visto) all'ambra fino al verde (saldo), e quelli da ripassare pulsano.
+- **Te la porti dietro.** Esporta le domande per **Anki** (con la fonte dentro la risposta e un'etichetta per documento) o in CSV.
+
+I progressi si salvano accanto alle modifiche della mappa, nella cartella dati dell'app, e sopravvivono a unioni, separazioni e rinomine dei concetti.
+
 ## Immagini
 
 | | |
 |:---:|:---:|
+| <img src="docs/images/library-question.webp" alt="Una frase da completare costruita da una frase degli appunti dell'utente, con la risposta scritta controllata e la fonte"><br>**Studio: una domanda dai tuoi appunti** | <img src="docs/images/library-mastery.webp" alt="Mappa dei concetti colorata per padronanza: grigio per i mai visti, verde per quelli saldi"><br>**La mappa colorata per padronanza** |
 | <img src="docs/images/review-quiz.webp" alt="Scheda Ripasso con un quiz a scelta multipla"><br>**Schede di ripasso e quiz** | <img src="docs/images/pen.webp" alt="Penna con un'evidenziazione e una nota numerata"><br>**Penna: evidenziazioni e note** |
 | <img src="docs/images/ocr.webp" alt="PDF scansionato riconosciuto con l'OCR, con i segni sulle parole della scansione"><br>**OCR sui PDF scansionati** | <img src="docs/images/reader-paper.webp" alt="Tema carta per studiare"><br>**Tema carta** |
 | <img src="docs/images/scanner-running.webp" alt="Scanner del disco: il ragno cammina sulla mappa delle cartelle"><br>**Scanner del disco** | <img src="docs/images/scanner-treemap.webp" alt="Mappa a riquadri delle dimensioni delle cartelle"><br>**Mappa a riquadri** |
@@ -192,7 +212,7 @@ Le regole per contribuire sono in [CONTRIBUTING.md](CONTRIBUTING.md); la storia 
 
 ## Stato del progetto
 
-Versione **2.2.0**. Limiti noti:
+Versione **2.3.0**. Limiti noti:
 
 - Il motore OCR (tesseract.js) è provato nei test con l'uscita registrata di Tesseract; il motore WebAssembly vero gira solo nell'app e nell'estensione.
 - Non si aprono i vecchi .ppt/.xls né le immagini TIFF (salvarli come .pptx/.xlsx o PNG/PDF).
