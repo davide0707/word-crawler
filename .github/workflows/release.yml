@@ -73,7 +73,7 @@ jobs:
           status=${PIPESTATUS[0]}
           if [ $status -ne 0 ]; then echo "::error title=electron-builder ($RUNNER_OS)::$(grep -E '⨯|rror' build.log | tail -6 | tr '\n' ' ' | cut -c1-900)"; fi
           exit $status
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: word-crawler-${{ runner.os }}
           path: |
@@ -94,7 +94,7 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run build:extension
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: word-crawler-extension
           path: dist/word-crawler-extension.zip
