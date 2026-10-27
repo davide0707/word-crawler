@@ -416,8 +416,10 @@
             push(model, { type: 'row', text: cells.join(' · ') });
           });
         } else if (name === 'page') {
-          push(model, { type: 'h', level: 2, text: 'Diapositiva ' + (all(el, 'page').indexOf(k) + 1) });
+          var slideNo = all(el, 'page').indexOf(k) + 1, before = model.blocks.length;
+          push(model, { type: 'h', level: 2, text: 'Diapositiva ' + slideNo });
           walk(k, false);
+          for (var sb = before; sb < model.blocks.length; sb++) model.blocks[sb].slide = slideNo; // numero della diapositiva (citazioni)
         } else if (name === 'frame' || name === 'text-box' || name === 'section' || name === 'g' || name === 'custom-shape' || name === 'text' || name === 'presentation' || name === 'spreadsheet' || name === 'index-body' || name === 'table-of-content') {
           if (name === 'frame' && attr(k, 'class') === 'title') {
             push(model, { type: 'h', level: 3, text: k.textContent });
@@ -460,6 +462,7 @@
     for (var i = 0; i < slides.length; i++) {
       if (!zip.has(slides[i])) continue;
       var sx = xml(await zip.text(slides[i]));
+      var slideStart = model.blocks.length;
       var shapes = all(sx, 'sp');
       var titled = false;
       shapes.forEach(function (sp) {
@@ -484,6 +487,7 @@
         push(model, { type: 'row', text: cells.join(' · ') });
       });
       if (!titled && shapes.length) model.blocks.splice(model.blocks.length, 0);
+      for (var sb = slideStart; sb < model.blocks.length; sb++) model.blocks[sb].slide = i + 1; // numero della diapositiva (citazioni)
     }
     if (zip.has('docProps/core.xml')) {
       try { model.title = clean((first(xml(await zip.text('docProps/core.xml')), 'title') || {}).textContent || ''); } catch (e) { /* facoltativo */ }
