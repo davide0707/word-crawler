@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Test dell'estensione vera in Chromium (serve un display: su Linux senza schermo usa "xvfb-run -a").
  * Costruisce dist/extension, la carica in un profilo temporaneo e prova:
@@ -77,6 +78,9 @@ process.on('unhandledRejection', (e) => {
     const stats = await panel.locator('.wc-stats').textContent();
     assert.ok(/Italiano/.test(stats), stats);
     assert.ok(/usata \(frequenze della lingua\)/.test(stats), 'frequenze non caricate: ' + stats);
+    await panel.screenshot({ path: path.join(__dirname, 'screenshots', 'estensione-pannello.png') });
+    await page.bringToFront();
+    await page.screenshot({ path: path.join(__dirname, 'screenshots', 'estensione-pagina.png') });
     await panel.click('#spr-tab-cards');
     assert.ok(await panel.locator('.wc-card').count() >= 4);
   });

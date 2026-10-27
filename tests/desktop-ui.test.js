@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Davide Di Filippo. Tutti i diritti riservati. Vedi LICENSE.
 /*
  * Test dell'interfaccia desktop senza Electron: la pagina vera (desktop/ui/index.html) gira in Chromium
  * con un finto "wcDesktop" al posto del preload. La scansione mostrata è una scansione VERA fatta
@@ -100,7 +101,7 @@ function serve() {
       },
       showItem: async () => true,
       openExternal: async () => true,
-      info: async () => ({ version: '2.0.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: false }),
+      info: async () => ({ version: '2.1.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
       onMenu: () => () => {},
       onFileOpened: () => () => {}
     };
@@ -118,6 +119,21 @@ function serve() {
   await page.waitForTimeout(400);
   await page.click('text=Salva in archivio');
   await page.waitForTimeout(300);
+  // Ripasso: schede e quiz
+  await page.click('#wcr-tab-cards');
+  await page.locator('.wc-card').first().locator('text=Mostra la risposta').click();
+  await page.waitForTimeout(150);
+  await page.screenshot({ path: path.join(SHOTS, '02b-ripasso-schede.png') });
+  await page.click('text=/^Quiz \\(/');
+  await page.locator('.wc-choice').first().click();
+  await page.waitForTimeout(150);
+  await page.screenshot({ path: path.join(SHOTS, '02c-ripasso-quiz.png') });
+  // Tema carta, con la penna
+  await page.selectOption('#wcs-theme', 'paper');
+  await page.click('#wcr-tab-marks');
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(SHOTS, '02d-lettore-carta.png') });
+  await page.selectOption('#wcs-theme', 'night');
 
   // Ragnatela, tema notte
   await page.selectOption('#wcs-preset', 'video');
