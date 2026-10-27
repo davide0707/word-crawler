@@ -1,12 +1,20 @@
 # Costruisce Word Crawler per Windows, macOS e Linux e prepara l'estensione per Chrome.
-# Si avvia da solo quando pubblichi un tag "v..." (es. v2.1.0), oppure a mano da Actions → Build → Run workflow.
-# I file pronti si scaricano da Actions (Artifacts) e, per i tag, dalla pagina Releases.
+# Si avvia da solo quando pubblichi una Release su GitHub (Releases → Draft a new release, tag "v2.1.0")
+# o un tag "v...", oppure a mano da Actions → Build → Run workflow.
+# I file pronti si scaricano da Actions (Artifacts) e, per le release, dalla pagina Releases.
 name: Build
 
 on:
   push:
     tags: ['v*']
+  release:
+    types: [published]
   workflow_dispatch:
+
+# una sola compilazione alla volta per lo stesso tag
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -93,6 +101,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: out/*
+          tag_name: ${{ github.ref_name }}
           body: |
             Word Crawler ${{ github.ref_name }}
             - Windows: Word-Crawler-Setup (installazione) o Word-Crawler-Portatile (senza installare)
