@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Word Crawler",
+  "version": "2.0.0",
+  "description": "Un ragno che legge pagine web, PDF e documenti Word: sottolinea, cerchia, riassume e salva. Senza intelligenza artificiale.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Word Crawler: apri il pannello",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["activeTab", "scripting", "storage", "unlimitedStorage", "sidePanel", "contextMenus"],
+  "host_permissions": ["<all_urls>"],
+  "commands": {
+    "toggle-crawler": {
+      "suggested_key": { "default": "Alt+Shift+K" },
+      "description": "Avvia o ferma il ragno sulla pagina"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "minimum_chrome_version": "116"
+}

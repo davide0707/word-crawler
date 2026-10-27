@@ -1,0 +1,66 @@
+/* Word Crawler Studio: guscio dell'app desktop, scanner, archivio e guida.
+   Le variabili di colore vengono da core/reader.css. */
+body { padding-top: var(--wc-top, 52px); }
+.topbar {
+  position: fixed; inset: 0 0 auto; height: var(--wc-top, 52px); z-index: 2147483647;
+  display: flex; align-items: center; gap: 24px; padding: 0 18px;
+  background: var(--wc-panel); border-bottom: 1px solid var(--wc-line);
+}
+.brand { display: flex; align-items: center; gap: 10px; font: 600 13px var(--wc-mono); letter-spacing: .16em; color: var(--wc-fg); }
+.brand-mark { width: 12px; height: 22px; border: 1.5px solid #fff; background: #0b0b0e; position: relative; }
+.brand-mark::after { content: ""; position: absolute; left: 3px; bottom: 3px; width: 4px; height: 4px; background: var(--wc-cyan); }
+.tabs { display: flex; gap: 4px; height: 100%; }
+.tabs [role="tab"] {
+  border: 0; background: none; padding: 0 12px; height: 100%; cursor: pointer; font-weight: 600; color: var(--wc-mute);
+  border-bottom: 2px solid transparent;
+}
+.tabs [role="tab"][aria-selected="true"] { color: var(--wc-fg); border-bottom-color: var(--wc-cyan); }
+.tabs [role="tab"]:hover { color: var(--wc-fg); }
+.version { margin-left: auto; font: 500 11px var(--wc-mono); color: var(--wc-mute); }
+.nohost { max-width: 520px; margin: 20vh auto; text-align: center; }
+
+/* ---------------- scanner */
+.sc { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: calc(100vh - var(--wc-top, 52px)); }
+.sc-left .wc-settings { gap: 14px; }
+.sc-btns { display: grid; gap: 8px; }
+.sc-path { margin: 0; font: 500 12px var(--wc-mono); color: var(--wc-cyan); overflow-wrap: anywhere; }
+.sc-safe { margin: 0; font-size: 12px; color: var(--wc-green); }
+.sc-main { min-width: 0; padding: 16px 20px 40px; display: flex; flex-direction: column; gap: 14px; }
+.sc-stage { position: relative; height: calc(100vh - var(--wc-top, 52px) - 190px); min-height: 380px; border: 1px solid var(--wc-line); border-radius: 12px; overflow: hidden; background: #0b0b0e; }
+.sc-canvas { display: block; }
+.sc-legs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 4px 16px; font: 12px/1.5 var(--wc-mono); min-height: 18px; }
+.sc-legs li { display: flex; gap: 10px; min-width: 0; }
+.sc-legs li.idle { opacity: .4; }
+.sc-leg-n { color: var(--wc-cyan); flex: none; }
+.sc-leg-p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wc-mute); }
+.sc-report { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
+.sc-rhead { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.sc-rhead h2 { margin: 0; font: 700 22px var(--wc-ui); }
+.sc-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.sc-tile { background: var(--wc-panel-2); border: 1px solid var(--wc-line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.sc-tile span { font-size: 12px; color: var(--wc-mute); }
+.sc-tile b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.sc-report .wc-tabs { padding: 0; flex-wrap: wrap; }
+.sc-panel { outline: none; }
+.sc-note { margin: 10px 0; }
+.sc-tw { overflow-x: auto; border: 1px solid var(--wc-line); border-radius: 8px; }
+.sc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sc-table th, .sc-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--wc-line); vertical-align: top; }
+.sc-table th { color: var(--wc-mute); font-weight: 600; position: sticky; top: 0; background: var(--wc-panel); }
+.sc-table td { overflow-wrap: anywhere; white-space: pre-line; font-variant-numeric: tabular-nums; position: relative; }
+.sc-table .wc-link { white-space: nowrap; }
+.sc-bar { display: block; height: 3px; background: var(--wc-crawl-hi); margin-top: 5px; border-radius: 2px; }
+
+/* ---------------- guida */
+.guide { padding: 32px clamp(16px, 4vw, 48px) 80px; }
+.guide #guide { max-width: 760px; }
+.guide h1 { font: 700 28px/1.2 var(--wc-ui); margin: 0 0 12px; }
+.guide h2 { margin: 32px 0 10px; font: 600 12px var(--wc-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--wc-cyan); }
+.guide p, .guide li, .guide dd { font-size: 15px; line-height: 1.6; color: #d7d6de; }
+.guide dl { margin: 0; }
+.guide dt { font-weight: 700; margin-top: 12px; }
+.guide dd { margin: 2px 0 0; }
+
+@media (max-width: 1100px) {
+  .sc { grid-template-columns: 280px minmax(0, 1fr); }
+}

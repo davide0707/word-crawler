@@ -1,0 +1,21 @@
+/* Word Crawler (estensione): pannello laterale. Il resto dello stile viene da core/reader.css. */
+.brand { display: flex; align-items: center; gap: 10px; font: 600 12px var(--wc-mono); letter-spacing: .16em; color: var(--wc-fg); }
+.brand-mark { width: 11px; height: 20px; border: 1.5px solid #fff; background: #0b0b0e; position: relative; flex: none; }
+.brand-mark::after { content: ""; position: absolute; left: 3px; bottom: 3px; width: 3px; height: 3px; background: var(--wc-cyan); }
+
+body.sp { min-width: 300px; display: flex; flex-direction: column; min-height: 100vh; background: var(--wc-panel); overflow-x: hidden; }
+body.sp > * { min-width: 0; }
+.sp-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--wc-line); flex-wrap: wrap; }
+.sp-links { display: flex; gap: 12px; }
+.sp-page { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--wc-line); }
+.sp-title { margin: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-run { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sp-run #run { grid-column: 1 / -1; padding: 11px; }
+.sp-results .wc-results { height: auto; }
+.sp-results .wc-results-head { padding: 12px 14px 6px; }
+.sp-results .wc-tabs { padding: 0 8px; }
+.sp-results .wc-panels { max-height: 52vh; padding: 12px 14px; }
+.sp-results .wc-results-foot { padding: 10px 14px 14px; }
+.sp-results .wc-item-side { width: 64px; }
+.sp-settings { padding: 12px 14px 40px; border-top: 1px solid var(--wc-line); }
+.sp-settings > summary { cursor: pointer; font: 600 11px var(--wc-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--wc-cyan); margin-bottom: 12px; }

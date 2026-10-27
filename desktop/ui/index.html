@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Word Crawler</title>
+  <link rel="stylesheet" href="../../core/reader.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>WORD CRAWLER</span></div>
+    <nav class="tabs" role="tablist" aria-label="Sezioni">
+      <button type="button" role="tab" id="tab-reader" aria-controls="view-reader" data-view="reader">Lettore</button>
+      <button type="button" role="tab" id="tab-scanner" aria-controls="view-scanner" data-view="scanner">Scanner del PC</button>
+      <button type="button" role="tab" id="tab-archive" aria-controls="view-archive" data-view="archive">Archivio</button>
+      <button type="button" role="tab" id="tab-guide" aria-controls="view-guide" data-view="guide">Guida</button>
+    </nav>
+    <span class="version" id="version"></span>
+  </header>
+
+  <section class="view" id="view-reader" role="tabpanel" aria-labelledby="tab-reader"><div id="reader"></div></section>
+  <section class="view" id="view-scanner" role="tabpanel" aria-labelledby="tab-scanner" hidden><div id="scanner"></div></section>
+  <section class="view" id="view-archive" role="tabpanel" aria-labelledby="tab-archive" hidden><div id="archive"></div></section>
+  <section class="view guide" id="view-guide" role="tabpanel" aria-labelledby="tab-guide" hidden><div id="guide"></div></section>
+
+  <div class="nohost" id="nohost" hidden>
+    <h1>Questa pagina va aperta dall’app</h1>
+    <p>Avvia Word Crawler con <code>npm start</code> oppure dal programma installato.</p>
+  </div>
+
+  <script src="../../core/settings.js"></script>
+  <script src="../../core/text.js"></script>
+  <script src="../../core/analysis.js"></script>
+  <script src="../../core/zip.js"></script>
+  <script src="../../core/cfb.js"></script>
+  <script src="../../core/formats.js"></script>
+  <script src="../../core/dom.js"></script>
+  <script src="../../core/pdfcore.js"></script>
+  <script src="../../core/crawler.js"></script>
+  <script src="../../core/export.js"></script>
+  <script src="../../core/settings-ui.js"></script>
+  <script src="../../core/results-ui.js"></script>
+  <script src="../../core/reader.js"></script>
+  <script src="../../core/archive-ui.js"></script>
+  <script src="scan-report.js"></script>
+  <script src="scan-view.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
