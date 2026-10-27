@@ -1,133 +1,180 @@
+<div align="center">
+
+<img src="docs/images/logo.svg" width="112" alt="Word Crawler logo">
+
 # Word Crawler
 
-Un ragno che legge al posto tuo. Apre PDF (anche scansionati), documenti Word, pagine web e foto di pagine, sottolinea le frasi chiave, cerchia nomi e concetti, riquadra numeri e date e alla fine ti lascia il sunto e le schede per ripassare. Quello che ha segnato, e quello che segni tu con la penna, si può salvare in un archivio o esportare, anche come documento Word con tutti i segni.
+**A spider that reads for you.** It underlines, circles and summarises documents and web pages, builds review cards and maps your disk — with statistics, not AI.
 
-L'app desktop ha anche uno **scanner del PC**: un ragno percorre in sola lettura un disco o una cartella e alla fine fa un rapporto completo (spazio per estensione e per tipo, mappa a riquadri delle cartelle, file e cartelle più grandi, duplicati, file vuoti, percorsi troppo lunghi…), confrontabile con le scansioni precedenti.
+[![CI](https://github.com/davide0707/word-crawler/actions/workflows/ci.yml/badge.svg)](https://github.com/davide0707/word-crawler/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/davide0707/word-crawler?label=release&color=2f4bff)](https://github.com/davide0707/word-crawler/releases)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Chrome-3fd8ff)
+![Languages](https://img.shields.io/badge/document%20languages-6-5de07f)
+[![License](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)](LICENSE)
 
-**Niente intelligenza artificiale.** Parole chiave, sunto e schede sono calcolati con metodi statistici classici (frequenze, nomi propri, grafi di parole vicine, TextRank). Il testo nelle immagini si riconosce con Tesseract, un programma di OCR classico. Tutto resta sul computer.
+**English** · [Italiano](README.it.md)
 
-## Novità della 2.1
+<img src="docs/images/reader-study.webp" alt="The spider reading a Word document in Study mode: key sentences underlined, names circled, dates boxed" width="100%">
 
-- **Sei lingue**: italiano, inglese, francese, spagnolo, tedesco e portoghese, riconosciute da sole. Per ognuna: parole da ignorare, abbreviazioni, modi di scrivere una definizione, connettivi, indice di leggibilità adatto (Gulpease, Flesch, Kandel-Moles, Szigriszt-Pazos, Amstad, Flesch-Martins) e **frequenza delle parole**: una parola rara ripetuta nel testo conta più di una parola comune.
-- **OCR con Tesseract** per i PDF scansionati e per le immagini (PNG, JPG, WebP, BMP, GIF): il ragno cammina sulle parole riconosciute, al posto giusto sulla pagina.
-- **Documenti lunghi**: l'analisi va in un thread separato, le pagine dei PDF si leggono in parallelo, le parole delle pagine web non tengono oggetti pesanti in memoria (25.000 parole lette e analizzate in circa 1,5 secondi).
-- **Sunti più scorrevoli**: niente "Inoltre," o "Tuttavia" all'inizio di una frase staccata dal suo contesto; le frasi che cominciano con "Questo…" pesano meno.
-- **Ripasso**: schede dalle definizioni ("Che cos'è la cortina di ferro?") e frasi da completare, quiz a scelta multipla, esportazione per **Anki**.
-- **Penna**: evidenzia, sottolinea, scrivi note, cancella. Funziona anche sui PDF e sulle pagine web.
-- **Esportazione del documento segnato**: Word (.docx, con le note come commenti), pagina web e PDF.
-- **Estensione**: quando riapri una pagina salvata in archivio, i segni ricompaiono da soli.
-- **Scanner**: mappa a riquadri con zoom, confronto con una scansione precedente, duplicati nel Cestino con conferma e tanti controlli.
-- **Firma digitale** facoltativa nella compilazione su GitHub.
+</div>
 
-## Cosa c'è dentro
+## Contents
 
-| Cartella | Contenuto |
+- [Highlights](#highlights)
+- [Screenshots](#screenshots)
+- [Download](#download)
+- [How it works](#how-it-works)
+- [Formats and languages](#formats-and-languages)
+- [Privacy and security](#privacy-and-security)
+- [Development](#development)
+- [Project status](#project-status)
+- [License](#license)
+
+## Highlights
+
+| | |
 |---|---|
-| `core/` | Il motore condiviso: lingue e frequenze, lettura dei formati, analisi, OCR, ragno animato, penna, lettore, risultati, esportazioni, archivio |
-| `desktop/` | App per Windows, macOS e Linux (Electron): finestra, scanner del disco, confronto e Cestino, collegamento sicuro al sistema |
-| `extension/` | Estensione per Chrome, Edge e Brave: pannello laterale, lettore di documenti, archivio, segni ritrovati |
-| `tests/` | Test automatici e file di prova in tutti i formati |
-| `scripts/` | Preparazione dell'estensione (`build-extension.js`) |
-| `.github/workflows/` | Compilazione automatica su GitHub per i tre sistemi |
+| **Reads everything** | PDF (scanned ones too, via OCR), Word (.docx and legacy .doc), OpenDocument, PowerPoint, Excel, EPUB, RTF, HTML, Markdown, plain text, subtitles, CSV, images and live web pages. |
+| **Marks what matters** | Underlines key sentences and definitions, circles names and concepts, boxes numbers and dates — and draws it all with an animated spider. |
+| **Summarises without AI** | Keywords from YAKE-style statistics, word-frequency rarity and a co-occurrence graph; extractive summary with TextRank and MMR. Every figure is computed, nothing is generated. |
+| **Helps you study** | Flashcards from definitions, fill-in-the-blank cards from key sentences, a multiple-choice quiz and Anki export. |
+| **Your own pen** | Highlight, underline, annotate and erase, on PDFs and web pages too. |
+| **Exports the marked document** | Word (.docx, with your notes as comments), HTML and PDF, plus Markdown, text, JSON and Anki summaries. |
+| **Remembers pages** | The browser extension restores your marks when you reopen a saved page. |
+| **Maps your disk** | Read-only scanner with a zoomable treemap, duplicates, largest files and folders, scan-to-scan comparison and a safe "move duplicates to Trash". |
+| **Handles long documents** | Analysis runs in a Web Worker and PDF pages are extracted in parallel: about 25,000 words read and analysed in 1.3 s. |
 
-## Formati letti
+The user interface is in Italian. Documents can be in Italian, English, French, Spanish, German or Portuguese.
 
-PDF (anche scansionati, con l'OCR) · Word (.docx, .docm, .dotx e il vecchio .doc) · OpenDocument (.odt, .odp, .ods) · PowerPoint (.pptx) · Excel (.xlsx) · EPUB · RTF · HTML · Markdown · testo (anche con codifiche Windows) · sottotitoli (.srt, .vtt) · CSV/TSV · immagini (PNG, JPG, WebP, BMP, GIF) · pagine web.
-Restano esclusi i vecchi .ppt/.xls (vanno salvati come .pptx/.xlsx) e le immagini TIFF (vanno salvate come PNG, JPG o PDF).
+## Screenshots
 
-## Usarlo
+| | |
+|:---:|:---:|
+| <img src="docs/images/review-quiz.webp" alt="Review tab with a multiple-choice quiz"><br>**Review cards and quiz** | <img src="docs/images/pen.webp" alt="Pen tool with a highlight and a numbered note"><br>**Pen: highlights and notes** |
+| <img src="docs/images/ocr.webp" alt="Scanned PDF recognised with OCR, with the marks placed on the scanned words"><br>**OCR on scanned PDFs** | <img src="docs/images/reader-paper.webp" alt="Paper theme for studying"><br>**Paper theme** |
+| <img src="docs/images/scanner-running.webp" alt="Disk scanner: the spider walking the folder map"><br>**Disk scanner** | <img src="docs/images/scanner-treemap.webp" alt="Treemap of folder sizes"><br>**Treemap** |
+| <img src="docs/images/scanner-duplicates.webp" alt="Duplicates selected and moved to the Trash"><br>**Duplicates to the Trash** | <img src="docs/images/scanner-compare.webp" alt="Comparison between two scans"><br>**Scan comparison** |
+| <img src="docs/images/extension-restored.webp" alt="Browser extension restoring marks on a saved web page"><br>**Extension: marks restored** | <img src="docs/images/archive.webp" alt="Archive of saved readings"><br>**Archive** |
 
-### App desktop in sviluppo (serve Node.js 18 o più recente)
+## Download
 
-```bash
-npm install      # scarica Electron, PDF.js, Tesseract e gli strumenti di build
-npm start        # apre l'app
+Ready-made builds are published on the [**Releases**](https://github.com/davide0707/word-crawler/releases) page.
+
+| Platform | File | Notes |
+|---|---|---|
+| Windows 10/11 | `Word-Crawler-Setup-<version>.exe` | Installer. A portable `.exe` that needs no installation is also provided. |
+| macOS 11+ | `Word-Crawler-<version>-arm64.dmg` / `-x64.dmg` | Apple silicon and Intel. |
+| Linux | `.AppImage` or `.deb` | x64. |
+| Chrome, Edge, Brave | `word-crawler-extension.zip` | Unzip, open `chrome://extensions`, enable *Developer mode*, *Load unpacked*. |
+
+Unsigned builds show a warning the first time: on Windows choose *More info → Run anyway*; on macOS right-click the app and choose *Open*. Signed builds are produced automatically when signing certificates are configured (see [Code signing](#code-signing)).
+
+## How it works
+
+```mermaid
+flowchart LR
+  A[File or web page] --> B[Format readers<br/>PDF.js · ZIP/XML · CFB · Tesseract OCR]
+  B --> C[Words with positions]
+  C --> D[Analysis<br/>language · keywords · summary · definitions · cards]
+  D --> E[Spider engine<br/>canvas overlay]
+  D --> F[Results panel<br/>summary · marks · review · stats]
+  E --> G[Pen]
+  F --> H[Archive and exports<br/>Word · HTML · PDF · Anki]
 ```
 
-### Creare il programma installabile
+One shared engine (`core/`) powers both the desktop app and the browser extension. A full description of the algorithms, the module map and the security model is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-Sul tuo computer (crea il pacchetto per il sistema che stai usando):
+## Formats and languages
 
-```bash
-npm run dist     # Windows: .exe di installazione + versione portatile; macOS: .dmg; Linux: .AppImage e .deb
-```
-
-I file finiscono in `dist/`.
-
-Con GitHub (crea i pacchetti per tutti e tre i sistemi):
-1. Vai in **Releases → Draft a new release**, scrivi un tag che inizia con `v` (per esempio `v2.1.0`) e premi **Publish release**. In alternativa: `git tag v2.1.0 && git push --tags`, oppure **Actions → Build → Run workflow**.
-2. In 15–20 minuti trovi .exe, .dmg, .AppImage, .deb e lo zip dell'estensione nella release, oppure negli **Artifacts** dell'esecuzione (se l'hai avviata a mano).
-
-#### Firma digitale (facoltativa)
-
-Senza firma i programmi funzionano lo stesso, ma:
-- su Windows, SmartScreen può dire "App non riconosciuta": premi *Ulteriori informazioni → Esegui comunque*;
-- su macOS, la prima volta apri l'app con tasto destro → *Apri*.
-
-Per firmarli, in **Settings → Secrets and variables → Actions** del repository aggiungi:
-
-| Segreto | Cosa contiene |
+| Documents | Notes |
 |---|---|
-| `CSC_LINK` | il certificato di firma (.p12 o .pfx) codificato in base64 |
-| `CSC_KEY_PASSWORD` | la password del certificato |
-| `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` | solo per macOS: l'autenticazione ("notarizzazione") di Apple |
+| PDF | Text PDFs through PDF.js; pages without text are recognised with Tesseract OCR |
+| Word | .docx, .docm, .dotx and legacy .doc (Word 97–2003) |
+| OpenDocument | .odt, .odp, .ods |
+| Office | .pptx, .xlsx |
+| Books and markup | EPUB, RTF, HTML, Markdown |
+| Text | .txt (UTF-8, UTF-16, Windows-1252), .srt/.vtt subtitles, CSV/TSV |
+| Images | PNG, JPG, WebP, BMP, GIF (OCR) |
 
-La compilazione li usa se ci sono; altrimenti crea programmi non firmati.
+| Language | Readability index | Stopwords, abbreviations, definitions | Word frequencies |
+|---|---|---|---|
+| Italian | Gulpease | yes | 20,000 words |
+| English | Flesch Reading Ease | yes | 20,000 words |
+| French | Kandel–Moles | yes | 20,000 words |
+| Spanish | Szigriszt–Pazos | yes | 20,000 words |
+| German | Amstad | yes, with common-noun detection | 20,000 words |
+| Portuguese | Flesch (Martins) | yes | 20,000 words |
 
-### Estensione per il browser
+## Privacy and security
+
+- **Local by design.** Documents never leave the computer and there is no telemetry. The only network access the app makes on its own is the first-time download of OCR language data (2–4 MB per language, from `cdn.jsdelivr.net`), and only when a scanned page or image is opened.
+- **Hardened desktop app.** Context isolation, sandboxed renderer, a strict Content Security Policy, an internal `app://` protocol and a minimal preload bridge whose inputs are validated in the main process.
+- **Read-only scanner.** The disk scan only lists, measures and reads files. Moving duplicates to the Trash is a separate action that only accepts files found by that scan inside the scanned folder, always keeps one copy per group, verifies byte-for-byte identity with SHA-256, asks for confirmation and writes a log.
+- **Safe exports.** Marked-up PDFs are printed from a hidden window with JavaScript disabled.
+
+Please report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+
+## Development
+
+Requirements: **Node.js 20+** (22 recommended, see `.nvmrc`). No build step: the engine is plain JavaScript that runs unchanged in Electron, in the extension and in Node.
 
 ```bash
-npm install
-npm run build:extension   # crea dist/word-crawler-extension.zip (con PDF.js e Tesseract dentro)
+git clone https://github.com/davide0707/word-crawler.git
+cd word-crawler
+npm install          # Electron, PDF.js, Tesseract and the test tools
+npm start            # run the desktop app
 ```
 
-Poi estrai lo zip, apri `chrome://extensions`, attiva *Modalità sviluppatore* e premi *Carica estensione non pacchettizzata*. Scegli la cartella `word-crawler-extension`.
-Clicca l'icona del ragno: si apre il pannello laterale. **Alt+Shift+K** avvia o ferma il ragno sulla pagina. Con il tasto destro su un'immagine: *Leggi il testo di questa immagine (OCR)*.
-
-## Modalità e parametri
-
-- **Studio**: sottolinea le frasi chiave e le definizioni, cerchia nomi e concetti, riquadra numeri e date.
-- **Riassunto**: sottolinea le frasi più importanti e le raccoglie nel sunto.
-- **Ragnatela**: l'effetto del video, pensato per essere registrato.
-- **Cerca**: trova parole, varianti (`nucle*`) e frasi esatte, con la frase in cui compaiono.
-
-Ogni parametro dice nell'app cosa cambia. I principali:
-
-| Parametro | Effetto reale |
+| Script | What it does |
 |---|---|
-| Velocità | Solo il ritmo dell'animazione |
-| Zampe | Ampiezza del contesto per collegare le parole (finestra del grafo); nello scanner, cartelle lette in parallelo |
-| Selettività | Quante parole chiave tenere |
-| Lingua | Parole da ignorare, abbreviazioni, definizioni, leggibilità e frequenze delle parole |
-| Lunghezza | Quota di frasi nel sunto |
-| Varietà | Quanto evitare frasi ripetitive (MMR) |
-| Peso dell'inizio | Importanza delle prime frasi di ogni paragrafo |
-| OCR e lingua dell'OCR | Riconoscimento del testo nelle immagini e nei PDF scansionati |
+| `npm start` | Runs the desktop app |
+| `npm test` | Project checks plus the unit, integration and browser suites |
+| `npm run lint` | Syntax, line endings, headers, JSON and version consistency |
+| `npm run test:extension` | Loads the real extension in Chromium (needs a display; use `xvfb-run -a` on headless Linux) |
+| `npm run test:ui -- <folder>` | End-to-end run of the desktop UI with a real scan, saving screenshots |
+| `npm run build:extension` | Builds `dist/word-crawler-extension.zip` with PDF.js and Tesseract |
+| `npm run dist` | Packages the desktop app for the current OS into `dist/` |
+| `npm run fixtures` / `fixtures:ocr` | Regenerates the test documents (LibreOffice, pandoc) and OCR pages (Tesseract) |
 
-## OCR
+### Project structure
 
-L'OCR usa [tesseract.js](https://github.com/naptha/tesseract.js) (Tesseract compilato in WebAssembly), incluso nell'app e nell'estensione. I dati di ogni lingua (2–4 MB) si scaricano la prima volta da `cdn.jsdelivr.net` e poi restano salvati: dalla volta dopo l'OCR funziona anche senza internet. È l'unico momento in cui Word Crawler si collega a internet per conto suo, e solo se apri un documento scansionato o un'immagine.
-
-## Test
-
-```bash
-npm test                        # analisi, esportazioni, scanner, processo principale, formati, lettore (Chromium)
-npm run test:extension          # l'estensione vera in Chromium (su Linux senza schermo: xvfb-run -a npm run test:extension)
-npm run test:ui -- /usr/share   # interfaccia desktop completa in Chromium (screenshot in tests/screenshots)
-npm run fixtures                # ricrea i file di prova (servono LibreOffice e pandoc)
-npm run fixtures:ocr            # ricrea le pagine scansionate e la loro lettura con il vero Tesseract
+```
+core/                 shared engine: languages, formats, analysis, OCR, spider, pen, reader, exports
+  freq/               word-frequency lists (CC BY-SA 4.0)
+desktop/              Electron main process, preload bridge, disk scanner, scan tools
+  ui/                 desktop window: tabs, scanner view, report, guide
+extension/            Chrome/Edge/Brave extension (Manifest V3)
+scripts/              extension build, project checks, ZIP writer
+tests/                test suites, fixtures and test doubles
+docs/                 architecture and images
+.github/              CI, release workflow, issue and PR templates
 ```
 
-I test dell'OCR nel browser usano l'uscita vera del programma `tesseract` (salvata in `tests/fixtures`) al posto di tesseract.js, così non serve scaricare niente.
+### Testing
 
-## Sicurezza e privacy
+102 automated checks cover analysis in six languages, every document format, exports (Word files are validated by unzipping them), OCR mapping against real Tesseract output, the disk scanner and its safety rules, the Electron main process (with a stubbed `electron` module), the reader in Chromium with the real PDF.js, and the real extension loaded in Chromium. CI runs them on every push and pull request.
 
-- La finestra dell'app non ha accesso diretto al sistema: usa solo le funzioni esposte da `desktop/preload.js`, che vengono controllate in `desktop/main.js` (isolamento del contesto, sandbox, protocollo interno `app://`).
-- Lo scanner usa solo operazioni di lettura. Non segue i collegamenti simbolici e salta gli altri dischi se non lo chiedi. I test verificano che date e contenuti dei file restino identici.
-- Spostare i duplicati nel Cestino è un'azione a parte, solo su richiesta: il programma accetta solo file trovati come duplicati da quella scansione e dentro la cartella analizzata, tiene sempre almeno una copia per gruppo, ricontrolla che ogni file sia identico byte per byte alla copia che resta, chiede conferma e annota tutto in un registro. I file vanno nel Cestino, non vengono cancellati.
-- Il PDF del documento segnato si stampa in una finestra nascosta senza JavaScript.
-- Impostazioni, archivio e rapporti si salvano solo nella cartella dati dell'app, oppure dove scegli tu quando esporti.
+### Releases and code signing
 
-## Componenti di terze parti
+Publishing a GitHub release (tag `vX.Y.Z`) runs [`release.yml`](.github/workflows/release.yml), which tests the code, builds Windows, macOS and Linux packages plus the extension, and attaches them to the release with the notes from [CHANGELOG.md](CHANGELOG.md). <a id="code-signing"></a>Builds are signed when these repository secrets exist:
 
-Vedi [THIRD-PARTY.md](THIRD-PARTY.md). In breve: PDF.js e tesseract.js (Apache 2.0), le frequenze delle parole da [FrequencyWords](https://github.com/hermitdave/FrequencyWords) di Hermit Dave (dati OpenSubtitles, licenza CC BY-SA 4.0: i file `core/freq/*.js` sono distribuiti con la stessa licenza).
+| Secret | Purpose |
+|---|---|
+| `CSC_LINK`, `CSC_KEY_PASSWORD` | Signing certificate (.p12/.pfx, base64) and its password |
+| `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` | macOS notarisation |
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and [CHANGELOG.md](CHANGELOG.md) for the version history.
+
+## Project status
+
+Version **2.1.0**. Known limitations:
+
+- The OCR engine (tesseract.js) is exercised in tests through recorded Tesseract output; the WebAssembly engine itself runs only in the packaged app and extension.
+- Legacy .ppt/.xls and TIFF images are not supported (save them as .pptx/.xlsx or PNG/PDF).
+- Summaries are extractive: sentences are selected and lightly cleaned, never rewritten.
+- The browser extension does not run on iOS.
+
+## License
+
+Copyright © 2026 Davide Di Filippo. **All rights reserved.** The source code is published for viewing only; see [LICENSE](LICENSE).
+Third-party components keep their own licences — see [THIRD-PARTY.md](THIRD-PARTY.md). The word-frequency data in `core/freq/` comes from [FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave and is distributed under CC BY-SA 4.0.
