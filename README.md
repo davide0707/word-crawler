@@ -55,8 +55,8 @@ npm run dist     # Windows: .exe di installazione + versione portatile; macOS: .
 I file finiscono in `dist/`.
 
 Con GitHub (crea i pacchetti per tutti e tre i sistemi):
-1. Crea un tag che inizia con `v`, per esempio `git tag v2.1.0 && git push --tags`, oppure vai in **Actions → Build → Run workflow**.
-2. In 15–20 minuti trovi .exe, .dmg, .AppImage, .deb e lo zip dell'estensione in **Releases** (se hai usato un tag) o negli **Artifacts** dell'esecuzione.
+1. Vai in **Releases → Draft a new release**, scrivi un tag che inizia con `v` (per esempio `v2.1.0`) e premi **Publish release**. In alternativa: `git tag v2.1.0 && git push --tags`, oppure **Actions → Build → Run workflow**.
+2. In 15–20 minuti trovi .exe, .dmg, .AppImage, .deb e lo zip dell'estensione nella release, oppure negli **Artifacts** dell'esecuzione (se l'hai avviata a mano).
 
 #### Firma digitale (facoltativa)
 

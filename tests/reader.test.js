@@ -48,8 +48,18 @@ let failures = 0;
 async function check(name, fn) {
   const t0 = Date.now();
   try { await fn(); console.log('ok   ' + name + ' (' + (Date.now() - t0) + ' ms)'); }
-  catch (e) { failures++; console.log('FAIL ' + name + '\n     ' + (e && e.message || e)); }
+  catch (e) {
+    failures++;
+    console.log('FAIL ' + name + '\n     ' + (e && e.message || e));
+    // su GitHub Actions l'errore compare anche tra le annotazioni dell'esecuzione
+    if (process.env.GITHUB_ACTIONS) console.log('::error title=' + name.replace(/[:,\n]/g, ' ') + '::' + String(e && e.stack || e).slice(0, 1500).replace(/%/g, '%25').replace(/\r?\n/g, '%0A'));
+  }
 }
+process.on('unhandledRejection', (e) => {
+  console.log('ERRORE ' + (e && e.stack || e));
+  if (process.env.GITHUB_ACTIONS) console.log('::error title=errore non gestito::' + String(e && e.stack || e).slice(0, 1500).replace(/%/g, '%25').replace(/\r?\n/g, '%0A'));
+  process.exit(1);
+});
 
 (async () => {
   const server = await serve();
@@ -277,6 +287,7 @@ async function check(name, fn) {
   await browser.close();
   server.close();
   if (errs.length) { failures++; console.log('FAIL errori nella pagina:\n     ' + errs.slice(0, 8).join('\n     ')); }
+  if (errs.length && process.env.GITHUB_ACTIONS) console.log('::error title=errori nella pagina::' + errs.slice(0, 8).join('%0A').replace(/\r?\n/g, '%0A'));
   console.log(failures ? '\n' + failures + ' test falliti' : '\nTutti i test del lettore superati');
   process.exit(failures ? 1 : 0);
 })();
