@@ -442,6 +442,26 @@ async function check(name, fn) {
     await waitFor(() => Array.from(document.querySelectorAll('.lb-hit .lb-src b')).some((b) => b.textContent === 'Subnetting.md'));
   });
 
+  await check('svuota la libreria: tutti i documenti in un colpo solo, i file sul disco restano', async () => {
+    const n = await page.evaluate(() => window.__lib.docs.size);
+    assert.ok(n >= 5, 'documenti prima: ' + n);
+    await page.click('.lb-clear');
+    await page.waitForSelector('.lb-docsec .lb-ask');
+    // prima si annulla: non deve togliere niente
+    await page.click('.lb-docsec .lb-ask button:text-is("Annulla")');
+    assert.strictEqual(await page.evaluate(() => window.__lib.docs.size), n, 'annullare non toglie niente');
+    await page.click('.lb-clear');
+    await page.click('.lb-docsec .lb-ask .wc-danger');
+    await waitFor(() => window.__lib.docs.size === 0, null, 30000);
+    await page.waitForSelector('.lb-empty:not([hidden])');
+    assert.strictEqual(await page.evaluate(() => window.__view.state().docs.length), 0);
+    // i progressi dello studio e le modifiche della mappa sono azzerati con i documenti
+    const after = await page.evaluate(() => ({ study: window.__lib.study, edits: window.__lib.edits, trash: window.__lib.trash.size }));
+    assert.deepStrictEqual(after.study.cards, {}, 'progressi azzerati');
+    assert.deepStrictEqual(after.edits.merges, [], 'modifiche della mappa azzerate');
+    assert.ok(after.trash >= n, 'i record restano nel cestino dell’app: ' + after.trash);
+  });
+
   await check('nessun errore nella pagina', () => { assert.deepStrictEqual(errs, []); });
 
   await browser.close();

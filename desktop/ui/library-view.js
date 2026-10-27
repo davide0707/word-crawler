@@ -89,12 +89,13 @@
     var docFilter = el('input', { type: 'search', placeholder: 'Filtra per nome…', 'aria-label': 'Filtra i documenti per nome' });
     var docCount = el('h2', { text: 'Documenti' });
     var refreshBtn = el('button', { type: 'button', class: 'wc-link', hidden: 'hidden' });
+    var clearBtn = el('button', { type: 'button', class: 'wc-link lb-clear', text: 'Svuota la libreria', hidden: 'hidden' });
     var docList = el('ul', { class: 'lb-docs', 'aria-label': 'Documenti della libreria' });
     var left = el('aside', { class: 'wc-side wc-left', 'aria-label': 'Documenti della libreria' }, [
       el('section', {}, [el('h2', { text: 'Libreria' }), addFilesBtn, addFolderBtn,
         el('p', { class: 'wc-note', text: 'I file vengono solo letti: non sono modificati né spostati. Testo, concetti e fonti restano nella cartella dati dell’app, sul tuo computer.' }),
         impBox, impLogBox]),
-      el('section', { class: 'lb-docsec' }, [docCount, docFilter, refreshBtn, docList])
+      el('section', { class: 'lb-docsec' }, [docCount, docFilter, refreshBtn, clearBtn, docList])
     ]);
 
     var qInput = el('input', { type: 'search', class: 'lb-q', placeholder: 'Cerca in tutti i documenti: una parola, un concetto, "una frase esatta"…', 'aria-label': 'Cerca nella libreria', autocomplete: 'off', spellcheck: 'false' });
@@ -184,6 +185,7 @@
       var list = docs.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'it'); })
         .filter(function (d) { return !f || g.WCText.fold(d.name + ' ' + (d.title || '')).indexOf(f) >= 0; });
       docCount.textContent = 'Documenti (' + docs.length + ')';
+      clearBtn.hidden = !docs.length || importing;
       docList.textContent = '';
       if (!list.length) docList.appendChild(el('li', { class: 'wc-note', text: docs.length ? 'Nessun documento con questo nome.' : 'Ancora nessun documento.' }));
       list.forEach(function (d) {
@@ -390,6 +392,50 @@
     }
     impStop.addEventListener('click', function () { cancelImport = true; impStop.textContent = 'Mi fermo dopo questo file…'; setTimeout(function () { impStop.textContent = 'Interrompi'; }, 4000); });
     docFilter.addEventListener('input', renderDocs);
+    /*
+     * Svuotare la libreria: tutti i documenti in un colpo solo. I file sul disco non si toccano, e come
+     * per la rimozione di uno solo i record restano nel cestino dell'app per trenta giorni. I progressi
+     * dello studio e le modifiche della mappa vengono azzerati con loro: senza documenti non servono più.
+     */
+    clearBtn.addEventListener('click', function () {
+      var n = docs.length;
+      if (!n || importing) return;
+      clearBtn.hidden = true;
+      var yes = el('button', { type: 'button', class: 'wc-btn wc-danger', text: 'Sì, togli ' + plural(n, 'documento', 'documenti') });
+      var no = el('button', { type: 'button', class: 'wc-btn', text: 'Annulla' });
+      var ask = el('div', { class: 'lb-ask' }, [
+        el('p', { text: 'Togli tutti i documenti dalla libreria? I file sul tuo computer non vengono toccati: si perdono il testo già letto, i concetti, le tue modifiche alla mappa e i progressi dello studio.' }),
+        el('div', { class: 'wc-inline' }, [yes, no])]);
+      docCount.insertAdjacentElement('afterend', ask);
+      no.addEventListener('click', function () { ask.remove(); clearBtn.hidden = false; });
+      yes.addEventListener('click', function () {
+        yes.disabled = true; no.disabled = true;
+        yes.textContent = 'Tolgo…';
+        var ids = docs.map(function (d) { return d.id; });
+        ids.reduce(function (chain, id) { return chain.then(function () { return lib.remove(id); }); }, Promise.resolve())
+          .then(function () {
+            docs = []; docById.clear(); changed.clear();
+            edits = g.WCLibrary ? g.WCLibrary.emptyEdits() : null;
+            session = null; mastery = null; studyStats = null;
+            graph = null; mapNodes = []; mapEdges = []; nodeIdx = new Map(); fitted = false;
+            return Promise.all([lib.saveEdits(edits), lib.saveStudy ? lib.saveStudy({ v: 1, cards: {}, log: [] }) : null]);
+          })
+          .then(function () { return kb.call('load', { records: [], edits: edits }); })
+          .then(function () { return kb.call('study-load', { state: null }); })
+          .then(function () {
+            ask.remove();
+            qInput.value = ''; lastSearch = null; selected = null;
+            resultsBox.textContent = '';
+            renderDocs(); showView('results'); renderOverview(); updateDueBadge(); updateSuggBtn();
+            toast(plural(ids.length, 'documento tolto', 'documenti tolti') + ' dalla libreria. I file sul disco non sono stati toccati.');
+          })
+          .catch(function (e) {
+            ask.remove(); clearBtn.hidden = false;
+            toast('Non riesco a svuotare la libreria: ' + e.message);
+            load();
+          });
+      });
+    });
     refreshBtn.addEventListener('click', function () {
       enqueue(docs.filter(function (d) { return changed.get(d.id) === 'modified'; }).map(function (d) { return { path: d.path, id: d.id, name: d.name, ext: d.ext, size: -1, mtime: null }; }));
     });

@@ -17,11 +17,12 @@
     var search = el('input', { type: 'search', id: 'wca-search', placeholder: 'Cerca per titolo, parola chiave o testo…', autocomplete: 'off' });
     var count = el('span', { class: 'wc-count' });
     var exportAll = el('button', { type: 'button', class: 'wc-btn', text: 'Esporta tutto (.json)' });
+    var clearAll = el('button', { type: 'button', class: 'wc-btn', text: 'Svuota l’archivio', hidden: 'hidden' });
     var list = el('ul', { class: 'wca-list', 'aria-label': 'Letture salvate' });
     var detail = el('div', { class: 'wca-detail', tabindex: '-1' });
     container.appendChild(el('div', { class: 'wca-head' }, [
       el('div', {}, [el('h1', { text: 'Archivio' }), el('p', { class: 'wc-note', text: 'Le letture che hai salvato: sunto, sottolineature, parole chiave. Il documento originale non viene copiato.' })]),
-      el('div', { class: 'wc-inline' }, [el('label', { for: 'wca-search', class: 'wc-label', text: 'Cerca' }), search, count, exportAll])
+      el('div', { class: 'wc-inline' }, [el('label', { for: 'wca-search', class: 'wc-label', text: 'Cerca' }), search, count, exportAll, clearAll])
     ]));
     container.appendChild(el('div', { class: 'wca-body' }, [list, detail]));
 
@@ -136,12 +137,32 @@
         entries = (items || []).slice().sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
         if (current) current = entries.find(function (x) { return x.id === current.id; }) || null;
         if (!current && entries.length) current = entries[0];
+        clearAll.hidden = !entries.length;
         paintList(); paintDetail();
       });
     }
     search.addEventListener('input', function () { query = search.value.trim(); paintList(); });
     exportAll.addEventListener('click', function () {
       host.saveFile('archivio - Word Crawler.json', JSON.stringify({ exportedAt: new Date().toISOString(), entries: entries }, null, 2), 'application/json');
+    });
+    // svuotare l'archivio: tutte le letture in un colpo solo, con una conferma che dice quante sono
+    clearAll.addEventListener('click', function () {
+      var n = entries.length;
+      if (!n) return;
+      clearAll.hidden = true;
+      var yes = el('button', { type: 'button', class: 'wc-btn wc-danger', text: 'Sì, elimina ' + n + (n === 1 ? ' lettura' : ' letture') });
+      var no = el('button', { type: 'button', class: 'wc-btn', text: 'Annulla' });
+      var ask = el('div', { class: 'wca-clear wc-inline', role: 'alertdialog' }, [
+        el('span', { text: 'Elimini tutte le letture salvate? I documenti originali non vengono toccati, ma sunto, sottolineature e parole chiave si perdono.' }), yes, no]);
+      container.querySelector('.wca-head').appendChild(ask);
+      no.addEventListener('click', function () { ask.remove(); clearAll.hidden = false; search.focus(); });
+      yes.addEventListener('click', function () {
+        yes.disabled = true; no.disabled = true;
+        var ids = entries.map(function (e) { return e.id; });
+        ids.reduce(function (chain, id) { return chain.then(function () { return host.remove(id); }); }, Promise.resolve())
+          .then(function () { current = null; ask.remove(); return refresh(); })
+          .catch(function (err) { ask.textContent = 'Non riesco a svuotare l’archivio: ' + (err && err.message || err); });
+      });
     });
     refresh();
     return { refresh: refresh };

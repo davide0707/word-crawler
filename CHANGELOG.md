@@ -7,6 +7,9 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- **Empty the library** and **Empty the archive**: remove every document (or every saved reading) in one go, behind a confirmation that says how many there are. Files on disk are never touched; library records keep their 30 days in the app's trash, and the map edits and study progress are cleared with them.
+
 ## [2.3.0] - 2026-10-27
 
 ### Added

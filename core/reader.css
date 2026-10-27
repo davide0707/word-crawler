@@ -243,6 +243,8 @@ html.wc-pen-on .wc-doc { user-select: none; -webkit-user-select: none; }
 .wca-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
 .wca-head h1 { margin: 0; font: 700 26px var(--wc-ui); }
 .wca-head .wc-inline input { width: 320px; }
+.wca-clear { flex-basis: 100%; justify-content: flex-end; font-size: 13px; color: var(--wc-mute); }
+.wca-clear span { max-width: 56ch; }
 .wca-body { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 20px; align-items: start; }
 .wca-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; position: sticky; top: calc(var(--wc-top, 0px) + 16px); max-height: calc(100vh - var(--wc-top, 0px) - 140px); overflow-y: auto; }
 .wca-item { width: 100%; text-align: left; border: 1px solid var(--wc-line); background: var(--wc-panel-2); border-radius: 8px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; }

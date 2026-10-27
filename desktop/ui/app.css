@@ -134,6 +134,7 @@ body { padding-top: var(--wc-top, 52px); }
 .lb-maptools select { width: auto; }
 .lb-maptools .wc-check { font-weight: 500; }
 .lb-sugg-btn { border-color: #5a3a22; color: var(--wc-orange); }
+.lb-clear { align-self: flex-start; font-size: 12.5px; color: #ff8a9a; }
 .lb-stage { position: relative; height: calc(100vh - var(--wc-top, 52px) - 190px); min-height: 420px; border: 1px solid var(--wc-line); border-radius: 12px; overflow: hidden; background: #0b0b0e; }
 .lb-canvas { display: block; cursor: grab; touch-action: none; }
 .lb-canvas:active { cursor: grabbing; }

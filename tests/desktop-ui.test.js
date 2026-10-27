@@ -207,6 +207,14 @@ function serve() {
   await page.click('#tab-archive');
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(SHOTS, '08-archivio.png') });
+  // svuotare l'archivio: una conferma, poi tutte le letture in un colpo solo
+  if (await page.$('.wca-list li:not(.wca-empty)')) {
+    await page.click('text=Svuota l’archivio');
+    await page.waitForSelector('.wca-clear');
+    await page.click('.wca-clear .wc-danger');
+    await page.waitForTimeout(400);
+    if (!(await page.$('.wca-empty'))) fail('archivio non svuotato');
+  }
   await page.click('#tab-guide');
   await page.waitForTimeout(200);
   await page.screenshot({ path: path.join(SHOTS, '09-guida.png') });
