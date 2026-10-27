@@ -133,8 +133,17 @@ async function check(name, fn) {
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push(m.text()); });
 
   await page.addInitScript(({ files }) => {
-    const store = { settings: { reader: { ocr: true } }, docs: new Map(), trash: new Map(), edits: null };
+    const store = { settings: { reader: { ocr: true } }, docs: new Map(), trash: new Map(), edits: null, study: null };
     window.__lib = store;
+    // una presa sulla vista della Libreria, per leggere lo stato senza aggiungere ganci all'app
+    let view = null;
+    Object.defineProperty(window, 'WCLibraryView', {
+      configurable: true,
+      get: () => view,
+      set: (v) => {
+        view = { mount: (root, host) => { const api = v.mount(root, host); window.__view = api; return api; } };
+      }
+    });
     window.__saved = [];
     async function info(f) { return { path: f.path, id: 'd-' + (await sha(new TextEncoder().encode(f.path))).slice(0, 16), name: f.name, ext: f.name.split('.').pop().toLowerCase(), size: 1000 + f.name.length, mtime: '2026-10-20T10:00:00.000Z', created: null }; }
     async function sha(bytes) { const h = await crypto.subtle.digest('SHA-256', bytes); return Array.from(new Uint8Array(h)).map((b) => b.toString(16).padStart(2, '0')).join(''); }
@@ -142,7 +151,7 @@ async function check(name, fn) {
     window.wcDesktop = {
       openFile: async () => null,
       fetchUrl: async () => { throw new Error('rete non disponibile nel test'); },
-      saveFile: async (name, content) => { window.__saved.push({ name, size: content.length || content.byteLength }); return true; },
+      saveFile: async (name, content) => { window.__saved.push({ name, size: content.length || content.byteLength, text: typeof content === 'string' ? content : null }); return true; },
       printPdf: async () => true,
       settings: { load: async (k) => store.settings[k] || null, save: async (k, v) => { store.settings[k] = v; return true; } },
       archive: { list: async () => [], save: async () => true, remove: async () => true },
@@ -161,12 +170,14 @@ async function check(name, fn) {
         restore: async (id) => { const r = store.trash.get(id); store.docs.set(id, r); store.trash.delete(id); return clone(r); },
         stat: async (paths) => paths.map((p) => ({ path: p, exists: true, size: (store.docs.get(Array.from(store.docs.keys()).find((k) => store.docs.get(k).path === p)) || {}).size, mtime: '2026-10-20T10:00:00.000Z' })),
         loadEdits: async () => store.edits,
-        saveEdits: async (e) => { store.edits = clone(e); return true; }
+        saveEdits: async (e) => { store.edits = clone(e); return true; },
+        loadStudy: async () => store.study,
+        saveStudy: async (s) => { store.study = clone(s); return true; }
       },
       scan: { roots: async () => [], pickFolder: async () => null, start: async () => 'x', cancel: async () => true, exportCsv: async () => true, history: async () => [], compare: async () => null, trash: async () => ({}), onEvent: () => () => {} },
       showItem: async () => true,
       openExternal: async () => true,
-      info: async () => ({ version: '2.2.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
+      info: async () => ({ version: '2.3.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
       onMenu: () => () => {},
       onFileOpened: () => () => {}
     };
@@ -296,6 +307,124 @@ async function check(name, fn) {
     await waitFor(() => window.__saved.length >= 2);
     const saved = await page.evaluate(() => window.__saved.map((s) => s.name));
     assert.ok(saved.includes('mappa dei concetti.md') && saved.includes('mappa dei concetti.png'), saved.join(', '));
+  });
+
+  await check('studio: domande dalle definizioni, risposta scritta, voto e intervalli', async () => {
+    await page.click('.lb-tabs [role="tab"]:text-is("Studio")');
+    await page.waitForSelector('.lb-study:not([hidden])');
+    await waitFor(() => document.querySelectorAll('.lb-sttiles .sc-tile').length >= 4, null, 20000);
+    // all'inizio nessun concetto è stato visto
+    const tiles = await page.$$eval('.lb-sttiles .sc-tile', (ts) => ts.map((t) => t.textContent));
+    assert.ok(/Mai visti/.test(tiles.join(' ')), 'riquadri: ' + tiles.join(' | '));
+    const total = await page.evaluate(() => window.__view.state().study.total);
+    assert.ok(total >= 5, 'concetti da studiare: ' + total);
+    assert.strictEqual(await page.evaluate(() => window.__view.state().study.studied), 0);
+    // il percorso va dai concetti generali a quelli specifici
+    await page.waitForSelector('.lb-steps .lb-step');
+    const levels = await page.$$eval('.lb-steps .lb-step', (ls) => ls.map((l) => +l.style.getPropertyValue('--lv')));
+    assert.ok(levels.length >= 5 && levels.every((v, i) => i === 0 || v >= levels[i - 1]), 'livelli: ' + levels.join(','));
+    await shot('lib-07-ripasso.png');
+
+    await page.selectOption('.lb-sttools select:nth-of-type(2)', '10');
+    await page.click('.lb-sttools button');
+    await page.waitForSelector('.lb-card:not([hidden]) .lb-front');
+    const card = await page.evaluate(() => ({
+      ask: document.querySelector('.lb-prompt').textContent,
+      front: document.querySelector('.lb-front').textContent,
+      typed: !!document.querySelector('.lb-typed'),
+      n: document.querySelector('.lb-cardbar .wc-note').textContent
+    }));
+    assert.ok(card.front.trim().length > 2, 'domanda: ' + JSON.stringify(card));
+    assert.ok(/1 di \d+/.test(card.n), 'avanzamento: ' + card.n);
+    await shot('lib-08-domanda.png');
+
+    // una risposta sbagliata: il verdetto, la frase intera e la fonte
+    if (card.typed) {
+      await page.fill('.lb-typed', 'una risposta che non c’entra niente');
+      await page.press('.lb-typed', 'Enter');
+      await page.waitForSelector('.lb-verdict');
+      assert.ok(/no/.test(await page.getAttribute('.lb-verdict', 'class')), 'risposta sbagliata riconosciuta');
+    } else {
+      await page.click('.lb-answer button');
+    }
+    await page.waitForSelector('.lb-back p');
+    const back = await page.evaluate(() => ({
+      text: document.querySelector('.lb-back p').textContent,
+      src: (document.querySelector('.lb-src') || {}).textContent || '',
+      grades: Array.from(document.querySelectorAll('.lb-grades button')).map((b) => b.textContent)
+    }));
+    assert.ok(back.text.length > 10, 'risposta: ' + back.text);
+    assert.ok(/\.(md|txt|pdf|docx|pptx)/.test(back.src), 'la fonte è un documento vero: ' + back.src);
+    await shot('lib-09-risposta.png');
+
+    // il voto: quattro gradi quando si rivela, "Prossima" dopo una risposta scritta
+    if (card.typed) {
+      assert.ok(back.grades.some((g) => /Prossima|Finisci/.test(g)), 'si va avanti: ' + back.grades.join(', '));
+      await page.click('.lb-grades .wc-primary');
+    } else {
+      assert.deepStrictEqual(back.grades.slice(0, 4), ['Di nuovo', 'Difficile', 'Bene', 'Facile']);
+      await page.click('.lb-g2');
+    }
+    await waitFor(() => window.__view.state().study.studied >= 1, null, 15000);
+    const after = await page.evaluate(() => window.__view.state().study);
+    assert.ok(after.studied >= 1, 'un concetto studiato: ' + JSON.stringify(after));
+    assert.ok(after.mastery > 0, 'padronanza salita: ' + after.mastery);
+    // i progressi sono stati salvati fuori, nella cartella dati (il salvataggio aspetta un attimo)
+    await waitFor(() => !!(window.__lib.study && window.__lib.study.cards && Object.keys(window.__lib.study.cards).length), null, 10000);
+    const saved = await page.evaluate(() => window.__lib.study);
+    assert.ok(saved && saved.cards && Object.keys(saved.cards).length >= 1, 'progressi salvati: ' + JSON.stringify(saved && saved.cards));
+    const first = saved.cards[Object.keys(saved.cards)[0]];
+    assert.ok(first.due && Date.parse(first.due) > Date.now(), 'prossimo ripasso nel futuro: ' + first.due);
+    assert.ok(first.interval >= 1, 'intervallo: ' + first.interval);
+  });
+
+  await check('studio: la seconda domanda e la tastiera (barra spaziatrice e voti da 1 a 4)', async () => {
+    await page.waitForSelector('.lb-card .lb-front');
+    const before = await page.evaluate(() => window.__view.state().study.studied);
+    await page.click('.lb-card');
+    await page.keyboard.press('Space');
+    await page.waitForSelector('.lb-back p');
+    await page.keyboard.press('3');
+    await waitFor((k) => window.__view.state().study.studied > k, before, 15000);
+    assert.ok(await page.evaluate(() => window.__view.state().study.studied) > before, 'il voto da tastiera conta');
+  });
+
+  await check('la mappa colorata per padronanza, e il movimento si ferma se non serve', async () => {
+    await page.click('.lb-tabs [role="tab"]:text-is("Mappa dei concetti")');
+    await page.waitForSelector('.lb-map:not([hidden])');
+    await page.check('#lb-mastery');
+    await waitFor(() => document.querySelector('.lb-legend').classList.contains('lb-legend-m'));
+    const legend = await page.textContent('.lb-legend');
+    assert.ok(/mai visto/.test(legend) && /saldo/.test(legend) && /da ripassare/.test(legend), 'legenda della padronanza: ' + legend);
+    // la mappa è viva: i concetti si muovono da soli
+    const p0 = await page.evaluate(() => window.__view.state().graph.nodes.slice(0, 40).map((n) => [n.x, n.y]));
+    await page.waitForTimeout(600);
+    const p1 = await page.evaluate(() => window.__view.state().graph.nodes.slice(0, 40).map((n) => [n.x, n.y]));
+    const moved = p1.filter((p, i) => Math.abs(p[0] - p0[i][0]) + Math.abs(p[1] - p0[i][1]) > 0.01).length;
+    assert.ok(moved > 0, 'la mappa si muove da sola (' + moved + ' concetti su ' + p1.length + ')');
+    await shot('lib-10-mappa-padronanza.png');
+    // «Riordina» rimescola, e si riassesta
+    await page.click('.lb-maptools button:text-is("Riordina")');
+    await page.waitForTimeout(400);
+    const p2 = await page.evaluate(() => window.__view.state().graph.nodes.slice(0, 40).map((n) => [n.x, n.y]));
+    assert.ok(p2.some((p, i) => Math.abs(p[0] - p1[i][0]) + Math.abs(p[1] - p1[i][1]) > 1), 'il riordino sposta i concetti');
+    await page.uncheck('#lb-mastery');
+  });
+
+  await check('esportazione delle domande per Anki: tre colonne con la fonte', async () => {
+    await page.click('.lb-tabs [role="tab"]:text-is("Studio")');
+    await page.waitForSelector('.lb-study:not([hidden])');
+    const n0 = await page.evaluate(() => window.__saved.length);
+    await page.selectOption('.lb-sttools select:last-of-type', 'anki');
+    await waitFor((k) => window.__saved.length > k, n0, 15000);
+    const file = await page.evaluate(() => window.__saved[window.__saved.length - 1]);
+    assert.strictEqual(file.name, 'domande per Anki.txt');
+    const lines = String(file.text || '').trim().split('\n');
+    assert.ok(lines[0].startsWith('#separator:tab'), 'direttive di Anki: ' + lines[0]);
+    const rows = lines.filter((l) => l[0] !== '#');
+    assert.ok(rows.length >= 5, 'carte esportate: ' + rows.length);
+    rows.forEach((r) => assert.strictEqual(r.split('\t').length, 3, 'tre colonne: ' + r.slice(0, 100)));
+    assert.ok(/word-crawler/.test(rows[0]), 'etichette: ' + rows[0]);
   });
 
   await check('togli un documento e annulla (il file originale non si tocca)', async () => {

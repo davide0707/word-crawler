@@ -47,7 +47,9 @@ contextBridge.exposeInMainWorld('wcDesktop', {
     restore: (id) => ipcRenderer.invoke('library:restore', id),
     stat: (paths) => ipcRenderer.invoke('library:stat', paths),
     loadEdits: () => ipcRenderer.invoke('library:edits-load'),
-    saveEdits: (edits) => ipcRenderer.invoke('library:edits-save', edits)
+    saveEdits: (edits) => ipcRenderer.invoke('library:edits-save', edits),
+    loadStudy: () => ipcRenderer.invoke('library:study-load'),
+    saveStudy: (state) => ipcRenderer.invoke('library:study-save', state)
   },
   showItem: (p) => ipcRenderer.invoke('shell:show', p),
   openExternal: (url) => ipcRenderer.invoke('shell:external', url),

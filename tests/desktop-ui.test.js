@@ -100,10 +100,11 @@ function serve() {
         onEvent: (cb) => { listeners.push(cb); return () => { listeners = listeners.filter((x) => x !== cb); }; }
       },
       library: { addFiles: async () => null, addFolder: async () => null, read: async () => { throw new Error('nessun file'); }, list: async () => [], save: async () => true,
-        remove: async () => true, restore: async () => null, stat: async () => [], loadEdits: async () => null, saveEdits: async () => true },
+        remove: async () => true, restore: async () => null, stat: async () => [], loadEdits: async () => null, saveEdits: async () => true,
+        loadStudy: async () => null, saveStudy: async () => true },
       showItem: async () => true,
       openExternal: async () => true,
-      info: async () => ({ version: '2.2.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
+      info: async () => ({ version: '2.3.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
       onMenu: () => () => {},
       onFileOpened: () => () => {}
     };

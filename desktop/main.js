@@ -95,6 +95,7 @@ function buildMenu() {
       { type: 'separator' },
       { label: 'Aggiungi documenti alla libreria…', accelerator: 'CmdOrCtrl+Shift+O', click: send('library:add-files') },
       { label: 'Aggiungi una cartella alla libreria…', click: send('library:add-folder') },
+      { label: 'Studia la libreria', accelerator: 'CmdOrCtrl+Shift+S', click: send('library:study') },
       { type: 'separator' },
       { label: 'Scansiona una cartella o un disco…', accelerator: 'CmdOrCtrl+Shift+S', click: send('scanner') },
       { type: 'separator' },
@@ -525,6 +526,17 @@ ipcMain.handle('library:edits-save', async (_e, edits) => {
   const data = JSON.stringify(edits);
   if (data.length > 20 * 1024 * 1024) throw new Error('Modifiche troppo grandi');
   await writeJsonAtomic(libDir('edits.json'), data);
+  return true;
+});
+// i progressi del ripasso: come le modifiche, un file a parte che si rilegge all'avvio
+ipcMain.handle('library:study-load', async () => {
+  try { return JSON.parse(await fsp.readFile(libDir('study.json'), 'utf8')); } catch (e) { return null; }
+});
+ipcMain.handle('library:study-save', async (_e, state) => {
+  if (!state || typeof state !== 'object') throw new Error('Progressi non validi');
+  const data = JSON.stringify(state);
+  if (data.length > 20 * 1024 * 1024) throw new Error('Progressi troppo grandi');
+  await writeJsonAtomic(libDir('study.json'), data);
   return true;
 });
 

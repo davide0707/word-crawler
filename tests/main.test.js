@@ -63,7 +63,7 @@ async function check(name, fn) {
       'scan:roots', 'scan:pick-folder', 'scan:start', 'scan:cancel', 'scan:export-csv', 'shell:show', 'shell:external', 'app:info',
       'export:pdf', 'scan:history', 'scan:compare', 'scan:trash',
       'library:add-files', 'library:add-folder', 'library:read', 'library:list', 'library:save', 'library:remove', 'library:restore',
-      'library:stat', 'library:edits-load', 'library:edits-save']
+      'library:stat', 'library:edits-load', 'library:edits-save', 'library:study-load', 'library:study-save']
       .forEach((c) => assert.ok(handlers[c], 'manca ' + c));
   });
   await check('impostazioni: salvataggio e lettura', async () => {
@@ -273,6 +273,19 @@ async function check(name, fn) {
     await handlers['library:edits-save']({}, { v: 1, merges: [['qam', 'quadratur amplitud modulation']], labels: { qam: 'QAM' } });
     assert.deepStrictEqual((await handlers['library:edits-load']({})).labels, { qam: 'QAM' });
     await assert.rejects(() => handlers['library:edits-save']({}, null));
+  });
+  await check('libreria: i progressi del ripasso si salvano a parte e si rileggono', async () => {
+    assert.strictEqual(await handlers['library:study-load']({}), null);
+    const state = { v: 1, cards: { qam: { ease: 2.5, interval: 6, reps: 2, lapses: 0, due: '2026-11-02T10:00:00.000Z', seen: 2 } }, log: [{ t: '2026-10-27T10:00:00.000Z', id: 'qam', g: 2 }] };
+    await handlers['library:study-save']({}, state);
+    const back = await handlers['library:study-load']({});
+    assert.deepStrictEqual(back.cards.qam.interval, 6);
+    assert.strictEqual(back.log.length, 1);
+    await assert.rejects(() => handlers['library:study-save']({}, null));
+    await assert.rejects(() => handlers['library:study-save']({}, 'niente'));
+    // i progressi stanno in un file loro, separato dalle modifiche della mappa
+    assert.ok(fs.existsSync(path.join(USER, 'library', 'study.json')), 'study.json nella cartella dati');
+    assert.ok(fs.existsSync(path.join(USER, 'library', 'edits.json')), 'edits.json resta separato');
   });
   await check('libreria: nessun file della cartella è stato modificato', () => {
     assert.strictEqual(filesOf(), before);

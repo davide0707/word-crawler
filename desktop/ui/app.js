@@ -50,7 +50,7 @@
 
   // ---------------------------------------------------------------- libreria
   var importSettings = {};
-  var library = !D.library ? { refresh: function () {}, addFiles: function () {}, addFolder: function () {}, toast: function () {} } : WCLibraryView.mount($('library'), {
+  var library = !D.library ? { refresh: function () {}, addFiles: function () {}, addFolder: function () {}, toast: function () {}, study: function () {} } : WCLibraryView.mount($('library'), {
     lib: D.library,
     importer: WCLibImport.create({ pdfjs: loadPdfJs, ocr: OCR, settings: function () { return importSettings; } }),
     workerUrl: new URL('../../core/library-worker.js', location.href).href,
@@ -120,7 +120,7 @@
     parts.push(el('p', { text: 'Dal pannello dei risultati: riepilogo (Markdown, testo, pagina web, dati), schede per Anki e il documento con tutti i segni, in Word (.docx), come pagina web o in PDF.' }));
     parts.push(el('h2', { text: 'Tasti rapidi mentre il ragno legge' }));
     var keys = el('dl');
-    [['Spazio', 'pausa / riprendi'], ['Invio', 'completa subito la lettura'], ['+ e −', 'più veloce / più lento'], ['Esc', 'toglie il ragno'], ['Ctrl+O', 'apri un documento'], ['Ctrl+Maiusc+O', 'aggiungi documenti alla libreria'], ['Ctrl+1…4', 'Lettore, Libreria, Scanner, Archivio'], ['F1', 'questa guida']]
+    [['Spazio', 'pausa / riprendi'], ['Invio', 'completa subito la lettura'], ['+ e −', 'più veloce / più lento'], ['Esc', 'toglie il ragno'], ['Ctrl+O', 'apri un documento'], ['Ctrl+Maiusc+O', 'aggiungi documenti alla libreria'], ['Ctrl+Maiusc+S', 'studia la libreria'], ['Ctrl+1…4', 'Lettore, Libreria, Scanner, Archivio'], ['F1', 'questa guida']]
       .forEach(function (k) { keys.appendChild(el('dt', { text: k[0] })); keys.appendChild(el('dd', { text: k[1] })); });
     parts.push(keys);
     parts.push(el('h2', { text: 'Libreria' }));
@@ -128,6 +128,11 @@
     parts.push(el('p', { text: 'Ricerca: guarda in tutti i documenti insieme. Riconosce le parole anche al plurale o coniugate, mette prima i passaggi che contengono più parole della domanda e trova una frase esatta se la scrivi tra virgolette. Se cerchi un concetto (per esempio una sigla), trova anche i passaggi che usano le sue altre forme. Ogni risultato si apre nel Lettore alla posizione esatta.' }));
     parts.push(el('p', { text: 'Concetti e mappa: le parole chiave, i nomi, i termini definiti e le sigle di ogni documento diventano concetti. Lo stesso concetto in documenti diversi diventa un nodo solo; una sigla scritta con la sua forma estesa (“Quadrature Amplitude Modulation (QAM)”) è riconosciuta come lo stesso concetto. I concetti che compaiono negli stessi passaggi sono collegati; dalle definizioni (“la QAM è una modulazione digitale…”) nasce il collegamento “è un tipo di”. Nella mappa i concetti centrali sono blu, quelli presenti in più documenti viola.' }));
     parts.push(el('p', { text: 'Hai sempre l’ultima parola: quando due concetti sembrano uguali ma non è sicuro, il ragno chiede prima di unirli. Puoi rinominare un concetto, aggiungere alias, unire o separare concetti, aggiungere o togliere collegamenti e spostare i nodi sulla mappa: le modifiche si salvano e restano anche quando aggiungi altri documenti.' }));
+    parts.push(el('p', { text: 'La mappa è viva: i concetti continuano ad assestarsi, e se ne trascini uno i vicini si spostano di conseguenza. Rotella per ingrandire, trascina per spostarti, doppio clic o tasto 0 per inquadrare tutto, tasto R per rimescolare. Se nel sistema hai chiesto di ridurre le animazioni, la mappa resta ferma.' }));
+    parts.push(el('h2', { text: 'Studio: ripassare quello che hai letto' }));
+    parts.push(el('p', { text: 'Nella scheda Studio la libreria ti interroga sui concetti dei tuoi documenti. Le domande non se le inventa nessuno: nascono da quello che il ragno ha già estratto — un termine e la sua definizione, la definizione con il termine oscurato, una relazione “è un tipo di”, o una frase dove il concetto compare — e ognuna dice da quale documento, pagina o slide viene. Puoi aprire il passaggio nel Lettore mentre rispondi.' }));
+    parts.push(el('p', { text: 'Puoi scrivere la risposta (accenti, maiuscole, plurali e un errore di battitura vanno bene lo stesso) oppure rivelarla e votarti da solo: di nuovo, difficile, bene, facile. Barra spaziatrice per vedere la risposta, da 1 a 4 per il voto. Più lo sai, più il ripasso si allontana nel tempo; se lo dimentichi, torna domani.' }));
+    parts.push(el('p', { text: 'Il percorso di studio mette i concetti in ordine: prima quelli generali, poi quelli che ne dipendono, seguendo le definizioni che il ragno ha letto nei tuoi documenti. Sulla mappa, la spunta “Colora per padronanza” tinge ogni concetto dal grigio (mai visto) al verde (saldo), e fa pulsare quelli da ripassare. Le domande si possono esportare per Anki.' }));
     parts.push(el('h2', { text: 'Scanner del PC' }));
     parts.push(el('p', { text: 'Scegli un disco (per esempio C:) o una cartella: il ragno la percorre tutta e alla fine ti dà un rapporto con file, cartelle, spazio per estensione e per tipo, file e cartelle più grandi, duplicati, nomi ripetuti, file e cartelle vuoti, date, percorsi troppo lunghi e cartelle non leggibili.' }));
     parts.push(el('p', { text: 'La scansione è in sola lettura: il ragno elenca, misura e (per i duplicati) legge i file, ma non modifica, non sposta e non cancella niente. Non segue i collegamenti simbolici, così non gira in tondo. Le cartelle di sistema a cui Windows o macOS negano l’accesso vengono saltate e contate tra i “non leggibili”.' }));
@@ -179,6 +184,7 @@
     else if (cmd === 'scanner') show('scanner');
     else if (cmd === 'library:add-files') { show('library'); library.addFiles(); }
     else if (cmd === 'library:add-folder') { show('library'); library.addFolder(); }
+    else if (cmd === 'library:study') { show('library'); library.study(); }
     else if (/^tab:/.test(cmd)) show(cmd.slice(4));
   });
   D.onFileOpened(function (f) { show('reader'); reader.openBytes(f.name, f.bytes, f.source); });
