@@ -71,7 +71,8 @@ process.on('unhandledRejection', (e) => {
     await panel.click('#run');
     await panel.waitForSelector('#finish:not([disabled])', { timeout: 15000 });
     await panel.click('#finish');
-    await panel.waitForFunction(() => /Lettura completata/.test(document.querySelector('.wc-status').textContent), null, { timeout: 15000 });
+    // attese con i selettori: le pagine dell'estensione non permettono di valutare codice dall'esterno
+    await panel.waitForSelector('.wc-status:has-text("Lettura completata")', { timeout: 15000 });
     await panel.click('#spr-tab-stats');
     const stats = await panel.locator('.wc-stats').textContent();
     assert.ok(/Italiano/.test(stats), stats);
@@ -101,7 +102,7 @@ process.on('unhandledRejection', (e) => {
     await page.mouse.move(box.x2, box.y, { steps: 5 });
     await page.mouse.up();
     await panel.click('#spr-tab-marks');
-    await panel.waitForFunction(() => /I tuoi segni \(1\)/.test((document.querySelector('.wc-user') || {}).textContent || ''), null, { timeout: 5000 });
+    await panel.waitForSelector('.wc-user:has-text("I tuoi segni (1)")', { timeout: 5000 });
     assert.strictEqual(await panel.locator('.wc-umarks .wc-item-text span').first().textContent(), 'cortina di ferro');
     await panel.click('#pen [data-tool="hl"]');
   });
@@ -117,7 +118,7 @@ process.on('unhandledRejection', (e) => {
 
   await check('salva in archivio: indice della pagina per ritrovare i segni', async () => {
     await panel.click('text=Salva in archivio');
-    await panel.waitForFunction(() => /Salvato/.test(document.querySelector('.wc-results-foot .wc-note').textContent), null, { timeout: 5000 });
+    await panel.waitForSelector('.wc-results-foot .wc-note:has-text("Salvato")', { timeout: 5000 });
     const st = await sw.evaluate(() => chrome.storage.local.get('wcIndex'));
     const keys = Object.keys(st.wcIndex || {});
     assert.strictEqual(keys.length, 1);
@@ -136,7 +137,7 @@ process.on('unhandledRejection', (e) => {
     const tab2 = await sw.evaluate(async () => (await chrome.tabs.query({})).filter((t) => /utm_source=altro/.test(t.url)).map((t) => t.id).pop());
     const p2 = await ctx.newPage();
     await p2.goto('chrome-extension://' + id + '/sidepanel.html?tab=' + tab2);
-    await p2.waitForFunction(() => /segni di una lettura salvata/.test(document.getElementById('msg').textContent), null, { timeout: 5000 });
+    await p2.waitForSelector('#msg:has-text("segni di una lettura salvata")', { timeout: 5000 });
     await p2.click('#spr-tab-marks');
     assert.match(await p2.locator('.wc-user').textContent(), /I tuoi segni \(1\)/);
     await p2.close();
@@ -159,9 +160,9 @@ process.on('unhandledRejection', (e) => {
     rd.on('pageerror', (e) => errs.push('lettore: ' + e.message));
     await rd.goto('chrome-extension://' + id + '/reader.html');
     await rd.setInputFiles('#wc-file', path.join(__dirname, 'fixtures', 'sample.docx'));
-    await rd.waitForFunction(() => window.document.querySelector('.wc-tab .wc-count') && /parole/.test(document.querySelector('.wc-status').textContent), null, { timeout: 15000 });
+    await rd.waitForSelector('.wc-status:has-text("parole")', { timeout: 15000 });
     await rd.click('text=Completa ora');
-    await rd.waitForFunction(() => /Lettura completata/.test(document.querySelector('.wc-status').textContent), null, { timeout: 15000 });
+    await rd.waitForSelector('.wc-status:has-text("Lettura completata")', { timeout: 15000 });
     await rd.click('#wcr-tab-stats');
     assert.ok(/usata/.test(await rd.locator('.wc-stats').textContent()), 'frequenze non caricate nel lettore');
     await rd.close();
