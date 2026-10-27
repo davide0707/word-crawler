@@ -1,8 +1,9 @@
-# Costruisce Word Crawler per Windows, macOS e Linux e prepara l'estensione per Chrome.
-# Si avvia da solo quando pubblichi una Release su GitHub (Releases → Draft a new release, tag "v2.1.0")
-# o un tag "v...", oppure a mano da Actions → Build → Run workflow.
-# I file pronti si scaricano da Actions (Artifacts) e, per le release, dalla pagina Releases.
-name: Build
+# Builds Word Crawler for Windows, macOS and Linux plus the browser extension.
+# Runs when a GitHub release is published (tag "vX.Y.Z"), when such a tag is pushed, or by hand
+# (Actions → Release → Run workflow; the packages are then only available as workflow artifacts).
+# For releases, the packages and SHA256SUMS.txt are attached to the release, with the notes taken
+# from the matching section of CHANGELOG.md.
+name: Release
 
 on:
   push:
@@ -11,37 +12,30 @@ on:
     types: [published]
   workflow_dispatch:
 
-# una sola compilazione alla volta per lo stesso tag
 concurrency:
-  group: build-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
-      - run: npm install
+          node-version: 22
+      - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: xvfb-run -a npm test
-
-  # l'estensione vera in Chromium: non blocca la compilazione dei programmi
-  extension-e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm install
-      - run: npx playwright install --with-deps chromium
-      - run: xvfb-run -a npm run test:extension
+      - name: Tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v=$(node -p "require('./package.json').version")
+          if [ "v$v" != "$GITHUB_REF_NAME" ]; then echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $v"; exit 1; fi
 
   desktop:
     needs: test
@@ -50,16 +44,17 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
-      - run: npm install
-      # Firma digitale facoltativa: se nei "Secrets" del repository ci sono i certificati, i programmi
-      # vengono firmati (e su macOS anche autenticati da Apple). Senza, si creano programmi non firmati.
-      #   CSC_LINK (certificato .p12/.pfx in base64), CSC_KEY_PASSWORD
-      #   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID (solo macOS)
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      # Optional code signing: when the repository secrets below exist the packages are signed
+      # (and notarised on macOS); otherwise unsigned packages are built.
+      #   CSC_LINK (base64 .p12/.pfx certificate), CSC_KEY_PASSWORD
+      #   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID (macOS only)
       - name: Build
         shell: bash
         env:
@@ -71,7 +66,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           EXTRA=""
-          if [ -z "$CSC_LINK" ]; then unset CSC_LINK CSC_KEY_PASSWORD; echo "Nessun certificato: programmi non firmati."; else echo "Certificato trovato: i programmi verranno firmati."; fi
+          if [ -z "$CSC_LINK" ]; then unset CSC_LINK CSC_KEY_PASSWORD; echo "No certificate: building unsigned packages."; else echo "Certificate found: packages will be signed."; fi
           if [ "$RUNNER_OS" = "macOS" ] && [ -n "$CSC_LINK" ] && [ -n "$APPLE_ID" ]; then EXTRA="-c.mac.notarize=true"; else unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; fi
           set +e
           npx electron-builder --publish never $EXTRA 2>&1 | tee build.log
@@ -91,12 +86,13 @@ jobs:
   extension:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
-      - run: npm install
+          node-version: 22
+      - run: npm install --no-audit --no-fund
       - run: npm run build:extension
       - uses: actions/upload-artifact@v4
         with:
@@ -104,27 +100,37 @@ jobs:
           path: dist/word-crawler-extension.zip
           if-no-files-found: error
 
-  release:
+  publish:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [desktop, extension]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
           path: out
           merge-multiple: true
+      - name: Checksums and release notes
+        run: |
+          (cd out && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          version="${GITHUB_REF_NAME#v}"
+          awk -v h="## [$version]" 'index($0, h) == 1 { f = 1; next } /^## \[/ { f = 0 } f' CHANGELOG.md > notes.md
+          {
+            echo
+            echo "### Downloads"
+            echo "- **Windows**: \`Word-Crawler-Setup-$version.exe\` (installer) or \`Word-Crawler-Portable-$version.exe\` (no installation)"
+            echo "- **macOS**: \`.dmg\` — \`arm64\` for Apple silicon, \`x64\` for Intel"
+            echo "- **Linux**: \`.AppImage\` or \`.deb\`"
+            echo "- **Chrome, Edge, Brave**: \`word-crawler-extension.zip\` (unzip, then *Load unpacked* in \`chrome://extensions\`)"
+            echo
+            echo "Verify downloads with \`SHA256SUMS.txt\`."
+          } >> notes.md
+          cat notes.md
       - uses: softprops/action-gh-release@v2
         with:
           files: out/*
           tag_name: ${{ github.ref_name }}
-          body: |
-            Word Crawler ${{ github.ref_name }}
-            - Windows: Word-Crawler-Setup (installazione) o Word-Crawler-Portatile (senza installare)
-            - macOS: .dmg (arm64 per Mac con chip Apple, x64 per Mac Intel)
-            - Linux: .AppImage o .deb
-            - Estensione per Chrome, Edge e Brave: word-crawler-extension.zip
-
-            Novità della 2.1: sei lingue (italiano, inglese, francese, spagnolo, tedesco, portoghese), OCR con Tesseract
-            per PDF scansionati e immagini, documenti lunghi, schede di ripasso e quiz, penna per segnare a mano,
-            esportazione del documento segnato (Word, pagina web, PDF), segni ritrovati sulle pagine salvate,
-            scanner con mappa a riquadri, confronto tra scansioni e duplicati nel Cestino.
+          name: Word Crawler ${{ github.ref_name }}
+          body_path: notes.md

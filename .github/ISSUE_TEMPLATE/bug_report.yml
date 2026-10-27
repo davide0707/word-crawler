@@ -1,0 +1,77 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a problem. For security issues, please follow
+        [SECURITY.md](https://github.com/davide0707/word-crawler/blob/main/SECURITY.md) instead.
+        *Puoi scrivere anche in italiano.*
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown in the app under Guide, or in chrome://extensions for the extension.
+      placeholder: "2.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - Desktop app — Windows
+        - Desktop app — macOS
+        - Desktop app — Linux
+        - Browser extension — Chrome
+        - Browser extension — Edge
+        - Browser extension — Brave
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Reading and marks (the spider)
+        - Summary, keywords or review cards
+        - Opening a document format
+        - OCR (scanned PDFs and images)
+        - Pen
+        - Exports
+        - Archive
+        - Disk scanner
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Choose the … mode
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Sample document, screenshots or logs
+      description: Attach a document that shows the problem if you can (remove anything private first).
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched the existing issues and this has not been reported yet.
+          required: true

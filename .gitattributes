@@ -1,0 +1,23 @@
+# Text files always use LF line endings
+* text=auto eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.docx binary
+*.doc binary
+*.odt binary
+*.odp binary
+*.ods binary
+*.pptx binary
+*.xlsx binary
+*.epub binary
+
+# Generated data and test fixtures are excluded from language statistics and collapsed in diffs
+core/freq/** linguist-generated
+tests/fixtures/** linguist-vendored
+docs/images/** linguist-documentation
