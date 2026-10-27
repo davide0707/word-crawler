@@ -73,7 +73,11 @@ jobs:
           EXTRA=""
           if [ -z "$CSC_LINK" ]; then unset CSC_LINK CSC_KEY_PASSWORD; echo "Nessun certificato: programmi non firmati."; else echo "Certificato trovato: i programmi verranno firmati."; fi
           if [ "$RUNNER_OS" = "macOS" ] && [ -n "$CSC_LINK" ] && [ -n "$APPLE_ID" ]; then EXTRA="-c.mac.notarize=true"; else unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; fi
-          npx electron-builder --publish never $EXTRA
+          set +e
+          npx electron-builder --publish never $EXTRA 2>&1 | tee build.log
+          status=${PIPESTATUS[0]}
+          if [ $status -ne 0 ]; then echo "::error title=electron-builder ($RUNNER_OS)::$(grep -E '⨯|rror' build.log | tail -6 | tr '\n' ' ' | cut -c1-900)"; fi
+          exit $status
       - uses: actions/upload-artifact@v4
         with:
           name: word-crawler-${{ runner.os }}

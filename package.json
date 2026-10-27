@@ -3,6 +3,11 @@
   "productName": "Word Crawler",
   "version": "2.1.0",
   "description": "Un ragno che legge documenti, PDF (anche scansionati, con Tesseract) e pagine web in sei lingue: sottolinea, cerchia, riassume, prepara le schede di ripasso e scansiona il disco. Senza intelligenza artificiale.",
+  "homepage": "https://github.com/davide0707/word-crawler",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/davide0707/word-crawler.git"
+  },
   "main": "desktop/main.js",
   "private": true,
   "author": {
@@ -133,7 +138,8 @@
       ],
       "category": "Education",
       "icon": "build/icons/icon.png",
-      "artifactName": "Word-Crawler-${version}-${arch}.${ext}"
+      "artifactName": "Word-Crawler-${version}-${arch}.${ext}",
+      "maintainer": "Word Crawler <wordcrawler@example.invalid>"
     }
   }
 }
