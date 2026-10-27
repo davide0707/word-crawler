@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="t">
+  <title id="t">Word Crawler</title>
+  <!-- zampe: dal corpo verso le parole segnate -->
+  <g stroke="#2f4bff" stroke-width="3" stroke-linecap="round" fill="none">
+    <path d="M52 44 L18 22"/><path d="M52 56 L10 56"/><path d="M52 68 L18 94"/>
+    <path d="M76 44 L110 22"/><path d="M76 56 L118 56"/><path d="M76 68 L110 94"/>
+  </g>
+  <g fill="#ff4a5e">
+    <rect x="31" y="27.5" width="6" height="6"/><rect x="27" y="53" width="6" height="6"/><rect x="31" y="79" width="6" height="6"/>
+    <rect x="91" y="27.5" width="6" height="6"/><rect x="95" y="53" width="6" height="6"/><rect x="91" y="79" width="6" height="6"/>
+  </g>
+  <g fill="#0b0b0e" stroke="#3fd8ff" stroke-width="3">
+    <rect x="12" y="16" width="11" height="11"/><rect x="4" y="50.5" width="11" height="11"/><rect x="12" y="89" width="11" height="11"/>
+    <rect x="105" y="16" width="11" height="11"/><rect x="113" y="50.5" width="11" height="11"/><rect x="105" y="89" width="11" height="11"/>
+  </g>
+  <!-- il ragno -->
+  <rect x="50" y="26" width="28" height="56" fill="#0b0b0e" stroke="#ffffff" stroke-width="3.5"/>
+  <g stroke="#ffffff" stroke-width="2.5"><path d="M56 36h16"/><path d="M56 43h16"/><path d="M56 50h16"/></g>
+  <rect x="58" y="62" width="12" height="12" fill="#3fd8ff"/>
+  <!-- la riga di testo sottolineata -->
+  <path d="M30 110 H98" stroke="#5de07f" stroke-width="4" stroke-linecap="round" stroke-dasharray="9 6"/>
+</svg>
