@@ -49,7 +49,7 @@ jobs:
       - run: xvfb-run -a npm run test:extension
       - name: Build the extension package
         run: npm run build:extension
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: word-crawler-extension
           path: dist/word-crawler-extension.zip
