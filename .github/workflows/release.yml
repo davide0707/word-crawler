@@ -128,7 +128,7 @@ jobs:
             echo "Verify downloads with \`SHA256SUMS.txt\`."
           } >> notes.md
           cat notes.md
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: out/*
           tag_name: ${{ github.ref_name }}
