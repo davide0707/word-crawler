@@ -4,7 +4,7 @@
 
 # Word Crawler
 
-**A spider that reads for you.** It underlines, circles and summarises documents and web pages, builds review cards and maps your disk — with statistics, not AI.
+**A spider that reads for you.** It underlines, circles and summarises documents and web pages, turns a whole folder of course material into a searchable knowledge base with a concept map, builds review cards and maps your disk — with statistics, not AI.
 
 [![CI](https://github.com/davide0707/word-crawler/actions/workflows/ci.yml/badge.svg)](https://github.com/davide0707/word-crawler/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/davide0707/word-crawler?label=release&color=2f4bff)](https://github.com/davide0707/word-crawler/releases)
@@ -21,6 +21,7 @@
 ## Contents
 
 - [Highlights](#highlights)
+- [Library: your knowledge base](#library-your-knowledge-base)
 - [Screenshots](#screenshots)
 - [Download](#download)
 - [How it works](#how-it-works)
@@ -41,10 +42,29 @@
 | **Your own pen** | Highlight, underline, annotate and erase, on PDFs and web pages too. |
 | **Exports the marked document** | Word (.docx, with your notes as comments), HTML and PDF, plus Markdown, text, JSON and Anki summaries. |
 | **Remembers pages** | The browser extension restores your marks when you reopen a saved page. |
+| **Builds a knowledge base** | The Library reads many files at once — even whole folders — and lets you search all of them together, see how their concepts connect on an interactive map and open every result at the exact page. |
 | **Maps your disk** | Read-only scanner with a zoomable treemap, duplicates, largest files and folders, scan-to-scan comparison and a safe "move duplicates to Trash". |
 | **Handles long documents** | Analysis runs in a Web Worker and PDF pages are extracted in parallel: about 25,000 words read and analysed in 1.3 s. |
 
 The user interface is in Italian. Documents can be in Italian, English, French, Spanish, German or Portuguese.
+
+## Library: your knowledge base
+
+<img src="docs/images/library-search.webp" alt="Library search across nine documents: the question “Where did I talk about QAM?” finds passages in three files, including notes that only use the long form “Quadrature Amplitude Modulation”" width="100%">
+
+Add your lecture notes, slides, books, scans and saved pages — one by one or a whole folder — and the Library turns them into one local knowledge base. The original files are only read, never modified.
+
+- **Passages with their exact source.** Every document is split into passages (paragraphs, headings, slides, list items, table rows) that remember the file, page, slide, section and, for PDFs, the position on the page. **Open at the exact position** jumps to the passage in the Reader and highlights it.
+- **Search everything at once.** Ranking with BM25 on word stems in six languages, passages that contain more of your words first, exact phrases in quotes, filters by document and language. Ask *“Where did I talk about QAM?”* and it also finds the notes that only say *Quadrature Amplitude Modulation*.
+- **Concepts merged across files.** Keywords, names, defined terms and acronyms become concepts. Singular and plural, the same term in different files and an acronym written with its long form are one concept. Uncertain cases — an acronym in one file and its long form in another, two nearly identical names — are only suggested: you confirm or reject.
+- **An interactive concept map.** Concepts are linked when they appear in the same passages, and definitions add typed relations (*QAM — is a type of → digital modulation*). Central concepts are blue, concepts found in several documents purple. Zoom, pan, drag nodes into place, filter, and export to PNG, Markdown with `[[links]]` for Obsidian, or JSON.
+- **You stay in control.** Rename concepts, add aliases, merge or split them, add or remove links: every change is kept, logged in the concept's history and re-applied when you add more documents. Removing a document can be undone.
+
+| | |
+|:---:|:---:|
+| <img src="docs/images/library-map.webp" alt="Concept map with two clusters: telecommunications and the Cold War"><br>**Concept map** | <img src="docs/images/library-concept.webp" alt="Concept page for QAM with alias, definition and source, related concepts and passages"><br>**Concept page with sources** |
+
+The Library is part of the desktop app. Everything is computed on your computer, without AI and without an internet connection; see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#library) for the algorithms.
 
 ## Screenshots
 
@@ -55,6 +75,7 @@ The user interface is in Italian. Documents can be in Italian, English, French, 
 | <img src="docs/images/scanner-running.webp" alt="Disk scanner: the spider walking the folder map"><br>**Disk scanner** | <img src="docs/images/scanner-treemap.webp" alt="Treemap of folder sizes"><br>**Treemap** |
 | <img src="docs/images/scanner-duplicates.webp" alt="Duplicates selected and moved to the Trash"><br>**Duplicates to the Trash** | <img src="docs/images/scanner-compare.webp" alt="Comparison between two scans"><br>**Scan comparison** |
 | <img src="docs/images/extension-restored.webp" alt="Browser extension restoring marks on a saved web page"><br>**Extension: marks restored** | <img src="docs/images/archive.webp" alt="Archive of saved readings"><br>**Archive** |
+| <img src="docs/images/library-merge.webp" alt="Suggested merge: OFDM and Orthogonal Frequency Division Multiplexing"><br>**Library: merges you confirm** | <img src="docs/images/library-open.webp" alt="A search result opened in the Reader at the exact page, passage highlighted"><br>**Library: open at the exact position** |
 
 ## Download
 
@@ -80,6 +101,8 @@ flowchart LR
   D --> F[Results panel<br/>summary · marks · review · stats]
   E --> G[Pen]
   F --> H[Archive and exports<br/>Word · HTML · PDF · Anki]
+  C --> L[Library<br/>passages · BM25 index · concept graph]
+  L --> M[Search · concept map · open at position]
 ```
 
 One shared engine (`core/`) powers both the desktop app and the browser extension. A full description of the algorithms, the module map and the security model is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -109,6 +132,7 @@ One shared engine (`core/`) powers both the desktop app and the browser extensio
 
 - **Local by design.** Documents never leave the computer and there is no telemetry. The only network access the app makes on its own is the first-time download of OCR language data (2–4 MB per language, from `cdn.jsdelivr.net`), and only when a scanned page or image is opened.
 - **Hardened desktop app.** Context isolation, sandboxed renderer, a strict Content Security Policy, an internal `app://` protocol and a minimal preload bridge whose inputs are validated in the main process.
+- **Read-only library.** Files added to the Library are only read; their text, concepts and sources are stored in the app's data folder. Removing a document from the Library never touches the file.
 - **Read-only scanner.** The disk scan only lists, measures and reads files. Moving duplicates to the Trash is a separate action that only accepts files found by that scan inside the scanned folder, always keeps one copy per group, verifies byte-for-byte identity with SHA-256, asks for confirmation and writes a log.
 - **Safe exports.** Marked-up PDFs are printed from a hidden window with JavaScript disabled.
 
@@ -131,6 +155,7 @@ npm start            # run the desktop app
 | `npm test` | Project checks plus the unit, integration and browser suites |
 | `npm run lint` | Syntax, line endings, headers, JSON and version consistency |
 | `npm run test:extension` | Loads the real extension in Chromium (needs a display; use `xvfb-run -a` on headless Linux) |
+| `npm run test:library` | Library engine tests plus the Library tab end to end in Chromium (also part of `npm test`) |
 | `npm run test:ui -- <folder>` | End-to-end run of the desktop UI with a real scan, saving screenshots |
 | `npm run build:extension` | Builds `dist/word-crawler-extension.zip` with PDF.js and Tesseract |
 | `npm run dist` | Packages the desktop app for the current OS into `dist/` |
@@ -139,10 +164,10 @@ npm start            # run the desktop app
 ### Project structure
 
 ```
-core/                 shared engine: languages, formats, analysis, OCR, spider, pen, reader, exports
+core/                 shared engine: languages, formats, analysis, OCR, spider, pen, reader, exports, library
   freq/               word-frequency lists (CC BY-SA 4.0)
 desktop/              Electron main process, preload bridge, disk scanner, scan tools
-  ui/                 desktop window: tabs, scanner view, report, guide
+  ui/                 desktop window: tabs, library view, scanner view, report, guide
 extension/            Chrome/Edge/Brave extension (Manifest V3)
 scripts/              extension build, project checks, ZIP writer
 tests/                test suites, fixtures and test doubles
@@ -152,7 +177,7 @@ docs/                 architecture and images
 
 ### Testing
 
-102 automated checks cover analysis in six languages, every document format, exports (Word files are validated by unzipping them), OCR mapping against real Tesseract output, the disk scanner and its safety rules, the Electron main process (with a stubbed `electron` module), the reader in Chromium with the real PDF.js, and the real extension loaded in Chromium. CI runs them on every push and pull request.
+More than 130 automated checks cover analysis in six languages, the Library (passages, concepts, merges, search, edits, a 5,000-concept map and the whole Library tab in Chromium with real PDF.js), every document format, exports (Word files are validated by unzipping them), OCR mapping against real Tesseract output, the disk scanner and its safety rules, the Electron main process (with a stubbed `electron` module), the reader in Chromium with the real PDF.js, and the real extension loaded in Chromium. CI runs them on every push and pull request.
 
 ### Releases and code signing
 
@@ -167,12 +192,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and [CHANGELOG.md](CHANGE
 
 ## Project status
 
-Version **2.1.0**. Known limitations:
+Version **2.2.0**. Known limitations:
 
 - The OCR engine (tesseract.js) is exercised in tests through recorded Tesseract output; the WebAssembly engine itself runs only in the packaged app and extension.
 - Legacy .ppt/.xls and TIFF images are not supported (save them as .pptx/.xlsx or PNG/PDF).
 - Summaries are extractive: sentences are selected and lightly cleaned, never rewritten.
 - The browser extension does not run on iOS.
+- The Library is in the desktop app only. Its search is lexical (word stems) plus concepts and aliases: it does not use embeddings, so synonyms that never appear together are linked only when you add them as aliases.
+- Archives (ZIP), watched folders and conflict detection between documents are planned for a later version.
 
 ## License
 

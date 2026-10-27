@@ -7,6 +7,23 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-27
+
+### Added
+- **Library** (desktop app): a local knowledge base built from many documents. Add files or whole folders (PDF, scanned PDF with OCR, Word, OpenDocument, PowerPoint, Excel, EPUB, RTF, HTML, Markdown, text); the originals are only read, never modified.
+  - Each document is split into passages (paragraphs, headings, slides, list items, table rows, pieces of very long paragraphs) that keep their exact source: file, page, slide, section and, for PDFs, the position on the page.
+  - Metadata for every file: path, type, size, dates, SHA-256 fingerprint, language, pages or slides, OCR pages, status and errors. Unchanged files are skipped on re-import, identical copies are recognised, and modified or missing files are flagged.
+  - Removing a document from the library is reversible (undo, and the record is kept for 30 days); the file on disk is never touched.
+- **Search across all documents**: BM25 ranking on word stems in six languages, passages matching more query words ranked first, exact phrases in quotes, filters by document and language, highlighted snippets and **Open at the exact position** in the Reader.
+- **Concepts across documents**: keywords, names, defined terms and acronyms of every document become concepts; the same concept in different files is one node, and an acronym written with its long form ("Quadrature Amplitude Modulation (QAM)") is merged automatically. Searching for a concept also finds the passages that use its other forms.
+- **Concept map**: interactive graph on canvas (zoom, pan, drag, find, filters for central concepts, multi-document concepts and a single document) with relations from co-occurrence and from definitions ("QAM is a type of digital modulation"); exports to PNG, Markdown with `[[links]]` (Obsidian) and JSON. Lays out 5,000 concepts in about two seconds.
+- **Concept page**: aliases, definitions with sources, related concepts, every passage where it appears, edit history; rename, add or remove aliases, merge or split concepts, add or remove relations. Uncertain merges (an acronym and a long form in different documents, near-identical names) are only suggested and wait for confirmation.
+- Presentation blocks now carry their slide number.
+
+### Changed
+- The Reader can open a document already read and scroll to a passage, highlighting it.
+- Menu and shortcuts: Ctrl+2 opens the Library; Scanner and Archive move to Ctrl+3 and Ctrl+4; Ctrl+Shift+O adds documents to the library.
+
 ## [2.1.0] - 2026-10-27
 
 ### Added
@@ -40,6 +57,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Browser extension (Manifest V3) with side panel, document reader and archive.
 - Automated tests and a multi-platform build workflow.
 
-[Unreleased]: https://github.com/davide0707/word-crawler/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/davide0707/word-crawler/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/davide0707/word-crawler/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/davide0707/word-crawler/releases/tag/v2.1.0
 [2.0.0]: https://github.com/davide0707/word-crawler/commits/main

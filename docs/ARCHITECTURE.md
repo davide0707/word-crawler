@@ -9,6 +9,7 @@ desktop app and the browser extension), the algorithms, the disk scanner and the
 - [Text analysis](#text-analysis)
 - [The spider and the pen](#the-spider-and-the-pen)
 - [Exports and archive](#exports-and-archive)
+- [Library](#library)
 - [Desktop app](#desktop-app)
 - [Disk scanner](#disk-scanner)
 - [Browser extension](#browser-extension)
@@ -29,11 +30,12 @@ flowchart TB
     pen[pen.js]
     reader[reader.js · results-ui.js · settings-ui.js · archive-ui.js]
     exports[export.js · annotate.js · docx.js]
+    library[library.js · library-worker.js · library-import.js]
   end
   subgraph desktop["desktop/ — Electron"]
     main[main.js] --- preload[preload.js]
     main --- scanner[scanner.js · scan-worker.js · scan-tools.js]
-    ui[ui/ app.js · scan-view.js · scan-report.js]
+    ui[ui/ app.js · library-view.js · scan-view.js · scan-report.js]
   end
   subgraph ext["extension/ — Manifest V3"]
     bg[background.js] --- content[content.js · restore.js]
@@ -43,6 +45,8 @@ flowchart TB
   pages --> reader
   content --> dom
   reader --> formats & pdf & ocr & analysis & crawler & pen & exports
+  ui --> library
+  library --> formats & pdf & ocr & analysis
 ```
 
 The engine is plain JavaScript with no build step. Every `core/` module is an immediately invoked function
@@ -73,6 +77,10 @@ by `chrome.scripting.executeScript`, and by `require` in the Node test suites.
 | `core/export.js` | Summary exports: Markdown, text, HTML, JSON, Anki; archive entries |
 | `core/annotate.js`, `docx.js` | The marked-up document as HTML/PDF and as Word (.docx with comments) |
 | `core/archive-ui.js` | Archive of saved readings |
+| `core/library.js` | Library engine: passages, concepts across documents, acronym merging, concept graph, BM25 search, user edits, Markdown export, map layout |
+| `core/library-worker.js` | Runs the library engine in two Web Workers (one imports documents, one serves search and the graph) |
+| `core/library-import.js` | Reads a file for the library: blocks, PDF words with their box on the page, OCR of scanned pages and images |
+| `desktop/ui/library-view.js` | Library tab: import queue, document list, search results, concept map on canvas, concept page |
 | `desktop/main.js` | Electron main process: window, `app://` protocol, IPC, file dialogs, PDF printing |
 | `desktop/preload.js` | The only bridge between the window and the system |
 | `desktop/scanner.js`, `scan-worker.js` | Read-only disk scan in a worker thread |
@@ -160,16 +168,87 @@ engine, drawn by the same overlay, listed in the results panel and saved in the 
   app keeps it in the app's data folder; the extension in `chrome.storage.local`, with an index of saved
   web addresses used to restore marks.
 
+## Library
+
+The Library (desktop app) turns many documents into one local knowledge base. Everything is statistical and
+computed on the user's computer.
+
+```mermaid
+flowchart LR
+  F[Files and folders<br/>read only] --> I[library-import.js<br/>blocks · PDF words + boxes · OCR]
+  I --> W1[Worker 1: buildRecord<br/>analysis · passages · concepts · acronyms]
+  W1 --> S[(library/docs/&lt;id&gt;.json<br/>app data folder)]
+  S --> W2[Worker 2: open<br/>BM25 index · concept graph · layout]
+  E[(library/edits.json<br/>merges · aliases · links · positions)] --> W2
+  W2 --> UI[Search · concept map · concept page]
+  UI -- open at position --> R[Reader]
+```
+
+**Import.** The main process lists folders recursively without following links, skipping hidden entries,
+Office temporary files, programs and images (images can be added one by one), and reads only files the user
+chose. Each file gets an id derived from its path and a SHA-256 fingerprint: unchanged files are skipped,
+identical copies under another name are reported, and files changed or missing on disk are flagged in the
+list. Records are written atomically; removing a document moves its record to `library/trash` for 30 days
+(the original file is never touched).
+
+**Passages.** The analysed tokens are grouped by block: headings become their own passage and the *section*
+of the following ones; consecutive list items or table rows are merged up to 90 words; paragraphs longer
+than 220 words are split at sentence boundaries into pieces of about 150 words. Each passage stores its
+page (and last page), slide number, section and, for PDF and OCR pages, the union of its word boxes as
+fractions of the page.
+
+**Concepts of a document.** Candidates are the document's keywords (`analysis.js`), names, terms found in
+definitions and acronyms. An acronym is matched to its long form when the initials of the words before or
+inside the parentheses spell it, skipping stopwords: "Quadrature Amplitude Modulation (QAM)",
+"Ministero della Salute (MS)", "NATO (North Atlantic Treaty Organization)". A concept's key is the sequence
+of word stems of its content words in the document's language, so singular, plural and inflected forms
+share one key. Weak candidates (a single word seen once that is not a name, acronym or defined term) are
+dropped; at most 70 concepts per document are kept, plus all defined terms and acronyms.
+
+**One graph for all documents.**
+1. Keys that are equal across documents are one concept. Acronym pairs written in the text are merged with
+   a union-find; so are the merges confirmed by the user, unless the user separated them.
+2. Every concept is searched in **every** passage of the library (sequence match on stems), so a term is
+   found even in documents where the analysis did not select it. A concept that only ever appears inside a
+   longer one ("Amplitude Modulation" inside "Quadrature Amplitude Modulation") is not a node of its own.
+3. Links: concepts in the same passages, weighted by `c / sqrt(nA · nB)` (co-occurrences over the geometric
+   mean of their passage counts); kept when they co-occur at least twice or the weight is at least 0.5, and
+   at most 8 per concept. Definitions add typed links: the first concept within a few words after the
+   copula ("is a", "è una", "est un", "ist ein"…) gives *is a type of*; the others *used in the definition*.
+4. Importance: weighted PageRank on the links; the top 10% are *central*. A concept in two or more documents
+   is *multi-document*.
+5. Suggestions, never applied automatically: an acronym whose letters match the initials of another
+   concept, labels that differ only in spaces, hyphens or accents, and labels within edit distance 2.
+
+**Search.** Each passage is indexed by `language:stem` terms (hyphenated words also by their parts, short
+upper-case acronyms included). Ranking is BM25 (k1 = 1.2, b = 0.75), multiplied by the share of query
+words found in the passage. If the query or part of it is the name or an alias of a concept, the passages
+of that concept get a boost and its other forms are highlighted too. Quoted phrases must appear verbatim.
+Question words of natural queries ("dove ho parlato di…", "where did I…") are ignored. Filters: documents,
+languages, file types, dates, a concept.
+
+**User edits** are stored separately (`library/edits.json`) and re-applied every time the graph is rebuilt:
+merges, separations, rejected suggestions, labels, aliases, manual links, removed links and pinned map
+positions, each with a history entry.
+
+**Map layout.** Force-directed: springs on the links and repulsion between nearby nodes through a spatial
+grid, so the cost grows almost linearly; pinned nodes stay where the user put them. About 2 s for 5,000
+concepts and 15,000 links.
+
+**Open at the exact position.** The Reader opens the file, completes the reading at once, finds the passage
+by its first words (and page, for PDFs), scrolls to it and highlights it for a few seconds.
+
 ## Desktop app
 
 - One `BrowserWindow` with `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`.
 - App files are served from an internal `app://` protocol restricted to a fixed list of folders
   (`core`, `desktop/ui`, PDF.js, Tesseract, icons), with a strict Content Security Policy.
 - `preload.js` exposes a small API (`openFile`, `fetchUrl`, `saveFile`, `printPdf`, `settings`, `archive`,
-  `scan`, `showItem`, `openExternal`, `info`, menu and file-open events). Every argument is validated in
+  `library`, `scan`, `showItem`, `openExternal`, `info`, menu and file-open events). Every argument is validated in
   `main.js`: documents are read only from paths the user chose or passed to the app (300 MB at most),
   archive identifiers cannot leave the archive folder, CSV lists are copied only from the scans folder,
-  and web addresses must be `http(s)`.
+  library files can be read only if the user added them (or they are already in the library), library
+  records must match the id of their path, and web addresses must be `http(s)`.
 - Documents passed on the command line or by the operating system (file associations) open in the reader.
 
 ## Disk scanner
@@ -218,6 +297,8 @@ flowchart LR
 - DOM ranges and token rectangles are created lazily and cached.
 - Keyword and sentence graphs are sparse; PageRank runs on adjacency lists.
 - Reference figure: about 25,000 words read and analysed in 1.3 s.
+- Library: import and analysis in one worker, index and graph in another; search over 3,000 passages in
+  about 15 ms; graph of a few thousand passages in well under a second; map layout of 5,000 concepts in about 2 s.
 
 ## Testing
 
@@ -228,6 +309,8 @@ flowchart LR
 | `tests/export.test.js` | Summary exports and the Word/HTML marked-up document (Word files are unzipped and checked) |
 | `tests/scanner.test.js` | Scanner results, read-only guarantee, comparison and every Trash safety rule |
 | `tests/main.test.js` | Electron main process with a stubbed `electron` module: IPC validation, protocol, dialogs |
+| `tests/library.test.js` | Library engine: passages, acronyms, concepts across documents, graph and relations, suggestions, search, every user edit, Markdown export, performance |
+| `tests/library-ui.test.js` | The Library tab in Chromium with the real workers and PDF.js: folder import (Word, PowerPoint, PDF, scanned PDF), search, open at position, map, concept page, merge, rename, links, exports, undo |
 | `tests/reader.test.js` | The reader in Chromium with the real PDF.js, OCR mapping from recorded Tesseract output, the pen |
 | `tests/extension.test.js` | The real extension loaded in Chromium: side panel, spider on a page, archive, restored marks |
 | `tests/desktop-ui.test.js` | End-to-end run of the desktop UI with a real scan and screenshots |

@@ -4,7 +4,7 @@
 
 # Word Crawler
 
-**Un ragno che legge per te.** Sottolinea, cerchia e riassume documenti e pagine web, prepara le schede di ripasso e fa la mappa del disco — con la statistica, senza intelligenza artificiale.
+**Un ragno che legge per te.** Sottolinea, cerchia e riassume documenti e pagine web, trasforma una cartella di dispense in una base di conoscenza dove cercare e vedere la mappa dei concetti, prepara le schede di ripasso e fa la mappa del disco — con la statistica, senza intelligenza artificiale.
 
 [![CI](https://github.com/davide0707/word-crawler/actions/workflows/ci.yml/badge.svg)](https://github.com/davide0707/word-crawler/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/davide0707/word-crawler?label=versione&color=2f4bff)](https://github.com/davide0707/word-crawler/releases)
@@ -21,6 +21,7 @@
 ## Indice
 
 - [In breve](#in-breve)
+- [Libreria: la tua base di conoscenza](#libreria-la-tua-base-di-conoscenza)
 - [Immagini](#immagini)
 - [Scaricare](#scaricare)
 - [Come funziona](#come-funziona)
@@ -41,10 +42,29 @@
 | **La tua penna** | Evidenzia, sottolinea, annota e cancella, anche sui PDF e sulle pagine web. |
 | **Esporta il documento segnato** | Word (.docx, con le note come commenti), pagina web e PDF, più riepiloghi in Markdown, testo, JSON e Anki. |
 | **Ricorda le pagine** | L'estensione rimette i segni quando riapri una pagina salvata. |
+| **Costruisce una base di conoscenza** | La Libreria legge tanti file insieme, anche cartelle intere: cerchi in tutti i documenti insieme, vedi come si collegano i concetti su una mappa interattiva e apri ogni risultato alla pagina giusta. |
 | **Fa la mappa del disco** | Scanner in sola lettura con mappa a riquadri, duplicati, file e cartelle più grandi, confronto tra scansioni e spostamento sicuro dei duplicati nel Cestino. |
 | **Regge i documenti lunghi** | L'analisi gira in un Web Worker e le pagine dei PDF si leggono in parallelo: circa 25.000 parole lette e analizzate in 1,3 s. |
 
 L'interfaccia è in italiano. I documenti possono essere in italiano, inglese, francese, spagnolo, tedesco o portoghese.
+
+## Libreria: la tua base di conoscenza
+
+<img src="docs/images/library-search.webp" alt="Ricerca nella Libreria su nove documenti: la domanda «Dove ho parlato di QAM?» trova passaggi in tre file, anche negli appunti che usano solo la forma estesa «Quadrature Amplitude Modulation»" width="100%">
+
+Aggiungi dispense, slide, libri, scansioni e pagine salvate — uno alla volta o una cartella intera — e la Libreria ne fa un'unica base di conoscenza sul tuo computer. I file originali vengono solo letti, mai modificati.
+
+- **Passaggi con la fonte esatta.** Ogni documento si divide in passaggi (paragrafi, titoli, slide, voci di elenco, righe di tabella) che ricordano file, pagina, slide, sezione e, nei PDF, la posizione sulla pagina. **Apri alla posizione esatta** porta al passaggio nel Lettore e lo evidenzia.
+- **Cerca in tutto insieme.** Classifica BM25 sulle radici delle parole in sei lingue, prima i passaggi che contengono più parole della domanda, frasi esatte tra virgolette, filtri per documento e lingua. Chiedi *«Dove ho parlato di QAM?»* e trova anche gli appunti che dicono solo *Quadrature Amplitude Modulation*.
+- **Concetti uniti tra i file.** Parole chiave, nomi, termini definiti e sigle diventano concetti. Singolare e plurale, lo stesso termine in file diversi e una sigla scritta con la sua forma estesa sono un concetto solo. I casi incerti — una sigla in un file e la forma estesa in un altro, due nomi quasi uguali — sono solo suggeriti: decidi tu.
+- **Una mappa dei concetti interattiva.** I concetti sono collegati quando compaiono negli stessi passaggi, e le definizioni aggiungono relazioni con un nome (*QAM — è un tipo di → modulazione digitale*). I concetti centrali sono blu, quelli presenti in più documenti viola. Ingrandisci, spostati, trascina i nodi, filtra ed esporta in PNG, in Markdown con i `[[collegamenti]]` per Obsidian o in JSON.
+- **L'ultima parola è tua.** Rinomina i concetti, aggiungi alias, unisci o separa, aggiungi o togli collegamenti: ogni modifica resta, finisce nella cronologia del concetto e si riapplica quando aggiungi altri documenti. Un documento tolto si può rimettere.
+
+| | |
+|:---:|:---:|
+| <img src="docs/images/library-map.webp" alt="Mappa dei concetti con due gruppi: telecomunicazioni e guerra fredda"><br>**Mappa dei concetti** | <img src="docs/images/library-concept.webp" alt="Scheda del concetto QAM con alias, definizione e fonte, concetti collegati e passaggi"><br>**Scheda del concetto con le fonti** |
+
+La Libreria fa parte dell'app desktop. Tutto si calcola sul tuo computer, senza intelligenza artificiale e senza internet; gli algoritmi sono descritti in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#library) (in inglese).
 
 ## Immagini
 
@@ -55,6 +75,7 @@ L'interfaccia è in italiano. I documenti possono essere in italiano, inglese, f
 | <img src="docs/images/scanner-running.webp" alt="Scanner del disco: il ragno cammina sulla mappa delle cartelle"><br>**Scanner del disco** | <img src="docs/images/scanner-treemap.webp" alt="Mappa a riquadri delle dimensioni delle cartelle"><br>**Mappa a riquadri** |
 | <img src="docs/images/scanner-duplicates.webp" alt="Duplicati scelti e spostati nel Cestino"><br>**Duplicati nel Cestino** | <img src="docs/images/scanner-compare.webp" alt="Confronto tra due scansioni"><br>**Confronto tra scansioni** |
 | <img src="docs/images/extension-restored.webp" alt="L'estensione rimette i segni su una pagina web salvata"><br>**Estensione: segni ritrovati** | <img src="docs/images/archive.webp" alt="Archivio delle letture salvate"><br>**Archivio** |
+| <img src="docs/images/library-merge.webp" alt="Unione suggerita: OFDM e Orthogonal Frequency Division Multiplexing"><br>**Libreria: le unioni le confermi tu** | <img src="docs/images/library-open.webp" alt="Un risultato aperto nel Lettore alla pagina giusta, con il passaggio evidenziato"><br>**Libreria: apri alla posizione esatta** |
 
 ## Scaricare
 
@@ -80,6 +101,8 @@ flowchart LR
   D --> F[Pannello dei risultati<br/>riassunto · segni · ripasso · statistiche]
   E --> G[Penna]
   F --> H[Archivio ed esportazioni<br/>Word · pagina web · PDF · Anki]
+  C --> L[Libreria<br/>passaggi · indice BM25 · grafo dei concetti]
+  L --> M[Ricerca · mappa dei concetti · apri alla posizione]
 ```
 
 Un unico motore (`core/`) serve sia l'app desktop sia l'estensione. Algoritmi, mappa dei moduli e modello di sicurezza sono descritti in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (in inglese).
@@ -109,6 +132,7 @@ Un unico motore (`core/`) serve sia l'app desktop sia l'estensione. Algoritmi, m
 
 - **Tutto in locale.** I documenti non lasciano il computer e non c'è telemetria. L'unico accesso a internet che l'app fa da sola è lo scaricamento, la prima volta, dei dati delle lingue per l'OCR (2–4 MB per lingua, da `cdn.jsdelivr.net`), e solo quando si apre una pagina scansionata o un'immagine.
 - **App desktop protetta.** Isolamento del contesto, finestra in sandbox, Content Security Policy rigida, protocollo interno `app://` e un ponte minimo verso il sistema, con i dati controllati nel processo principale.
+- **Libreria in sola lettura.** I file aggiunti alla Libreria vengono solo letti; testo, concetti e fonti si salvano nella cartella dati dell'app. Togliere un documento dalla Libreria non tocca mai il file.
 - **Scanner in sola lettura.** La scansione elenca, misura e legge i file e basta. Lo spostamento dei duplicati nel Cestino è un'azione a parte: accetta solo file trovati da quella scansione dentro la cartella analizzata, lascia sempre una copia per gruppo, controlla con SHA-256 che il contenuto sia identico byte per byte, chiede conferma e scrive un registro.
 - **Esportazioni sicure.** I PDF con i segni si stampano da una finestra nascosta con JavaScript disattivato.
 
@@ -131,6 +155,7 @@ npm start            # avvia l'app desktop
 | `npm test` | Controlli del progetto e prove di unità, di integrazione e nel browser |
 | `npm run lint` | Sintassi, fine riga, intestazioni, JSON e versioni coerenti |
 | `npm run test:extension` | Carica l'estensione vera in Chromium (serve uno schermo; su Linux senza schermo usare `xvfb-run -a`) |
+| `npm run test:library` | Prove del motore della Libreria e della scheda Libreria completa in Chromium (anche in `npm test`) |
 | `npm run test:ui -- <cartella>` | Prova completa dell'interfaccia desktop con una scansione vera, salvando le immagini |
 | `npm run build:extension` | Crea `dist/word-crawler-extension.zip` con PDF.js e Tesseract |
 | `npm run dist` | Crea il programma per il sistema in uso, in `dist/` |
@@ -139,10 +164,10 @@ npm start            # avvia l'app desktop
 ### Struttura
 
 ```
-core/                 motore condiviso: lingue, formati, analisi, OCR, ragno, penna, lettore, esportazioni
+core/                 motore condiviso: lingue, formati, analisi, OCR, ragno, penna, lettore, esportazioni, libreria
   freq/               frequenze delle parole (CC BY-SA 4.0)
 desktop/              processo principale di Electron, ponte preload, scanner del disco, strumenti di scansione
-  ui/                 finestra dell'app: schede, scanner, rapporto, guida
+  ui/                 finestra dell'app: schede, libreria, scanner, rapporto, guida
 extension/            estensione per Chrome/Edge/Brave (Manifest V3)
 scripts/              creazione dell'estensione, controlli del progetto, scrittura ZIP
 tests/                prove automatiche, documenti di prova e sostituti dei moduli esterni
@@ -152,7 +177,7 @@ docs/                 architettura e immagini
 
 ### Prove automatiche
 
-102 controlli automatici coprono l'analisi in sei lingue, tutti i formati dei documenti, le esportazioni (i file Word si verificano aprendo lo zip), l'OCR con l'uscita vera di Tesseract, lo scanner del disco e le sue regole di sicurezza, il processo principale di Electron (con un modulo `electron` finto), il lettore in Chromium con il vero PDF.js e l'estensione vera caricata in Chromium. La CI li esegue a ogni push e pull request.
+Più di 130 controlli automatici coprono l'analisi in sei lingue, la Libreria (passaggi, concetti, unioni, ricerca, modifiche, una mappa di 5.000 concetti e la scheda Libreria completa in Chromium con il vero PDF.js), tutti i formati dei documenti, le esportazioni (i file Word si verificano aprendo lo zip), l'OCR con l'uscita vera di Tesseract, lo scanner del disco e le sue regole di sicurezza, il processo principale di Electron (con un modulo `electron` finto), il lettore in Chromium con il vero PDF.js e l'estensione vera caricata in Chromium. La CI li esegue a ogni push e pull request.
 
 ### Versioni e firma digitale
 
@@ -167,12 +192,14 @@ Le regole per contribuire sono in [CONTRIBUTING.md](CONTRIBUTING.md); la storia 
 
 ## Stato del progetto
 
-Versione **2.1.0**. Limiti noti:
+Versione **2.2.0**. Limiti noti:
 
 - Il motore OCR (tesseract.js) è provato nei test con l'uscita registrata di Tesseract; il motore WebAssembly vero gira solo nell'app e nell'estensione.
 - Non si aprono i vecchi .ppt/.xls né le immagini TIFF (salvarli come .pptx/.xlsx o PNG/PDF).
 - I riassunti sono estrattivi: le frasi vengono scelte e ripulite, mai riscritte.
 - L'estensione non funziona su iOS.
+- La Libreria c'è solo nell'app desktop. La ricerca è sulle parole (radici) più concetti e alias: non usa embedding, quindi due sinonimi che non compaiono mai insieme si collegano solo se li aggiungi come alias.
+- Archivi ZIP, cartelle controllate e rilevamento delle contraddizioni tra documenti arriveranno in una versione successiva.
 
 ## Licenza
 

@@ -6,8 +6,8 @@ Security fixes are made for the latest release only.
 
 | Version | Supported |
 |---|---|
-| 2.1.x | Yes |
-| < 2.1 | No |
+| 2.2.x | Yes |
+| < 2.2 | No |
 
 ## Reporting a vulnerability
 
@@ -35,7 +35,9 @@ Of particular interest:
 - any way for the disk scanner to modify, move or delete files, or for "Move duplicates to the Trash"
   to touch a file that was not selected, not inside the scanned folder or not byte-for-byte identical
   to the copy that is kept;
-- a web page that can read or alter the extension's archive or settings.
+- a web page that can read or alter the extension's archive or settings;
+- any way for the Library to read a file the user did not add, to write outside the app's data folder, or to
+  modify, move or delete a document it has read.
 
 ## Security model in short
 
@@ -46,6 +48,9 @@ Of particular interest:
 - **Disk scanner**: uses only directory listing, `lstat` and read-only file access; does not follow
   symbolic links or Windows junctions. Moving duplicates to the Trash is a separate, confirmed action
   with the checks described in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#disk-scanner).
+- **Library**: files are only read; the main process serves only files the user added (or already in the
+  library), records are written to the app's data folder and must match the id of their path; removing a
+  document never touches the file.
 - **Annotated PDF export**: rendered in a hidden window with JavaScript disabled.
 - **Extension**: Manifest V3, no remote code; a page is read only when the user starts the spider on it or
   reopens a page they saved; the small content script that runs on every page only asks whether the
