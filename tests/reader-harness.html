@@ -9,6 +9,7 @@
 <body>
 <div id="app"></div>
 <script src="../core/settings.js"></script>
+<script src="../core/lang.js"></script>
 <script src="../core/text.js"></script>
 <script src="../core/analysis.js"></script>
 <script src="../core/zip.js"></script>
@@ -17,7 +18,11 @@
 <script src="../core/dom.js"></script>
 <script src="../core/pdfcore.js"></script>
 <script src="../core/crawler.js"></script>
+<script src="../core/annotate.js"></script>
+<script src="../core/docx.js"></script>
 <script src="../core/export.js"></script>
+<script src="../core/ocr.js"></script>
+<script src="../core/pen.js"></script>
 <script src="../core/settings-ui.js"></script>
 <script src="../core/results-ui.js"></script>
 <script src="../core/reader.js"></script>
@@ -25,15 +30,25 @@
   // Host finto per i test: salva in memoria quello che l'app vera scriverebbe su disco
   window.__saved = [];
   window.__archive = [];
+  window.__printed = [];
+  window.__workers = 0;
+  var RealWorker = window.Worker;
+  window.Worker = function (url, o) { window.__workers++; return new RealWorker(url, o); };
+  var q = location.search;
   window.reader = WCReader.mount(document.getElementById('app'), {
     saveFile: function (name, content, mime) { window.__saved.push({ name: name, content: content, mime: mime }); return Promise.resolve(true); },
+    printPdf: function (html, name) { window.__printed.push({ name: name, html: html }); return Promise.resolve(true); },
     archive: { save: function (e) { window.__archive.push(e); return Promise.resolve(true); } },
     settings: { load: function () { return Promise.resolve(null); }, save: function () {} },
     fetchUrl: function (url) { return fetch(url).then(function (r) { return r.text(); }).then(function (html) { return { html: html, url: url }; }); },
     pdfjs: function () {
-      return import(location.search.indexOf('pdfstub') >= 0 ? '/tests/pdfjs-stub.mjs' : '/lib/pdf.min.mjs').catch(function () { return null; });
+      if (q.indexOf('pdfstub') >= 0) return import('/tests/pdfjs-stub.mjs').catch(function () { return null; });
+      return import('/lib/pdf.min.mjs').then(function (m) { m.GlobalWorkerOptions.workerSrc = '/lib/pdf.worker.min.mjs'; return m; }).catch(function () { return null; });
     },
-    pdfHelp: 'Per leggere i PDF serve PDF.js.'
+    pdfHelp: 'Per leggere i PDF serve PDF.js.',
+    ocr: q.indexOf('ocrstub') >= 0 ? { script: '/tests/tesseract-stub.js', workerPath: '/lib/tesseract/worker.min.js', corePath: '/lib/tesseract/core/' } : null,
+    ocrHelp: 'OCR non disponibile in questo test.',
+    noWorker: q.indexOf('noworker') >= 0
   });
 </script>
 </body>

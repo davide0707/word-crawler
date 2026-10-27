@@ -16,8 +16,17 @@
     }, Promise.resolve(null)).then(function (m) { pdfLib = m; return m; });
   }
 
+  // Tesseract (OCR) è incluso nelle copie create con "npm run build:extension" o da GitHub
+  var OCR = {
+    script: chrome.runtime.getURL('lib/tesseract/tesseract.min.js'),
+    workerPath: chrome.runtime.getURL('lib/tesseract/worker.min.js'),
+    corePath: chrome.runtime.getURL('lib/tesseract/core/')
+  };
   var reader = WCReader.mount(document.getElementById('reader'), {
     saveFile: function (name, content, mime) { return WCStore.download(name, content, mime); },
+    printPdf: function (html) { return WCStore.printPdf(html); },
+    ocr: OCR,
+    ocrHelp: 'Per l’OCR serve Tesseract, che non è incluso in questa copia dell’estensione: creala con “npm install” e “npm run build:extension”, oppure scaricala da GitHub (Releases).',
     archive: { save: function (e) { return WCStore.save(e); } },
     settings: { load: WCStore.loadSettings, save: WCStore.saveSettings },
     fetchUrl: function (url) {

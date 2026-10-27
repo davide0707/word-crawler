@@ -1,8 +1,8 @@
 {
   "name": "word-crawler-studio",
   "productName": "Word Crawler",
-  "version": "2.0.0",
-  "description": "Un ragno che legge documenti e pagine web, sottolinea, cerchia, riassume e scansiona il disco in sola lettura. Senza intelligenza artificiale.",
+  "version": "2.1.0",
+  "description": "Un ragno che legge documenti, PDF (anche scansionati, con Tesseract) e pagine web in sei lingue: sottolinea, cerchia, riassume, prepara le schede di ripasso e scansiona il disco. Senza intelligenza artificiale.",
   "main": "desktop/main.js",
   "private": true,
   "author": {
@@ -15,17 +15,20 @@
   },
   "scripts": {
     "start": "electron .",
-    "test": "node tests/analysis.test.js && node tests/scanner.test.js && node tests/main.test.js && node tests/formats.test.js",
+    "test": "node tests/analysis.test.js && node tests/export.test.js && node tests/scanner.test.js && node tests/main.test.js && node tests/formats.test.js && node tests/reader.test.js",
     "test:ui": "node tests/desktop-ui.test.js",
     "fixtures": "python3 tests/make-fixtures.py",
     "build:extension": "node scripts/build-extension.js",
     "dist": "electron-builder --publish never",
     "dist:win": "electron-builder --win --publish never",
     "dist:mac": "electron-builder --mac --publish never",
-    "dist:linux": "electron-builder --linux --publish never"
+    "dist:linux": "electron-builder --linux --publish never",
+    "test:extension": "node tests/extension.test.js",
+    "fixtures:ocr": "python3 tests/make-ocr-fixtures.py"
   },
   "dependencies": {
-    "pdfjs-dist": "4.10.38"
+    "pdfjs-dist": "4.10.38",
+    "tesseract.js": "7.0.0"
   },
   "devDependencies": {
     "electron": "33.2.1",
@@ -45,12 +48,20 @@
       "desktop/**/*",
       "core/**/*",
       "build/icons/**/*",
+      "THIRD-PARTY.md",
       "!**/*.map",
       "!node_modules/pdfjs-dist/legacy/**",
       "!node_modules/pdfjs-dist/web/**",
       "!node_modules/pdfjs-dist/types/**",
       "!node_modules/pdfjs-dist/image_decoders/**",
-      "!node_modules/@napi-rs/**"
+      "!node_modules/@napi-rs/**",
+      "!node_modules/tesseract.js/src/**",
+      "!node_modules/tesseract.js/docs/**",
+      "!node_modules/tesseract.js/examples/**",
+      "!node_modules/tesseract.js/tests/**",
+      "!node_modules/tesseract.js-core/tesseract-core.wasm*",
+      "!node_modules/tesseract.js-core/tesseract-core-simd.wasm*",
+      "!node_modules/tesseract.js-core/tesseract-core-relaxedsimd.wasm*"
     ],
     "asarUnpack": [
       "desktop/scanner.js",
@@ -58,15 +69,34 @@
     ],
     "fileAssociations": [
       {
-        "ext": ["pdf", "docx", "doc", "odt", "epub", "rtf", "md", "txt"],
+        "ext": [
+          "pdf",
+          "docx",
+          "doc",
+          "odt",
+          "epub",
+          "rtf",
+          "md",
+          "txt"
+        ],
         "name": "Documento",
         "role": "Viewer"
       }
     ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icons/icon.ico"
     },
@@ -82,14 +112,25 @@
     },
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "category": "public.app-category.education",
       "icon": "build/icons/icon.png",
-      "artifactName": "Word-Crawler-${version}-${arch}.${ext}"
+      "artifactName": "Word-Crawler-${version}-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Education",
       "icon": "build/icons/icon.png",
       "artifactName": "Word-Crawler-${version}-${arch}.${ext}"

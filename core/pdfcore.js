@@ -88,6 +88,8 @@
           else {
             var dy = line.base - prev.base;
             newBlock = dy > prev.fhPx * 1.75 || dy < 0 || heading !== prev.heading || Math.abs(line.fh - prev.fh) > prev.fh * 0.2;
+            // righe riconosciute con l'OCR: Tesseract dice già dove comincia un paragrafo
+            if (line.ocr) newBlock = !!line.newBlock || dy > prev.fhPx * 2.2 || dy < 0 || heading !== prev.heading;
           }
         }
         if (newBlock) blk++;

@@ -1,5 +1,5 @@
 # Costruisce Word Crawler per Windows, macOS e Linux e prepara l'estensione per Chrome.
-# Si avvia da solo quando pubblichi un tag "v..." (es. v2.0.0), oppure a mano da Actions → Build → Run workflow.
+# Si avvia da solo quando pubblichi un tag "v..." (es. v2.1.0), oppure a mano da Actions → Build → Run workflow.
 # I file pronti si scaricano da Actions (Artifacts) e, per i tag, dalla pagina Releases.
 name: Build
 
@@ -21,7 +21,8 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npx playwright install --with-deps chromium
-      - run: npm test
+      - run: xvfb-run -a npm test
+      - run: xvfb-run -a npm run test:extension
 
   desktop:
     needs: test
@@ -36,9 +37,24 @@ jobs:
         with:
           node-version: 20
       - run: npm install
-      - run: npx electron-builder --publish never
+      # Firma digitale facoltativa: se nei "Secrets" del repository ci sono i certificati, i programmi
+      # vengono firmati (e su macOS anche autenticati da Apple). Senza, si creano programmi non firmati.
+      #   CSC_LINK (certificato .p12/.pfx in base64), CSC_KEY_PASSWORD
+      #   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID (solo macOS)
+      - name: Build
+        shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          EXTRA=""
+          if [ -z "$CSC_LINK" ]; then unset CSC_LINK CSC_KEY_PASSWORD; echo "Nessun certificato: programmi non firmati."; else echo "Certificato trovato: i programmi verranno firmati."; fi
+          if [ "$RUNNER_OS" = "macOS" ] && [ -n "$CSC_LINK" ] && [ -n "$APPLE_ID" ]; then EXTRA="-c.mac.notarize=true"; else unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; fi
+          npx electron-builder --publish never $EXTRA
       - uses: actions/upload-artifact@v4
         with:
           name: word-crawler-${{ runner.os }}
@@ -83,3 +99,8 @@ jobs:
             - macOS: .dmg (arm64 per Mac con chip Apple, x64 per Mac Intel)
             - Linux: .AppImage o .deb
             - Estensione per Chrome, Edge e Brave: word-crawler-extension.zip
+
+            Novità della 2.1: sei lingue (italiano, inglese, francese, spagnolo, tedesco, portoghese), OCR con Tesseract
+            per PDF scansionati e immagini, documenti lunghi, schede di ripasso e quiz, penna per segnare a mano,
+            esportazione del documento segnato (Word, pagina web, PDF), segni ritrovati sulle pagine salvate,
+            scanner con mappa a riquadri, confronto tra scansioni e duplicati nel Cestino.

@@ -23,6 +23,14 @@
     }).catch(function () { return null; });
   }
 
+  // ---------------------------------------------------------------- Tesseract (OCR, installato con npm)
+  var NM = new URL('../../node_modules/', location.href).href;
+  var OCR = {
+    script: NM + 'tesseract.js/dist/tesseract.min.js',
+    workerPath: NM + 'tesseract.js/dist/worker.min.js',
+    corePath: NM + 'tesseract.js-core/'
+  };
+
   // ---------------------------------------------------------------- lettore
   var archiveUI = null;
   var reader = WCReader.mount($('reader'), {
@@ -32,14 +40,18 @@
     saveFile: function (name, content, mime) { return D.saveFile(name, content, mime); },
     archive: { save: function (e) { return D.archive.save(e).then(function () { if (archiveUI) archiveUI.refresh(); return true; }); } },
     settings: { load: function () { return D.settings.load('reader'); }, save: function (v) { return D.settings.save('reader', v); } },
+    printPdf: function (html, name) { return D.printPdf(html, name); },
     pdfjs: loadPdfJs,
-    pdfHelp: 'Per leggere i PDF serve PDF.js: nella cartella del progetto esegui “npm install” e riavvia l’app. Le versioni installate da GitHub lo contengono già.'
+    pdfHelp: 'Per leggere i PDF serve PDF.js: nella cartella del progetto esegui “npm install” e riavvia l’app. Le versioni installate da GitHub lo contengono già.',
+    ocr: OCR,
+    ocrHelp: 'Per l’OCR serve Tesseract: nella cartella del progetto esegui “npm install” e riavvia l’app. Le versioni installate da GitHub lo contengono già.'
   });
 
   // ---------------------------------------------------------------- scanner
   var scanner = WCScanView.mount($('scanner'), {
     roots: D.scan.roots, pickFolder: D.scan.pickFolder, start: D.scan.start, cancel: D.scan.cancel, onEvent: D.scan.onEvent,
     exportCsv: D.scan.exportCsv, showItem: D.showItem, saveFile: D.saveFile,
+    history: D.scan.history, compare: D.scan.compare, trash: D.scan.trash,
     settings: { load: function () { return D.settings.load('scanner'); }, save: function (v) { return D.settings.save('scanner', v); } }
   });
 
@@ -77,6 +89,16 @@
       ul.appendChild(el('li', { text: WCSettings.PRESETS[k].label + ': modalità ' + WCSettings.MODES[v.mode].label + ', ' + v.speed + ' parole/s, ' + v.legs + ' zampe, selettività ' + v.selectivity + '.' }));
     });
     parts.push(ul);
+    parts.push(el('h2', { text: 'Lingue' }));
+    parts.push(el('p', { text: 'Italiano, inglese, francese, spagnolo, tedesco e portoghese. La lingua si riconosce da sola dalle parole più comuni (articoli, preposizioni…); per ognuna il ragno conosce le parole da ignorare, le abbreviazioni, i modi di scrivere una definizione e la formula di leggibilità adatta. Sa anche quanto ogni parola è comune nella lingua di tutti i giorni (elenchi di frequenza ricavati da OpenSubtitles): una parola rara ripetuta nel testo pesa di più di una parola comune.' }));
+    parts.push(el('h2', { text: 'Ripasso' }));
+    parts.push(el('p', { text: 'Dalle definizioni nascono schede del tipo “Che cos’è la cortina di ferro?”; dalle frasi chiave nascono frasi da completare, con il buco al posto del concetto, del nome o della data più importante. Quando nel testo ci sono abbastanza alternative dello stesso tipo, la scheda diventa una domanda a scelta multipla del quiz. Le schede si esportano per Anki.' }));
+    parts.push(el('h2', { text: 'Penna' }));
+    parts.push(el('p', { text: 'Nella colonna di sinistra: evidenzia, sottolinea, scrivi una nota o cancella. Trascina sulle parole del documento, anche nei PDF. I tuoi segni compaiono tra i risultati, si salvano nell’archivio e finiscono nelle esportazioni (nel file Word le note diventano commenti).' }));
+    parts.push(el('h2', { text: 'OCR: PDF scansionati e immagini' }));
+    parts.push(el('p', { text: 'Se un PDF non contiene testo (una scansione) o apri una foto di una pagina, il testo viene riconosciuto con Tesseract, un programma di OCR classico che riconosce le lettere senza intelligenza artificiale generativa. La prima volta scarica i dati della lingua (2–4 MB) da cdn.jsdelivr.net, poi li tiene e funziona anche senza internet. Le pagine riconosciute hanno l’etichetta OCR.' }));
+    parts.push(el('h2', { text: 'Esportare' }));
+    parts.push(el('p', { text: 'Dal pannello dei risultati: riepilogo (Markdown, testo, pagina web, dati), schede per Anki e il documento con tutti i segni, in Word (.docx), come pagina web o in PDF.' }));
     parts.push(el('h2', { text: 'Tasti rapidi mentre il ragno legge' }));
     var keys = el('dl');
     [['Spazio', 'pausa / riprendi'], ['Invio', 'completa subito la lettura'], ['+ e −', 'più veloce / più lento'], ['Esc', 'toglie il ragno'], ['Ctrl+O', 'apri un documento'], ['Ctrl+1…3', 'Lettore, Scanner, Archivio'], ['F1', 'questa guida']]
@@ -86,11 +108,14 @@
     parts.push(el('p', { text: 'Scegli un disco (per esempio C:) o una cartella: il ragno la percorre tutta e alla fine ti dà un rapporto con file, cartelle, spazio per estensione e per tipo, file e cartelle più grandi, duplicati, nomi ripetuti, file e cartelle vuoti, date, percorsi troppo lunghi e cartelle non leggibili.' }));
     parts.push(el('p', { text: 'La scansione è in sola lettura: il ragno elenca, misura e (per i duplicati) legge i file, ma non modifica, non sposta e non cancella niente. Non segue i collegamenti simbolici, così non gira in tondo. Le cartelle di sistema a cui Windows o macOS negano l’accesso vengono saltate e contate tra i “non leggibili”.' }));
     parts.push(el('p', { text: 'Su macOS, per analizzare tutto il disco, concedi a Word Crawler l’“Accesso completo al disco” in Impostazioni di Sistema → Privacy e sicurezza.' }));
+    parts.push(el('p', { text: 'Nel rapporto: la mappa a riquadri mostra lo spazio occupato da ogni cartella (clic per entrare, “Su” per tornare); il confronto con una scansione precedente della stessa cartella mostra cosa è cresciuto, comparso o sparito.' }));
+    parts.push(el('p', { text: 'Duplicati nel Cestino: è l’unica azione che cambia qualcosa sul disco, e solo se la chiedi tu. Scegli i file, conferma, e vengono spostati nel Cestino (non cancellati: si possono ripristinare). Prima di spostarli il programma controlla che esistano ancora con la stessa dimensione e tiene sempre almeno una copia di ogni gruppo. Ogni spostamento viene annotato in un registro.' }));
     parts.push(el('h2', { text: 'Dove finiscono i dati' }));
     var info = el('p', { text: 'Impostazioni, archivio e rapporti delle scansioni stanno nella cartella dati dell’app.' });
     parts.push(info);
     D.info().then(function (i) {
-      info.textContent = 'Impostazioni, archivio e rapporti delle scansioni stanno in: ' + i.userData + '. PDF.js: ' + (i.pdfjs ? 'installato.' : 'non installato (esegui npm install).');
+      info.textContent = 'Impostazioni, archivio e rapporti delle scansioni stanno in: ' + i.userData + '. PDF.js: ' + (i.pdfjs ? 'installato' : 'non installato (esegui npm install)') +
+        '. Tesseract (OCR): ' + (i.ocr ? 'installato.' : 'non installato (esegui npm install).');
       $('version').textContent = 'v' + i.version;
     });
     parts.forEach(function (p) { g.appendChild(p); });

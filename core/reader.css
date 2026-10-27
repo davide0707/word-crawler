@@ -183,6 +183,60 @@ textarea { resize: vertical; }
 .wc-actions select { padding: 8px; }
 .wc-results-foot .wc-note { margin-top: 8px; min-height: 1em; }
 
+/* segni fatti a mano */
+.wc-user:empty { display: none; }
+.wc-user { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--wc-line); }
+.wc-subhead { margin: 0 0 8px; font: 600 11px var(--wc-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--wc-orange); }
+.wc-umarks .wc-item { flex-wrap: wrap; }
+.wc-umarks .wc-edit { flex-basis: 100%; margin-left: 82px; font-size: 12px; text-align: left; }
+.wc-x { border: 1px solid var(--wc-line); background: none; border-radius: 6px; width: 24px; height: 24px; line-height: 1; cursor: pointer; color: var(--wc-mute); padding: 0; }
+.wc-x:hover { color: var(--wc-fg); border-color: var(--wc-mute); }
+.wc-b-uhl { color: #ffe14a; }
+.wc-b-uunder { color: #ff4a5e; }
+.wc-b-unote { color: var(--wc-orange); }
+.wc-t-uhl .wc-item-text { border-left: 3px solid #ffe14a; }
+.wc-t-uunder .wc-item-text { border-left: 3px solid #ff4a5e; }
+.wc-t-unote .wc-item-text { border-left: 3px dotted var(--wc-orange); }
+
+/* penna (nella colonna di sinistra) */
+.wc-pen-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.wc-pen-tools .wc-btn[aria-pressed="true"] { background: var(--wc-orange); border-color: var(--wc-orange); color: #111; }
+.wc-pen-tools .wc-btn { padding: 7px 8px; }
+.wc-pen-sw { display: inline-block; width: 18px; height: 10px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+.wc-pen-sw.hl { background: #ffe14a; }
+.wc-pen-sw.under { border-bottom: 2px solid #ff4a5e; height: 8px; border-radius: 0; }
+.wc-pen-sw.note { background: rgba(255, 138, 61, .35); border-bottom: 2px dotted var(--wc-orange); }
+.wc-pen-sw.erase { border: 1px dashed var(--wc-mute); }
+html.wc-pen-on .wc-doc { user-select: none; -webkit-user-select: none; }
+
+/* ripasso */
+.wc-cardmode { margin-bottom: 10px; }
+.wc-cards { gap: 10px; }
+.wc-card { border: 1px solid var(--wc-line); background: var(--wc-panel-2); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.wc-card-front { margin: 0; font-weight: 700; font-size: 14px; line-height: 1.45; }
+.wc-card-back { margin: 0; font: 15px/1.55 var(--wc-serif); padding-left: 10px; border-left: 3px solid var(--wc-green); }
+.wc-card .wc-inline { gap: 14px; font-size: 12px; }
+.wc-quiz { display: flex; flex-direction: column; gap: 10px; }
+.wc-quiz-n { margin: 0; font: 600 11px var(--wc-mono); color: var(--wc-mute); letter-spacing: .08em; text-transform: uppercase; }
+.wc-quiz-q { margin: 0; font: 16px/1.55 var(--wc-serif); }
+.wc-quiz-choices { display: grid; gap: 6px; }
+.wc-choice { text-align: left; border: 1px solid var(--wc-line); background: var(--wc-panel-2); border-radius: 8px; padding: 9px 12px; cursor: pointer; font-weight: 600; }
+.wc-choice:hover:not(:disabled) { border-color: var(--wc-mute); }
+.wc-choice:disabled { cursor: default; opacity: .8; }
+.wc-choice.wc-right { border-color: var(--wc-green); color: var(--wc-green); opacity: 1; }
+.wc-choice.wc-wrong { border-color: #ff4a5e; color: #ff4a5e; opacity: 1; }
+.wc-quiz-fb { margin: 0; font-size: 13px; line-height: 1.5; }
+.wc-quiz-fb:empty { display: none; }
+.wc-quiz-score { margin: 0; font: 700 22px var(--wc-ui); }
+.wc-quiz .wc-btn { align-self: flex-start; }
+
+/* immagini e pagine riconosciute con l'OCR */
+.wc-page img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.wc-doc.night .wc-page img { filter: invert(.9) hue-rotate(180deg); }
+.wc-ocr-badge { position: absolute; top: 6px; right: 6px; font: 600 10px var(--wc-mono); letter-spacing: .08em; background: var(--wc-orange); color: #111; padding: 2px 6px; border-radius: 4px; z-index: 1; }
+.wc-progress { height: 4px; border-radius: 2px; background: var(--wc-line); overflow: hidden; }
+.wc-progress > span { display: block; height: 100%; width: 0; background: var(--wc-cyan); transition: width .2s; }
+
 /* archivio (app desktop ed estensione) */
 .wc-archive { padding: 24px clamp(16px, 3vw, 36px) 60px; display: flex; flex-direction: column; gap: 18px; }
 .wca-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; flex-wrap: wrap; }

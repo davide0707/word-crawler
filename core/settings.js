@@ -47,8 +47,9 @@
     { id: 'selectivity', group: 'Analisi', type: 'range', min: 1, max: 5, step: 1, def: 3, label: 'Selettività',
       scale: ['Larga', 'Ampia', 'Media', 'Stretta', 'Severa'],
       effect: 'Quante parole chiave tenere. Stretta: solo le più forti, meno rumore ma qualche concetto perso. Larga: più parole, più completo ma più rumore.' },
-    { id: 'language', group: 'Analisi', type: 'select', def: 'auto', options: [['auto', 'Automatica'], ['it', 'Italiano'], ['en', 'Inglese']],
-      label: 'Lingua', effect: 'Serve per le parole da ignorare (articoli, preposizioni…), le abbreviazioni e l’indice di leggibilità.' },
+    { id: 'language', group: 'Analisi', type: 'select', def: 'auto',
+      options: [['auto', 'Automatica'], ['it', 'Italiano'], ['en', 'Inglese'], ['fr', 'Francese'], ['es', 'Spagnolo'], ['de', 'Tedesco'], ['pt', 'Portoghese']],
+      label: 'Lingua', effect: 'Serve per le parole da ignorare (articoli, preposizioni…), le abbreviazioni, le definizioni, l’indice di leggibilità e la frequenza delle parole: quelle d’uso comune pesano meno di quelle rare.' },
 
     { id: 'summaryLength', group: 'Riassunto', type: 'range', min: 5, max: 60, step: 5, def: 20, unit: '%', label: 'Lunghezza',
       modes: ['summary', 'study'],
@@ -65,6 +66,14 @@
     { id: 'markNames', group: 'Studio', type: 'toggle', def: true, modes: ['study'], label: 'Cerchia nomi e concetti', effect: 'Nomi propri e parole chiave, la prima volta in ogni paragrafo.' },
     { id: 'markNumbers', group: 'Studio', type: 'toggle', def: true, modes: ['study'], label: 'Riquadra numeri e date', effect: 'Anni, date, percentuali e cifre.' },
 
+    { id: 'ocr', group: 'OCR (immagini e PDF scansionati)', type: 'toggle', def: true, label: 'Riconosci il testo nelle immagini',
+      effect: 'Per i PDF scansionati e le foto di pagine (PNG, JPG…) usa Tesseract, un programma di OCR classico. La prima volta scarica i dati della lingua (2–4 MB), poi funziona anche senza internet.' },
+    { id: 'ocrLang', group: 'OCR (immagini e PDF scansionati)', type: 'select', def: 'auto',
+      options: [['auto', 'Come la lingua del testo'], ['it', 'Italiano'], ['en', 'Inglese'], ['fr', 'Francese'], ['es', 'Spagnolo'], ['de', 'Tedesco'], ['pt', 'Portoghese']],
+      label: 'Lingua dell’OCR', effect: 'Con la lingua giusta Tesseract legge meglio accenti e apostrofi. “Come la lingua del testo” usa la lingua scelta sopra (con Automatica: italiano e inglese).' },
+    { id: 'restoreMarks', group: 'Pagine salvate', type: 'toggle', def: true, label: 'Ritrova i segni sulle pagine salvate',
+      effect: 'Quando riapri una pagina web che hai salvato in archivio, i segni ricompaiono da soli, senza animazione. Si nascondono con il pulsante sulla pagina.' },
+
     { id: 'theme', group: 'Aspetto', type: 'select', def: 'night', options: [['night', 'Notte (come il video)'], ['paper', 'Carta (per studiare)']],
       label: 'Tema', effect: 'Colori della pagina e dei segni.' },
     { id: 'veil', group: 'Aspetto', type: 'toggle', def: true, label: 'Velo sul testo non letto', effect: 'Scurisce ciò che il ragno non ha ancora letto.' },
@@ -77,7 +86,7 @@
     'study': { label: 'Studio accurato', values: { mode: 'study', speed: 25, legs: 10, selectivity: 3, summaryLength: 25, variety: 6, lead: 4, theme: 'paper', veil: false, webDensity: 1 } },
     'summary': { label: 'Riassunto veloce', values: { mode: 'summary', speed: 120, legs: 6, selectivity: 4, summaryLength: 15, variety: 5, lead: 4, theme: 'paper', veil: false, webDensity: 0 } },
     'deep': { label: 'Lettura profonda', values: { mode: 'summary', speed: 10, legs: 14, selectivity: 2, summaryLength: 30, variety: 7, lead: 2, theme: 'night', veil: true, webDensity: 3 } },
-    'video': { label: 'Video TikTok', values: { mode: 'web', speed: 14, legs: 9, selectivity: 2, theme: 'night', veil: true, webDensity: 8, hud: true } }
+    'video': { label: 'Effetto video', values: { mode: 'web', speed: 14, legs: 9, selectivity: 2, theme: 'night', veil: true, webDensity: 8, hud: true } }
   };
 
   function defaults() {

@@ -7,7 +7,9 @@
  *  - i file dell'app sono serviti dal protocollo interno app:// (niente file:// generico);
  *  - si aprono solo i file scelti dall'utente; si scrive solo dove l'utente sceglie di salvare
  *    o nella cartella dati dell'app (impostazioni, archivio, rapporti delle scansioni);
- *  - la scansione del disco è in sola lettura (vedi scanner.js).
+ *  - la scansione del disco è in sola lettura (vedi scanner.js); l'unica azione che cambia qualcosa
+ *    sul disco è spostare nel Cestino i duplicati scelti dall'utente, dopo una conferma e molti controlli
+ *    (vedi scan-tools.js).
  */
 'use strict';
 const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Menu } = require('electron');
@@ -16,10 +18,13 @@ const fs = require('fs');
 const fsp = fs.promises;
 const { pathToFileURL } = require('url');
 const { Worker } = require('worker_threads');
+const scanTools = require('./scan-tools');
 
 const APP_ROOT = path.join(__dirname, '..');
-const SERVED = ['core', path.join('desktop', 'ui'), path.join('node_modules', 'pdfjs-dist'), path.join('build', 'icons')];
-const DOC_EXT = ['pdf', 'docx', 'docm', 'dotx', 'doc', 'odt', 'ott', 'odp', 'ods', 'pptx', 'pptm', 'ppsx', 'xlsx', 'xlsm', 'epub', 'rtf', 'html', 'htm', 'xhtml', 'md', 'markdown', 'txt', 'text', 'log', 'srt', 'vtt', 'csv', 'tsv'];
+const SERVED = ['core', path.join('desktop', 'ui'), path.join('node_modules', 'pdfjs-dist'), path.join('node_modules', 'tesseract.js', 'dist'),
+  path.join('node_modules', 'tesseract.js-core'), path.join('build', 'icons')];
+const DOC_EXT = ['pdf', 'docx', 'docm', 'dotx', 'doc', 'odt', 'ott', 'odp', 'ods', 'pptx', 'pptm', 'ppsx', 'xlsx', 'xlsm', 'epub', 'rtf', 'html', 'htm', 'xhtml', 'md', 'markdown', 'txt', 'text', 'log', 'srt', 'vtt', 'csv', 'tsv',
+  'png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'];
 const MAX_OPEN_BYTES = 300 * 1024 * 1024;
 
 protocol.registerSchemesAsPrivileged([
@@ -154,15 +159,46 @@ ipcMain.handle('url:fetch', async (_e, url) => {
   return { html, url: res.url || url };
 });
 
+function safeFileName(name, fallback) {
+  const n = path.basename(String(name || '')).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim();
+  return n || fallback;
+}
 ipcMain.handle('file:save', async (_e, { name, content, mime }) => {
+  name = safeFileName(name, 'word-crawler.txt');
   const ext = path.extname(name).slice(1) || 'txt';
   const r = await dialog.showSaveDialog(win, {
     title: 'Salva',
     defaultPath: path.join(app.getPath('documents'), name),
-    filters: [{ name: (mime || ext).toUpperCase(), extensions: [ext] }, { name: 'Tutti i file', extensions: ['*'] }]
+    filters: [{ name: ext.toUpperCase(), extensions: [ext] }, { name: 'Tutti i file', extensions: ['*'] }]
   });
   if (r.canceled || !r.filePath) return false;
-  await fsp.writeFile(r.filePath, content, 'utf8');
+  // testo (sunti, rapporti) oppure byte (documenti Word)
+  if (content instanceof Uint8Array) await fsp.writeFile(r.filePath, Buffer.from(content.buffer, content.byteOffset, content.byteLength));
+  else await fsp.writeFile(r.filePath, String(content), 'utf8');
+  return true;
+});
+
+// PDF del documento segnato: la pagina HTML viene stampata da una finestra nascosta, senza script
+ipcMain.handle('export:pdf', async (_e, { html, name }) => {
+  if (typeof html !== 'string' || html.length > 80 * 1024 * 1024) throw new Error('Documento non valido');
+  const r = await dialog.showSaveDialog(win, {
+    title: 'Salva il PDF',
+    defaultPath: path.join(app.getPath('documents'), safeFileName(name, 'documento segnato.pdf')),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  });
+  if (r.canceled || !r.filePath) return false;
+  const tmp = await ensureDir(userDir('tmp'));
+  const file = path.join(tmp, 'stampa-' + Date.now() + '.html');
+  await fsp.writeFile(file, html, 'utf8');
+  const pw = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false } });
+  try {
+    await pw.loadFile(file);
+    const pdf = await pw.webContents.printToPDF({ printBackground: true, pageSize: 'A4', margins: { marginType: 'default' } });
+    await fsp.writeFile(r.filePath, pdf);
+  } finally {
+    pw.destroy();
+    fsp.rm(file, { force: true }).catch(() => {});
+  }
   return true;
 });
 
@@ -262,7 +298,12 @@ ipcMain.handle('scan:start', async (event, opts) => {
   scanWorker.on('message', async (m) => {
     if (m.type === 'done') {
       m.report.id = id;
-      try { await fsp.writeFile(path.join(dir, 'rapporto.json'), JSON.stringify(m.report), 'utf8'); } catch (e) { /* il rapporto resta comunque in memoria */ }
+      try {
+        await fsp.writeFile(path.join(dir, 'rapporto.json'), JSON.stringify(m.report), 'utf8');
+        // scheda breve, per l'elenco delle scansioni da confrontare
+        await fsp.writeFile(path.join(dir, 'scheda.json'), JSON.stringify({ id, root: m.report.root, finishedAt: m.report.finishedAt, files: m.report.totals.files,
+          bytes: m.report.totals.bytes, dirs: m.report.totals.dirs, partial: m.report.partial, csv: !!m.report.csvPath }), 'utf8');
+      } catch (e) { /* il rapporto resta comunque in memoria */ }
     }
     if (!sender.isDestroyed()) sender.send('scan:event', m);
     if (m.type === 'done' || m.type === 'error') { const w = scanWorker; scanWorker = null; if (w) w.terminate(); }
@@ -271,6 +312,59 @@ ipcMain.handle('scan:start', async (event, opts) => {
   return id;
 });
 ipcMain.handle('scan:cancel', () => { if (scanWorker) scanWorker.postMessage({ type: 'cancel' }); return true; });
+
+// rapporti salvati nella cartella dell'app
+function scanDir(id) {
+  if (typeof id !== 'string' || !/^[0-9T-]+Z?$/.test(id)) throw new Error('Scansione non valida');
+  return userDir('scans', id);
+}
+async function readReport(id) { return JSON.parse(await fsp.readFile(path.join(scanDir(id), 'rapporto.json'), 'utf8')); }
+function sameRoot(a, b) {
+  const n = (p) => path.resolve(String(p || '')).replace(/[\\/]+$/, '');
+  return process.platform === 'win32' || process.platform === 'darwin' ? n(a).toLowerCase() === n(b).toLowerCase() : n(a) === n(b);
+}
+ipcMain.handle('scan:history', async (_e, root) => {
+  const base = await ensureDir(userDir('scans'));
+  const out = [];
+  for (const id of await fsp.readdir(base)) {
+    let meta = null;
+    try { meta = JSON.parse(await fsp.readFile(path.join(base, id, 'scheda.json'), 'utf8')); } catch (e) {
+      // scansioni della versione 2.0: niente scheda, si legge il rapporto
+      try { const r = JSON.parse(await fsp.readFile(path.join(base, id, 'rapporto.json'), 'utf8')); meta = { id, root: r.root, finishedAt: r.finishedAt, files: r.totals.files, bytes: r.totals.bytes, partial: r.partial, csv: !!r.csvPath }; } catch (e2) { /* cartella incompleta */ }
+    }
+    if (meta && (!root || sameRoot(meta.root, root))) out.push(meta);
+  }
+  return out.sort((a, b) => String(b.finishedAt).localeCompare(String(a.finishedAt)));
+});
+ipcMain.handle('scan:compare', async (_e, oldId, newId) => {
+  const a = await readReport(oldId), b = await readReport(newId);
+  const res = scanTools.compareReports(a, b);
+  const csvA = path.join(scanDir(oldId), 'elenco-file.csv'), csvB = path.join(scanDir(newId), 'elenco-file.csv');
+  if (fs.existsSync(csvA) && fs.existsSync(csvB)) res.files = await scanTools.compareCsv(csvA, csvB);
+  else res.files = { skipped: 'Per confrontare file per file servono gli elenchi completi di entrambe le scansioni (opzione “Salva l’elenco completo dei file”).' };
+  return res;
+});
+// Duplicati nel Cestino: controlli (scan-tools.planTrash), conferma dell'utente, spostamento e registro
+ipcMain.handle('scan:trash', async (event, scanId, items) => {
+  const report = await readReport(scanId);
+  const sender = event.sender;
+  const plan = await scanTools.planTrash(report, items, (p) => { if (!sender.isDestroyed()) sender.send('scan:event', { type: 'trash-check', done: p.done, total: p.total }); });
+  if (!plan.ok.length) return { moved: [], failed: [], skipped: plan.skipped, bytes: 0, cancelled: false };
+  const mb = (plan.bytes / 1048576).toLocaleString('it-IT', { maximumFractionDigits: 1 });
+  const ans = await dialog.showMessageBox(win, {
+    type: 'warning',
+    title: 'Spostare nel Cestino?',
+    message: 'Spostare ' + plan.ok.length + (plan.ok.length === 1 ? ' file' : ' file') + ' nel Cestino (' + mb + ' MB)?',
+    detail: 'Ho controllato che ognuno sia identico byte per byte a una copia che resta al suo posto. I file finiscono nel Cestino e si possono ripristinare da lì.' +
+      (plan.skipped.length ? '\n\n' + plan.skipped.length + ' file non verranno toccati (non superano i controlli).' : ''),
+    buttons: ['Sposta nel Cestino', 'Annulla'], defaultId: 1, cancelId: 1, noLink: true
+  });
+  if (ans.response !== 0) return { moved: [], failed: [], skipped: plan.skipped, bytes: 0, cancelled: true };
+  const res = await scanTools.runTrash(plan, (p) => shell.trashItem(p), path.join(scanDir(scanId), 'cestino.log'));
+  res.skipped = plan.skipped;
+  res.log = path.join(scanDir(scanId), 'cestino.log');
+  return res;
+});
 ipcMain.handle('scan:export-csv', async (_e, csvPath) => {
   const scans = userDir('scans') + path.sep;
   if (typeof csvPath !== 'string' || !path.resolve(csvPath).startsWith(scans)) throw new Error('Elenco non disponibile');
@@ -287,7 +381,8 @@ ipcMain.handle('app:info', () => ({
   version: app.getVersion(),
   platform: process.platform,
   userData: app.getPath('userData'),
-  pdfjs: fs.existsSync(path.join(APP_ROOT, 'node_modules', 'pdfjs-dist', 'build', 'pdf.min.mjs'))
+  pdfjs: fs.existsSync(path.join(APP_ROOT, 'node_modules', 'pdfjs-dist', 'build', 'pdf.min.mjs')),
+  ocr: fs.existsSync(path.join(APP_ROOT, 'node_modules', 'tesseract.js', 'dist', 'tesseract.min.js'))
 }));
 
 // ------------------------------------------------------------------ avvio

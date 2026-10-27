@@ -287,6 +287,21 @@ async function scan(options, emit, isCancelled) {
     d.total += d.size;
     if (d.parent >= 0) dirs[d.parent].total += d.total;
   }
+  // albero delle cartelle per la mappa a riquadri e per il confronto tra scansioni:
+  // solo le cartelle che pesano almeno 1/50.000 del totale (al massimo 40.000), i genitori prima dei figli
+  const tree = { names: [], parent: [], total: [], own: [], files: [] };
+  const minTree = Math.max(1, rootDir.total / 50000);
+  const treeIdx = new Int32Array(dirs.length).fill(-1);
+  for (let i = 0; i < dirs.length && tree.names.length < 40000; i++) {
+    const d = dirs[i];
+    if (i > 0 && (d.total < minTree || d.depth > 12 || treeIdx[d.parent] < 0)) continue;
+    treeIdx[i] = tree.names.length;
+    tree.names.push(i === 0 ? root : d.name);
+    tree.parent.push(i === 0 ? -1 : treeIdx[d.parent]);
+    tree.total.push(d.total);
+    tree.own.push(d.size);
+    tree.files.push(d.files);
+  }
   const largestDirs = new Top(100, (a, b) => a.total > b.total);
   const emptyDirs = [];
   let emptyDirsCount = 0;
@@ -354,7 +369,7 @@ async function scan(options, emit, isCancelled) {
   emit({ type: 'phase', phase: 'report' });
   const sameNames = Array.from(names.values()).filter((n) => n.count > 1).sort((a, b) => b.count - a.count || b.bytes - a.bytes).slice(0, 200);
   const report = {
-    version: 1,
+    version: 2,
     root: root,
     startedAt: new Date(started).toISOString(),
     finishedAt: new Date().toISOString(),
@@ -375,10 +390,11 @@ async function scan(options, emit, isCancelled) {
     newest: newest.list(),
     longPaths: { count: longCount, paths: longPaths },
     errors: errors,
+    tree: tree,
     csvPath: o.csvPath || null,
     csvRows: csvRows
   };
   return report;
 }
 
-module.exports = { scan, extOf, categoryOf, CATEGORIES, DEFAULT_EXCLUDES };
+module.exports = { scan, hashFile, extOf, categoryOf, CATEGORIES, DEFAULT_EXCLUDES };
