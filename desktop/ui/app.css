@@ -156,6 +156,13 @@ body { padding-top: var(--wc-top, 52px); }
 .lb-stage { position: relative; height: calc(100vh - var(--wc-top, 52px) - 190px); min-height: 420px; border: 1px solid var(--wc-line); border-radius: 12px; overflow: hidden; background: #0b0b0e; }
 .lb-canvas { display: block; cursor: grab; touch-action: none; }
 .lb-canvas:active { cursor: grabbing; }
+.lb-mini { position: absolute; right: 10px; top: 10px; border: 1px solid var(--wc-line); border-radius: 6px; opacity: .75; pointer-events: none; }
+.lb-crumbs { position: absolute; left: 10px; top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; max-width: 60%;
+  background: rgba(11, 11, 14, .82); border: 1px solid var(--wc-line); border-radius: 6px; padding: 4px 8px; font-size: 12.5px; }
+.lb-crumb-x { margin-left: 6px; color: var(--wc-mute); }
+.lb-stage.lb-light .lb-crumbs { background: rgba(246, 243, 236, .9); color: #3a3730; }
+.lb-stage.lb-light .lb-legend { background: rgba(246, 243, 236, .9); color: #55514a; }
+.lb-stage.lb-light .lb-tip { background: #fffdf8; color: #22201b; border-color: #d8d2c4; }
 .lb-tip { position: absolute; pointer-events: none; background: var(--wc-panel); border: 1px solid var(--wc-line); border-radius: 6px; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
 .lb-legend { position: absolute; left: 10px; bottom: 8px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--wc-mute); background: rgba(11, 11, 14, .8); padding: 5px 9px; border-radius: 6px; pointer-events: none; }
 .lb-legend span { display: flex; align-items: center; gap: 5px; }

@@ -354,8 +354,8 @@ async function check(name, fn) {
   });
 
   await check('esportazioni della mappa: immagine e note Markdown', async () => {
-    await page.selectOption('.lb-maptools select', 'md');
-    await page.selectOption('.lb-maptools select', 'png');
+    await page.selectOption('.lb-maptools select:last-of-type', 'md');
+    await page.selectOption('.lb-maptools select:last-of-type', 'png');
     await waitFor(() => window.__saved.length >= 2);
     const saved = await page.evaluate(() => window.__saved.map((s) => s.name));
     assert.ok(saved.includes('mappa dei concetti.md') && saved.includes('mappa dei concetti.png'), saved.join(', '));
@@ -701,6 +701,70 @@ async function check(name, fn) {
     assert.ok(/risposte giuste su/.test(await page.textContent('.lb-card')), 'e il dettaglio');
     await shot('lib-15-esame.png');
     await page.click('.lb-grades .wc-btn:text-is("Chiudi")');
+  });
+
+  await check('mappa: le quattro disposizioni, i temi, la profondità e la mini-mappa', async () => {
+    await page.click('.lb-tabs [role="tab"]:text-is("Mappa dei concetti")');
+    await page.waitForSelector('.lb-map:not([hidden])');
+    assert.ok(await page.$('.lb-mini'), 'c’è la mini-mappa');
+    const pos = () => page.evaluate(() => window.__view.state().graph.nodes.slice(0, 30).map((n) => [Math.round(n.x), Math.round(n.y)]));
+
+    // ad albero: i concetti si ordinano per livello, su righe
+    const prima = await pos();
+    await page.selectOption('.lb-maptools select:nth-of-type(1)', 'tree');
+    await page.waitForTimeout(900);
+    const albero = await pos();
+    assert.ok(albero.some((p, i) => Math.abs(p[1] - prima[i][1]) > 20), 'la disposizione ad albero sposta i concetti');
+    const righe = new Set(albero.map((p) => p[1]));
+    assert.ok(righe.size <= albero.length / 2 + 2, 'i concetti si allineano su poche righe: ' + righe.size);
+    await shot('lib-16-albero.png');
+
+    // per padronanza: i saldi verso il centro
+    await page.selectOption('.lb-maptools select:nth-of-type(1)', 'mastery');
+    await page.waitForTimeout(900);
+    assert.ok((await pos()).some((p, i) => p[0] !== albero[i][0] || p[1] !== albero[i][1]), 'la disposizione per padronanza cambia le posizioni');
+
+    // a costellazione
+    await page.selectOption('.lb-maptools select:nth-of-type(1)', 'ring');
+    await page.waitForTimeout(900);
+    await shot('lib-17-costellazione.png');
+
+    // temi
+    await page.selectOption('.lb-maptools select:nth-of-type(2)', 'paper');
+    await page.waitForTimeout(200);
+    assert.ok(await page.$('.lb-stage.lb-light'), 'il tema carta schiarisce lo sfondo');
+    await shot('lib-18-tema-carta.png');
+    await page.selectOption('.lb-maptools select:nth-of-type(2)', 'blueprint');
+    await page.waitForTimeout(200);
+    assert.ok(!(await page.$('.lb-stage.lb-light')), 'blueprint torna scuro');
+    await page.selectOption('.lb-maptools select:nth-of-type(2)', 'night');
+
+    // profondità
+    await page.check('#lb-3d');
+    await page.waitForTimeout(200);
+    await page.uncheck('#lb-3d');
+    await page.selectOption('.lb-maptools select:nth-of-type(1)', 'force');
+    await page.waitForTimeout(400);
+  });
+
+  await check('doppio clic apre un concetto e gli porta vicino i suoi, col percorso per tornare', async () => {
+    await page.fill('.lb-maptools input[type="search"]', 'QAM');
+    await page.press('.lb-maptools input[type="search"]', 'Enter');
+    await waitFor(() => /QAM/.test((document.querySelector('.lb-panel .lb-title') || {}).textContent || ''), null, 15000);
+    // dove sta il concetto sullo schermo, adesso
+    await page.waitForTimeout(500);
+    const at = await page.evaluate(() => {
+      const st = window.__view.state();
+      const n = st.graph.nodes.find((x) => /QAM/i.test(x.label));
+      const r = document.querySelector('.lb-canvas').getBoundingClientRect();
+      return n ? { x: r.left + n.x * st.camera.k + st.camera.x, y: r.top + n.y * st.camera.k + st.camera.y } : null;
+    });
+    assert.ok(at, 'il concetto è sulla mappa');
+    await page.mouse.dblclick(at.x, at.y);
+    await waitFor(() => window.__view.state().trail.length >= 1, null, 10000);
+    const trail = await page.evaluate(() => window.__view.state().trail.map((t) => t.label));
+    assert.ok(/QAM/i.test(trail.join(' ')), 'il percorso ricorda dove sei stato: ' + trail.join(' › '));
+    assert.ok(await page.$('.lb-crumbs button'), 'e lo mostra');
   });
 
   await check('nessun errore nella pagina', () => { assert.deepStrictEqual(errs, []); });

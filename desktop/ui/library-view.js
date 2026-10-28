@@ -124,13 +124,21 @@
       el('option', { value: '', text: 'Esporta…' }), el('option', { value: 'png', text: 'Immagine (.png)' }),
       el('option', { value: 'md', text: 'Note Markdown (.md)' }), el('option', { value: 'json', text: 'Dati (.json)' })]);
     var suggBtn = el('button', { type: 'button', class: 'wc-btn lb-sugg-btn', hidden: 'hidden' });
+    var layoutSel = el('select', { 'aria-label': 'Come disporre i concetti' }, [
+      el('option', { value: 'force', text: 'A nuvola' }), el('option', { value: 'tree', text: 'Ad albero (dal generale allo specifico)' }),
+      el('option', { value: 'mastery', text: 'Per padronanza (i saldi al centro)' }), el('option', { value: 'ring', text: 'A costellazione' })]);
+    var themeSel = el('select', { 'aria-label': 'Tema della mappa' }, [
+      el('option', { value: 'night', text: 'Notte' }), el('option', { value: 'blueprint', text: 'Blueprint' }),
+      el('option', { value: 'paper', text: 'Carta' }), el('option', { value: 'code', text: 'Code' })]);
+    var threeD = el('input', { type: 'checkbox', id: 'lb-3d' });
     var fitBtn = el('button', { type: 'button', class: 'wc-btn', text: 'Inquadra', title: 'Mostra tutta la mappa (tasto 0)' });
     var shakeBtn = el('button', { type: 'button', class: 'wc-btn', text: 'Riordina', title: 'Rimescola i concetti e lasciali ridisporre (tasto R)' });
     var mapTools = el('div', { class: 'lb-maptools' }, [mapFind, labelList,
       el('label', { class: 'wc-check', for: 'lb-central' }, [onlyCentral, el('span', { text: 'Solo concetti centrali' })]),
       el('label', { class: 'wc-check', for: 'lb-multi' }, [onlyMulti, el('span', { text: 'Solo in più documenti' })]),
       el('label', { class: 'wc-check', for: 'lb-mastery' }, [byMastery, el('span', { text: 'Colora per padronanza' })]),
-      fitBtn, shakeBtn, suggBtn, exportSel]);
+      el('label', { class: 'wc-check', for: 'lb-3d' }, [threeD, el('span', { text: 'Profondità' })]),
+      layoutSel, themeSel, fitBtn, shakeBtn, suggBtn, exportSel]);
     var canvas = el('canvas', { class: 'lb-canvas', tabindex: '0', 'aria-label': 'Mappa dei concetti: trascina per spostarti, rotella per ingrandire, clic su un concetto per aprirlo' });
     var tip = el('div', { class: 'lb-tip', hidden: 'hidden' });
     var legend = el('div', { class: 'lb-legend' }, [
@@ -144,7 +152,9 @@
       el('span', {}, [el('i', { class: 'lb-line isa' }), document.createTextNode('è un tipo di')]),
       el('span', {}, [el('i', { class: 'lb-line def' }), document.createTextNode('nella definizione')]),
       el('span', {}, [el('i', { class: 'lb-line user' }), document.createTextNode('tuo collegamento')])]);
-    var stage = el('div', { class: 'lb-stage' }, [canvas, tip, legend]);
+    var crumbs = el('div', { class: 'lb-crumbs', hidden: 'hidden', 'aria-label': 'Dove sei' });
+    var mini = el('canvas', { class: 'lb-mini', width: '180', height: '120', 'aria-hidden': 'true' });
+    var stage = el('div', { class: 'lb-stage' }, [canvas, crumbs, mini, tip, legend]);
     var mapBox = el('div', { class: 'lb-map', hidden: 'hidden' }, [mapTools, stage]);
 
     // ripasso
@@ -870,6 +880,109 @@
       kick(0);
       drawSoon();
     }
+    /*
+     * Le disposizioni. Quella a nuvola è la simulazione di sempre; le altre calcolano una posizione
+     * di arrivo e lasciano che i concetti ci scivolino dentro, invece di saltarci.
+     *  - albero: i livelli del percorso di studio, dal generale (in alto) allo specifico (in basso);
+     *  - padronanza: cerchi concentrici, i concetti saldi al centro e i mai visti ai bordi;
+     *  - costellazione: un anello per ogni documento, così si vede a colpo d'occhio da dove viene cosa.
+     */
+    var layoutMode = 'force';
+    function applyLayout() {
+      var list = mapNodes.filter(visible);
+      if (!list.length) return;
+      if (layoutMode === 'force') { kick(0.9); return; }
+      if (layoutMode === 'tree') {
+        var lv = new Map();
+        var byId2 = new Map(mapNodes.map(function (n) { return [n.id, n]; }));
+        var parent = new Map();
+        mapEdges.forEach(function (e) {
+          if (e.type !== 'isa' && e.type !== 'ext') return;
+          var a = mapNodes[e.a], b = mapNodes[e.b];
+          if (!parent.has(a.id)) parent.set(a.id, b.id);
+        });
+        function depth(id, guard) {
+          if (lv.has(id)) return lv.get(id);
+          if (guard > 12) return 0;
+          var p2 = parent.get(id);
+          var d = p2 && p2 !== id && byId2.has(p2) ? depth(p2, guard + 1) + 1 : 0;
+          lv.set(id, d);
+          return d;
+        }
+        list.forEach(function (n) { depth(n.id, 0); });
+        var rows = new Map();
+        list.slice().sort(function (a, b) { return (lv.get(a.id) - lv.get(b.id)) || (b.weight - a.weight); })
+          .forEach(function (n) { var d = lv.get(n.id) || 0; if (!rows.has(d)) rows.set(d, []); rows.get(d).push(n); });
+        /*
+         * Un livello con cento concetti non è una riga lunga un chilometro: si avvolge su più righe,
+         * così ogni livello è un blocco largo quanto alto e la mappa resta leggibile.
+         */
+        var COLW = 150, ROWH = 54, GAPLV = 90;
+        var cols = Math.max(4, Math.min(14, Math.ceil(Math.sqrt(list.length * 1.6))));
+        var y = -200;
+        Array.from(rows.keys()).sort(function (a, b) { return a - b; }).forEach(function (d) {
+          var row = rows.get(d);
+          var lines = Math.ceil(row.length / cols);
+          var span = Math.min(cols, row.length) * COLW;
+          row.forEach(function (n, i) {
+            var cxi = i % cols, ryi = Math.floor(i / cols);
+            target(n, (cxi + 0.5) / Math.min(cols, row.length) * span - span / 2, y + ryi * ROWH);
+          });
+          y += lines * ROWH + GAPLV;
+        });
+      } else if (layoutMode === 'mastery') {
+        var withM = list.slice().sort(function (a, b) { return mast(b) - mast(a); });
+        var R = Math.sqrt(withM.length) * 46 + 80;
+        withM.forEach(function (n, i) {
+          var m = mast(n);
+          var r = (1 - m) * R + 40;
+          var a2 = (i * 2.399963) % (Math.PI * 2); // angolo aureo: niente righe o buchi
+          target(n, Math.cos(a2) * r, Math.sin(a2) * r);
+        });
+      } else if (layoutMode === 'ring') {
+        var groups = new Map();
+        list.forEach(function (n) {
+          var k = (n.docs && n.docs.length === 1) ? n.docs[0] : (n.docs && n.docs.length > 1 ? '·molti' : '·soli');
+          if (!groups.has(k)) groups.set(k, []);
+          groups.get(k).push(n);
+        });
+        var keys = Array.from(groups.keys()), G = keys.length;
+        var ringR = Math.sqrt(list.length) * 60 + 160;
+        keys.forEach(function (k, gi) {
+          var members = groups.get(k);
+          var ga = (gi / G) * Math.PI * 2;
+          var cx2 = k === '·molti' ? 0 : Math.cos(ga) * ringR, cy2 = k === '·molti' ? 0 : Math.sin(ga) * ringR;
+          var rr = Math.sqrt(members.length) * 24 + 30;
+          members.sort(function (a, b) { return b.weight - a.weight; }).forEach(function (n, i) {
+            var a3 = (i / members.length) * Math.PI * 2;
+            var d2 = i ? rr * Math.sqrt(i / members.length) : 0;
+            target(n, cx2 + Math.cos(a3) * d2, cy2 + Math.sin(a3) * d2);
+          });
+        });
+      }
+      alpha = 0;
+      moving = true;
+      kick(0);
+      setTimeout(function () { fit(); }, 420);
+    }
+    function mast(n) { return mastery && mastery[n.id] ? mastery[n.id][0] : 0; }
+    function target(n, x, y) { n.tx = x; n.ty = y; n.vx = 0; n.vy = 0; }
+    var moving = false;
+    // scivolata verso le posizioni di arrivo di una disposizione calcolata
+    function glide(dt) {
+      if (!moving) return;
+      var t = animate ? 1 - Math.pow(0.82, dt) : 1, still = true;
+      for (var i = 0; i < mapNodes.length; i++) {
+        var n = mapNodes[i];
+        if (n.tx == null) continue;
+        n.x += (n.tx - n.x) * t;
+        n.y += (n.ty - n.y) * t;
+        if (Math.abs(n.tx - n.x) > 0.4 || Math.abs(n.ty - n.y) > 0.4) still = false;
+        else { n.x = n.tx; n.y = n.ty; }
+      }
+      if (still) moving = false;
+    }
+
     function fit(now) {
       var list = mapNodes.filter(visible);
       if (!list.length || !W) return;
@@ -919,9 +1032,11 @@
       var dt = last ? Math.min(3, (ts - last) / 16.7) : 1;
       last = ts;
       clock += dt;
-      simulate(dt);
+      glide(dt);
+      if (layoutMode === 'force') simulate(dt);
       camera(dt);
       draw();
+      drawMini();
       running = true;
       raf = requestAnimationFrame(tick);
     }
@@ -1021,7 +1136,26 @@
       if (Math.abs(aim.k - tf.k) < 0.0005) tf.k = aim.k;
     }
 
-    var COL = { central: '#4a63ff', multi: '#b48cff', one: '#7d8597', isa: 'rgba(170,180,255,0.85)', def: 'rgba(63,216,255,0.55)', user: 'rgba(255,138,61,0.9)' };
+    /*
+     * I temi della mappa. Ognuno è un insieme di colori: sfondo, alone, concetti e collegamenti.
+     * "Carta" è chiaro, per stampare o per chi legge meglio su fondo bianco.
+     */
+    var THEMES = {
+      night: { bg: '#0b0b0e', glow: 'rgba(74,99,255,0.10)', grid: null, central: '#4a63ff', multi: '#b48cff', one: '#7d8597',
+        isa: 'rgba(170,180,255,0.85)', def: 'rgba(63,216,255,0.55)', user: 'rgba(255,138,61,0.9)', use: 'rgba(93,224,127,0.75)',
+        ext: 'rgba(180,140,255,0.9)', dep: 'rgba(231,176,90,0.7)', co: '170,180,255', label: '#d9d8e2', labelOn: '#ffffff', labelBg: 'rgba(11,11,14,0.75)' },
+      blueprint: { bg: '#071a2b', glow: 'rgba(80,170,255,0.12)', grid: 'rgba(130,190,255,0.10)', central: '#8ecbff', multi: '#b8e0ff', one: '#5a86a8',
+        isa: 'rgba(190,225,255,0.9)', def: 'rgba(140,200,255,0.6)', user: 'rgba(255,200,120,0.9)', use: 'rgba(150,240,200,0.8)',
+        ext: 'rgba(200,220,255,0.9)', dep: 'rgba(255,220,150,0.7)', co: '150,200,255', label: '#cfe6ff', labelOn: '#ffffff', labelBg: 'rgba(7,26,43,0.8)' },
+      paper: { bg: '#f6f3ec', glow: 'rgba(120,110,90,0.08)', grid: null, central: '#2b4ad6', multi: '#7a45c8', one: '#8a8578',
+        isa: 'rgba(60,70,150,0.8)', def: 'rgba(20,120,160,0.6)', user: 'rgba(200,90,20,0.9)', use: 'rgba(30,130,70,0.8)',
+        ext: 'rgba(110,60,170,0.9)', dep: 'rgba(170,120,20,0.8)', co: '90,95,120', label: '#3a3730', labelOn: '#15130e', labelBg: 'rgba(246,243,236,0.8)' },
+      code: { bg: '#11131a', glow: 'rgba(93,224,127,0.08)', grid: 'rgba(120,140,130,0.07)', central: '#5de07f', multi: '#3fd8ff', one: '#6b7280',
+        isa: 'rgba(160,230,180,0.85)', def: 'rgba(63,216,255,0.55)', user: 'rgba(255,170,90,0.9)', use: 'rgba(93,224,127,0.9)',
+        ext: 'rgba(180,140,255,0.9)', dep: 'rgba(231,176,90,0.7)', co: '120,200,150', label: '#cfd8d2', labelOn: '#ffffff', labelBg: 'rgba(17,19,26,0.78)' }
+    };
+    var theme = 'night';
+    var COL = THEMES.night;
     // padronanza: grigio (mai visto) -> ambra (in corso) -> verde (saldo)
     function masteryColor(m) {
       if (m <= 0) return '#55555f';
@@ -1033,17 +1167,30 @@
     function draw() {
       if (mapBox.hidden || !W) return;
       cx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      cx.fillStyle = '#0b0b0e';
+      cx.fillStyle = COL.bg;
       cx.fillRect(0, 0, W, H);
-      if (mapNodes.length) {
+      if (COL.grid) {
+        // carta millimetrata: aiuta a capire quanto si è ingranditi
+        var step = 40 * tf.k;
+        while (step && step < 18) step *= 4;
+        if (step > 8 && step < 400) {
+          cx.strokeStyle = COL.grid;
+          cx.lineWidth = 1;
+          cx.beginPath();
+          for (var gx2 = ((tf.x % step) + step) % step; gx2 < W; gx2 += step) { cx.moveTo(gx2, 0); cx.lineTo(gx2, H); }
+          for (var gy2 = ((tf.y % step) + step) % step; gy2 < H; gy2 += step) { cx.moveTo(0, gy2); cx.lineTo(W, gy2); }
+          cx.stroke();
+        }
+      }
+      if (mapNodes.length && COL.glow) {
         var glow = cx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.7);
-        glow.addColorStop(0, 'rgba(74,99,255,0.10)');
-        glow.addColorStop(1, 'rgba(11,11,14,0)');
+        glow.addColorStop(0, COL.glow);
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
         cx.fillStyle = glow;
         cx.fillRect(0, 0, W, H);
       }
       if (!mapNodes.length) {
-        cx.fillStyle = '#9b9aa7'; cx.font = '14px system-ui, sans-serif'; cx.textAlign = 'center';
+        cx.fillStyle = COL.label; cx.font = '14px system-ui, sans-serif'; cx.textAlign = 'center';
         cx.fillText(graph ? 'Nessun concetto ancora: aggiungi qualche documento.' : 'Preparo la mappa…', W / 2, H / 2);
         return;
       }
@@ -1053,6 +1200,7 @@
       if (focusI !== undefined && focusI !== null && mapNodes[focusI]) { near.add(focusI); mapNodes[focusI].nb.forEach(function (j) { near.add(j); }); }
       var find = g.WCText.fold(mapFind.value.trim());
       var vis = mapNodes.map(visible);
+      vis2 = vis;
       function sx(x) { return x * tf.k + tf.x; }
       function sy(y) { return y * tf.k + tf.y; }
       // collegamenti
@@ -1063,8 +1211,8 @@
         var dim = near.size && !hot;
         cx.beginPath();
         cx.moveTo(sx(A.x), sy(A.y)); cx.lineTo(sx(B.x), sy(B.y));
-        if (e.type === 'co') cx.strokeStyle = 'rgba(170,180,255,' + (dim ? 0.05 : (hot ? 0.6 : 0.1 + 0.35 * e.w)) + ')';
-        else cx.strokeStyle = dim ? 'rgba(120,120,140,0.12)' : COL[e.type];
+        if (e.type === 'co') cx.strokeStyle = 'rgba(' + COL.co + ',' + (dim ? 0.05 : (hot ? 0.6 : 0.1 + 0.35 * e.w)) + ')';
+        else cx.strokeStyle = dim ? 'rgba(120,120,140,0.12)' : (COL[e.type] || COL.def);
         cx.lineWidth = (e.type === 'co' ? 0.6 + 1.6 * e.w : 1.6) * (hot ? 1.5 + 0.35 * Math.sin(clock * 0.1) : 1);
         cx.setLineDash(e.type === 'user' ? [5, 4] : (hot && e.type !== 'co' ? [7, 5] : []));
         // sul concetto a fuoco il tratteggio scorre verso di lui: si vede da dove arriva il collegamento
@@ -1076,6 +1224,7 @@
       cx.lineDashOffset = 0;
       // concetti
       var labels = [];
+      var depthOn = threeD.checked;
       var ease = animate ? 0.18 : 1;
       var breathe = animate ? Math.sin(clock * 0.035) : 0;
       var byM = byMastery.checked && mastery;
@@ -1086,7 +1235,9 @@
         if (!vis[i] && n.rNow <= 0.3) return;
         var x = sx(n.x), y = sy(n.y);
         var zoom = Math.max(0.6, Math.min(tf.k, 2));
-        var r = n.rNow * zoom;
+        // profondità: l'importanza diventa distanza, i concetti centrali vengono avanti
+        var z = depthOn ? 0.72 + 0.56 * Math.sqrt((n.weight || 0) / maxW) : 1;
+        var r = n.rNow * zoom * z;
         if (x < -40 - r || y < -40 - r || x > W + 40 + r || y > H + 40 + r) return;
         var dim = near.size && !near.has(i);
         var match = find && g.WCText.fold(n.label).indexOf(find) >= 0;
@@ -1103,7 +1254,7 @@
           cx.fillStyle = due ? '#d68e3a' : (match ? '#5de07f' : '#ffffff');
           cx.fill();
         }
-        cx.globalAlpha = n.aNow;
+        cx.globalAlpha = n.aNow * (depthOn ? 0.45 + 0.55 * z / 1.28 : 1);
         cx.beginPath(); cx.arc(x, y, r + (animate && !n.dragged ? breathe * 0.25 : 0), 0, Math.PI * 2);
         cx.fillStyle = byM ? masteryColor(m) : (n.central ? COL.central : (n.multi ? COL.multi : COL.one));
         cx.fill();
@@ -1112,6 +1263,29 @@
         var important = i < 40 || r >= 9 || near.has(i) || match || i === sel;
         if (important && vis[i] && !(dim && !match)) labels.push([n, x, y, r, i === sel || i === hover || match]);
       });
+      // il laccio mentre lo disegni, e i concetti già scelti
+      if (picked.size) {
+        cx.strokeStyle = '#5de07f';
+        cx.lineWidth = 2;
+        picked.forEach(function (i2) {
+          var n2 = mapNodes[i2];
+          if (!vis[i2]) return;
+          cx.beginPath();
+          cx.arc(sx(n2.x), sy(n2.y), (n2.rNow || n2.r) * Math.max(0.6, Math.min(tf.k, 2)) + 5, 0, Math.PI * 2);
+          cx.stroke();
+        });
+      }
+      if (lasso && lasso.pts.length > 1) {
+        cx.strokeStyle = '#5de07f';
+        cx.lineWidth = 1.5;
+        cx.setLineDash([6, 4]);
+        cx.beginPath();
+        cx.moveTo(lasso.pts[0][0], lasso.pts[0][1]);
+        for (var lp = 1; lp < lasso.pts.length; lp++) cx.lineTo(lasso.pts[lp][0], lasso.pts[lp][1]);
+        cx.closePath();
+        cx.stroke();
+        cx.setLineDash([]);
+      }
       // etichette senza sovrapporsi
       var taken = [];
       cx.font = '600 12px system-ui, sans-serif';
@@ -1123,9 +1297,9 @@
         if (!L[4] && taken.some(function (b) { return !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]); })) return;
         taken.push(box);
         cx.globalAlpha = Math.max(0, Math.min(1, n.aNow));
-        cx.fillStyle = 'rgba(11,11,14,0.75)';
+        cx.fillStyle = COL.labelBg;
         cx.fillRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
-        cx.fillStyle = L[4] ? '#ffffff' : '#d9d8e2';
+        cx.fillStyle = L[4] ? COL.labelOn : COL.label;
         cx.fillText(n.label, x, y);
         cx.globalAlpha = 1;
       });
@@ -1140,6 +1314,34 @@
       cx.fillStyle = COL.isa;
       cx.fill();
     }
+
+    /* La mini-mappa: tutta la mappa in piccolo, con il riquadro di quello che stai guardando. */
+    function drawMini() {
+      if (mini.hidden || !mapNodes.length) return;
+      var mc = mini.getContext('2d'), MW = mini.width, MH = mini.height;
+      mc.clearRect(0, 0, MW, MH);
+      mc.fillStyle = COL.bg;
+      mc.fillRect(0, 0, MW, MH);
+      var xs = [], ys = [];
+      mapNodes.forEach(function (n, i) { if (vis2[i]) { xs.push(n.x); ys.push(n.y); } });
+      if (!xs.length) return;
+      var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+      var k = Math.min((MW - 8) / Math.max(40, x1 - x0), (MH - 8) / Math.max(40, y1 - y0));
+      var ox = MW / 2 - (x0 + x1) / 2 * k, oy = MH / 2 - (y0 + y1) / 2 * k;
+      mapNodes.forEach(function (n, i) {
+        if (!vis2[i]) return;
+        mc.fillStyle = n.central ? COL.central : (n.multi ? COL.multi : COL.one);
+        mc.globalAlpha = 0.8;
+        mc.fillRect(n.x * k + ox - 1, n.y * k + oy - 1, 2, 2);
+      });
+      // il riquadro di quello che si vede ora
+      mc.globalAlpha = 1;
+      mc.strokeStyle = COL.labelOn;
+      mc.lineWidth = 1;
+      var vx = (-tf.x / tf.k) * k + ox, vy = (-tf.y / tf.k) * k + oy;
+      mc.strokeRect(vx, vy, (W / tf.k) * k, (H / tf.k) * k);
+    }
+    var vis2 = [];
     function hit(px, py) {
       var best = null, bd = Infinity;
       for (var i = 0; i < mapNodes.length; i++) {
@@ -1152,8 +1354,11 @@
       return best;
     }
     var drag = null, moved = [];
+    var lasso = null, picked = new Set();
     canvas.addEventListener('pointerdown', function (e) {
       var r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+      // con Maiusc premuto si cerchia a mano libera un gruppo di concetti
+      if (e.shiftKey) { lasso = { pts: [[px, py]] }; canvas.setPointerCapture(e.pointerId); drawSoon(); return; }
       var i = hit(px, py);
       fling = null;
       drag = { i: i, sx: px, sy: py, tx: aim.x, ty: aim.y, moved: false, lx: px, ly: py, vx: 0, vy: 0 };
@@ -1163,13 +1368,26 @@
     });
     canvas.addEventListener('pointermove', function (e) {
       var r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+      if (lasso) {
+        var last = lasso.pts[lasso.pts.length - 1];
+        if (Math.abs(px - last[0]) + Math.abs(py - last[1]) > 4) lasso.pts.push([px, py]);
+        drawSoon();
+        return;
+      }
       if (drag) {
         if (Math.abs(px - drag.sx) + Math.abs(py - drag.sy) > 3) drag.moved = true;
         drag.vx = px - drag.lx; drag.vy = py - drag.ly;
         drag.lx = px; drag.ly = py;
         if (drag.i !== null) {
           var n = mapNodes[drag.i];
-          n.x = (px - tf.x) / tf.k; n.y = (py - tf.y) / tf.k; n.dragged = true; n.vx = 0; n.vy = 0;
+          var nx = (px - tf.x) / tf.k, ny = (py - tf.y) / tf.k;
+          if (picked.size && picked.has(drag.i)) {
+            var dx2 = nx - n.x, dy2 = ny - n.y;
+            picked.forEach(function (k2) { var m2 = mapNodes[k2]; m2.x += dx2; m2.y += dy2; m2.dragged = true; m2.vx = 0; m2.vy = 0; if (!moved.some(function (q) { return q.id === m2.id; })) moved.push({ id: m2.id, x: m2.x, y: m2.y }); });
+            moved.forEach(function (q) { var m3 = mapNodes[nodeIdx.get(q.id)]; if (m3) { q.x = m3.x; q.y = m3.y; } });
+            clearTimeout(posTimer);
+            posTimer = setTimeout(savePositions, 600);
+          } else { n.x = nx; n.y = ny; n.dragged = true; n.vx = 0; n.vy = 0; }
           kick(0.45); // i vicini si riassestano mentre lo sposti
         } else { aim.x = drag.tx + px - drag.sx; aim.y = drag.ty + py - drag.sy; tf.x = aim.x; tf.y = aim.y; }
         drawSoon();
@@ -1189,6 +1407,20 @@
       if (h !== null) { tip.style.left = (px + 14) + 'px'; tip.style.top = (py + 10) + 'px'; }
     });
     canvas.addEventListener('pointerup', function () {
+      if (lasso) {
+        var poly = lasso.pts;
+        lasso = null;
+        picked = new Set();
+        if (poly.length > 4) {
+          mapNodes.forEach(function (n, i) {
+            if (!visible(n)) return;
+            if (inside(poly, n.x * tf.k + tf.x, n.y * tf.k + tf.y)) picked.add(i);
+          });
+        }
+        if (picked.size) toast(plural(picked.size, 'concetto scelto', 'concetti scelti') + '. Trascinane uno per spostarli tutti; Esc per lasciare.');
+        drawSoon();
+        return;
+      }
       var d = drag;
       drag = null;
       if (!d) return;
@@ -1201,6 +1433,15 @@
       } else if (d.i !== null) openConcept(mapNodes[d.i].id);
       else if (!d.moved && selected && selected.concept) { selected = null; renderOverview(); drawSoon(); }
     });
+    // punto dentro un poligono (regola pari-dispari)
+    function inside(poly, x, y) {
+      var c = false;
+      for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        var xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+        if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+      }
+      return c;
+    }
     var posTimer = 0;
     function savePositions() {
       var list = moved; moved = [];
@@ -1216,7 +1457,52 @@
       kick(0.08);
       drawSoon();
     }, { passive: false });
-    canvas.addEventListener('dblclick', function () { fit(); });
+    /*
+     * Doppio clic su un concetto: si apre, e i suoi vicini vengono tirati a sé — così si esplora il
+     * grafo un passo alla volta invece di guardarlo tutto insieme. Doppio clic sul vuoto: inquadra.
+     */
+    canvas.addEventListener('dblclick', function (e) {
+      var r = canvas.getBoundingClientRect(), i = hit(e.clientX - r.left, e.clientY - r.top);
+      if (i === null) { fit(); return; }
+      expand(i);
+    });
+    function expand(i) {
+      var n = mapNodes[i];
+      pushCrumb(n);
+      openConcept(n.id);
+      var ring = n.nb.slice(0, 24);
+      ring.forEach(function (j, k) {
+        var a = (k / Math.max(1, ring.length)) * Math.PI * 2;
+        var m = mapNodes[j];
+        if (m.dragged || m.pinned) return;
+        target(m, n.x + Math.cos(a) * 130, n.y + Math.sin(a) * 130);
+      });
+      target(n, n.x, n.y);
+      moving = true;
+      focusNode(n.id);
+      kick(0.1);
+    }
+    // il percorso: i concetti che hai aperto, per tornare indietro
+    var trail = [];
+    function pushCrumb(n) {
+      trail = trail.filter(function (x) { return x.id !== n.id; });
+      trail.push({ id: n.id, label: n.label });
+      if (trail.length > 8) trail.shift();
+      paintCrumbs();
+    }
+    function paintCrumbs() {
+      crumbs.hidden = trail.length < 2;
+      crumbs.textContent = '';
+      trail.forEach(function (x, i) {
+        if (i) crumbs.appendChild(el('span', { class: 'wc-note', text: ' › ' }));
+        var b = el('button', { type: 'button', class: 'wc-link', text: x.label });
+        b.addEventListener('click', function () { trail = trail.slice(0, i + 1); paintCrumbs(); focusNode(x.id); openConcept(x.id); });
+        crumbs.appendChild(b);
+      });
+      var clr = el('button', { type: 'button', class: 'wc-link lb-crumb-x', text: '×', title: 'Svuota il percorso', 'aria-label': 'Svuota il percorso' });
+      clr.addEventListener('click', function () { trail = []; paintCrumbs(); });
+      if (trail.length) crumbs.appendChild(clr);
+    }
     function zoomBy(f) {
       var k = Math.max(0.05, Math.min(6, aim.k * f));
       aim.x = W / 2 - (W / 2 - aim.x) * k / aim.k; aim.y = H / 2 - (H / 2 - aim.y) * k / aim.k; aim.k = k;
@@ -1237,7 +1523,7 @@
       else if (e.key === '+' || e.key === '=') zoomBy(1.25);
       else if (e.key === '-') zoomBy(1 / 1.25);
       else if (e.key === 'r' || e.key === 'R') shake();
-      else if (e.key === 'Escape') { selected = null; renderOverview(); drawSoon(); }
+      else if (e.key === 'Escape') { picked = new Set(); selected = null; renderOverview(); drawSoon(); }
     });
     fitBtn.addEventListener('click', function () { fit(); });
     shakeBtn.addEventListener('click', shake);
@@ -1248,6 +1534,18 @@
       legend.classList.toggle('lb-legend-m', byMastery.checked);
       drawSoon();
     });
+    layoutSel.addEventListener('change', function () {
+      layoutMode = layoutSel.value;
+      if (layoutMode === 'mastery' && !mastery) refreshMastery().then(applyLayout);
+      else applyLayout();
+    });
+    themeSel.addEventListener('change', function () {
+      theme = themeSel.value;
+      COL = THEMES[theme] || THEMES.night;
+      stage.classList.toggle('lb-light', theme === 'paper');
+      drawSoon();
+    });
+    threeD.addEventListener('change', drawSoon);
     mapFind.addEventListener('input', function () { kick(0.02); drawSoon(); });
     var lastFind = '';
     function findOnMap() {
@@ -2113,7 +2411,10 @@
       search: function (q) { qInput.value = q; return search(); },
       openConcept: openConcept, showView: showView, toast: function (t) { toast(t); },
       study: function () { showView('study'); return session ? null : startSession(); },
-      state: function () { return { docs: docs.slice(), importing: importing, queue: queue.length, graph: graph, view: view, study: studyStats, session: session ? session.length : 0, animated: animate }; },
+      state: function () {
+        return { docs: docs.slice(), importing: importing, queue: queue.length, graph: graph, view: view, study: studyStats,
+          session: session ? session.length : 0, animated: animate, camera: { x: tf.x, y: tf.y, k: tf.k }, layout: layoutMode, theme: theme, trail: trail.slice() };
+      },
       ready: function () { return new Promise(function (res) { (function wait() { if (!importing && !queue.length) res(); else setTimeout(wait, 100); })(); }); }
     };
   }
