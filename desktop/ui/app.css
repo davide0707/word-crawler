@@ -56,6 +56,9 @@ body { padding-top: var(--wc-top, 52px); }
 
 /* mappa a riquadri */
 .sc-tm-bar { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; flex-wrap: wrap; }
+.sc-tm-bar select { width: auto; min-width: 180px; flex: 0 0 auto; }
+.sc-tm-bar .sc-crumbs { flex: 1 1 200px; min-width: 0; }
+.sc-tolib { margin-left: 10px; }
 .sc-crumbs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; flex: 1; min-width: 0; font-size: 13px; }
 .sc-crumbs .wc-link { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sc-crumb-sep { color: var(--wc-mute); }

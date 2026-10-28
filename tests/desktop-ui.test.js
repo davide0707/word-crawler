@@ -105,7 +105,9 @@ function serve() {
         brains: async () => ({ active: 'b-0000000000000001', brains: [{ id: 'b-0000000000000001', name: 'La mia libreria', icon: 'libro', color: '#4a63ff', tags: [], created: '2026-10-28T07:00:00.000Z', updated: '2026-10-28T07:00:00.000Z', docs: 0, studied: 0 }] }),
         brainCreate: async () => ({ id: 'b-0000000000000002', name: 'Nuovo cervello' }), brainUpdate: async (o) => o, brainUse: async () => true,
         brainDuplicate: async () => ({ id: 'b-0000000000000003', name: 'copia' }), brainDelete: async () => ({ active: 'b-0000000000000001' }),
-        brainExport: async () => null, brainImport: async () => null },
+        brainExport: async () => null, brainImport: async () => null,
+        countAll: async () => ({ brains: 1, docs: 0, studied: 0 }), backupAll: async () => null, eraseAll: async () => ({ active: 'b-0000000000000001', brains: 1 }),
+        addScanned: async (dir) => ({ root: dir, files: [], skipped: 0, truncated: false }) },
       showItem: async () => true,
       openExternal: async () => true,
       info: async () => ({ version: '2.4.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
@@ -167,6 +169,15 @@ function serve() {
   await page.waitForSelector('canvas.sc-tm');
   const box = await page.locator('canvas.sc-tm').boundingBox();
   await page.screenshot({ path: path.join(SHOTS, '06b-mappa.png') });
+  // la vista a raggiera
+  const viste = await page.$('.sc-tm-bar select');
+  if (viste) {
+    await page.selectOption('.sc-tm-bar select', 'sb');
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: path.join(SHOTS, '06d-raggiera.png') });
+    await page.selectOption('.sc-tm-bar select', 'tm');
+    await page.waitForTimeout(200);
+  } else fail('manca la scelta della vista della mappa');
   const crumbs0 = await page.locator('.sc-crumbs .wc-link').count();
   // clic su punti diversi finché si trova una cartella con sottocartelle
   let entered = false;

@@ -2747,6 +2747,13 @@
       search: function (q) { qInput.value = q; return search(); },
       openConcept: openConcept, showView: showView, toast: function (t) { toast(t); },
       study: function () { showView('study'); return session ? null : startSession(); },
+      // i file che arrivano dallo scanner: stessa coda dell'importazione normale
+      addScannedFiles: function (r) {
+        if (!r || !r.files || !r.files.length) { toast('In quella cartella non ho trovato documenti da leggere.'); return; }
+        if (r.truncated) toast('Troppi file: ne leggo i primi ' + r.files.length + '.');
+        enqueue(r.files);
+        toast(plural(r.files.length, 'documento', 'documenti') + ' da «' + r.root + '» in lettura.');
+      },
       state: function () {
         return { docs: docs.slice(), importing: importing, queue: queue.length, graph: graph, view: view, study: studyStats,
           session: session ? session.length : 0, animated: animate, camera: { x: tf.x, y: tf.y, k: tf.k }, layout: layoutMode, theme: theme, trail: trail.slice() };

@@ -66,7 +66,7 @@ async function check(name, fn) {
       'library:stat', 'library:edits-load', 'library:edits-save', 'library:study-load', 'library:study-save',
       'library:brains', 'library:brain-create', 'library:brain-update', 'library:brain-use', 'library:brain-duplicate',
       'library:brain-delete', 'library:brain-export', 'library:brain-import',
-      'library:backup-all', 'library:count-all', 'library:erase-all']
+      'library:backup-all', 'library:count-all', 'library:erase-all', 'library:add-scanned']
       .forEach((c) => assert.ok(handlers[c], 'manca ' + c));
   });
   await check('impostazioni: salvataggio e lettura', async () => {
@@ -374,6 +374,20 @@ async function check(name, fn) {
     const rest = (await handlers['library:brains']({})).brains;
     for (const b of rest.slice(1)) await handlers['library:brain-delete']({}, b.id);
     await assert.rejects(() => handlers['library:brain-delete']({}, rest[0].id), /almeno un cervello/);
+  });
+  await check('dallo scanner al cervello: solo cartelle già scansionate', async () => {
+    // senza scansione non si può pescare niente
+    await assert.rejects(() => handlers['library:add-scanned']({}, LIB), /scansione/i);
+    await handlers['scan:start']({}, { root: LIB, dups: 'off' });
+    await new Promise((r) => setTimeout(r, 50));
+    const got = await handlers['library:add-scanned']({}, LIB);
+    assert.strictEqual(got.root, LIB);
+    assert.ok(got.files.length >= 1, 'trova i documenti: ' + got.files.length);
+    assert.ok(got.files.every((f) => f.path.startsWith(LIB)), 'tutti dentro la cartella');
+    // e non si può uscire dalla radice scansionata
+    await assert.rejects(() => handlers['library:add-scanned']({}, os.tmpdir()), /non fa parte|non trovata/i);
+    await assert.rejects(() => handlers['library:add-scanned']({}, 'relativo'), /non valido/);
+    await assert.rejects(() => handlers['library:add-scanned']({}, path.join(LIB, 'niente-qui')), /non trovata/);
   });
   await check('libreria: nessun file della cartella è stato modificato', () => {
     assert.strictEqual(filesOf(), before);

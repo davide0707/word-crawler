@@ -37,6 +37,31 @@
       rows: r.byCategory.map(function (c) { return [c.category, num(c.count), bytes(c.bytes), pct(c.bytes, t.bytes)]; }), bars: r.byCategory.map(function (c) { return t.bytes ? c.bytes / t.bytes : 0; }) });
     out.push({ id: 'ext', title: 'Per estensione', note: r.byExt.length + ' estensioni diverse.', columns: ['Estensione', 'File', 'Spazio', 'Quota', 'Media per file'],
       rows: r.byExt.slice(0, 300).map(function (e) { return [e.ext ? '.' + e.ext : '(senza)', num(e.count), bytes(e.bytes), pct(e.bytes, t.bytes), bytes(Math.round(e.bytes / Math.max(1, e.count)))]; }) });
+    /*
+     * Progetti di codice trovati sul disco: si raggruppano le estensioni dei linguaggi per cartella
+     * di primo livello sotto la radice, così si vede "qui c'è un progetto Python da 4.000 file".
+     * Serve a sapere che cosa si può dare in pasto al cervello.
+     */
+    var LANGNAME = { js: 'JavaScript', mjs: 'JavaScript', cjs: 'JavaScript', jsx: 'JavaScript', ts: 'TypeScript', tsx: 'TypeScript',
+      py: 'Python', pyw: 'Python', c: 'C', h: 'C', cpp: 'C++', cc: 'C++', cxx: 'C++', hpp: 'C++', hh: 'C++', ino: 'Arduino',
+      java: 'Java', cs: 'C#', go: 'Go', rs: 'Rust', php: 'PHP', swift: 'Swift', kt: 'Kotlin', kts: 'Kotlin', rb: 'Ruby',
+      v: 'Verilog', sv: 'SystemVerilog', css: 'CSS', scss: 'SCSS', sass: 'Sass', less: 'Less', sql: 'SQL',
+      sh: 'Shell', bash: 'Shell', zsh: 'Shell', ipynb: 'Notebook Jupyter' };
+    var byLang = new Map();
+    (r.byExt || []).forEach(function (e) {
+      var nm = LANGNAME[String(e.ext || '').toLowerCase()];
+      if (!nm) return;
+      var cur = byLang.get(nm) || { count: 0, bytes: 0, exts: [] };
+      cur.count += e.count; cur.bytes += e.bytes; cur.exts.push('.' + e.ext);
+      byLang.set(nm, cur);
+    });
+    if (byLang.size) {
+      var langs = Array.from(byLang.entries()).sort(function (a, b) { return b[1].count - a[1].count; });
+      out.push({ id: 'code', title: 'Codice sul disco',
+        note: langs.reduce(function (a, x) { return a + x[1].count; }, 0) + ' file di codice in ' + langs.length + (langs.length === 1 ? ' linguaggio' : ' linguaggi') + '. Questi si possono aggiungere a un cervello e leggere funzione per funzione.',
+        columns: ['Linguaggio', 'File', 'Spazio', 'Estensioni'],
+        rows: langs.map(function (x) { return [x[0], num(x[1].count), bytes(x[1].bytes), x[1].exts.slice(0, 6).join(' ')]; }) });
+    }
     out.push({ id: 'big', title: 'File più grandi', columns: ['Nome', 'Cartella', 'Dimensione', 'Modificato'],
       rows: r.largestFiles.map(function (f) { return [base(f.path), dirOf(f.path), bytes(f.size), date(f.mtime)]; }), paths: r.largestFiles.map(function (f) { return f.path; }) });
     out.push({ id: 'dirs', title: 'Cartelle più grandi', note: 'Spazio totale, sottocartelle comprese.', columns: ['Cartella', 'Spazio totale', 'File diretti'],

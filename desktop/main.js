@@ -291,6 +291,7 @@ ipcMain.handle('scan:start', async (event, opts) => {
   const root = String(opts && opts.root || '');
   const st = await fsp.stat(root).catch(() => null);
   if (!st || !st.isDirectory()) throw new Error('Cartella non trovata: ' + root);
+  scannedRoots.add(path.resolve(root));
   const id = new Date().toISOString().replace(/[:.]/g, '-');
   const dir = await ensureDir(userDir('scans', id));
   const workerFile = path.join(__dirname, 'scan-worker.js').replace('app.asar' + path.sep, 'app.asar.unpacked' + path.sep);
@@ -398,6 +399,7 @@ const LIB_FOLDER_EXT = DOC_EXT.filter((e) => !['png', 'jpg', 'jpeg', 'webp', 'bm
 const LIB_MAX_FILES = 5000;
 const LIB_TRASH_DAYS = 30;
 const libraryPaths = new Set(); // file che l'utente ha messo nella libreria (del cervello aperto)
+const scannedRoots = new Set(); // cartelle che l'utente ha scansionato: da lì può pescare per il cervello
 
 /*
  * Cervelli: tante librerie separate, una per esame, progetto o lavoro. Ognuno ha la sua cartella
@@ -533,6 +535,23 @@ ipcMain.handle('library:add-folder', async () => {
   res.files.forEach((f) => libraryPaths.add(f.path));
   res.root = r.filePaths[0];
   return res;
+});
+/*
+ * Dallo scanner al cervello: una cartella trovata sul disco si aggiunge alla libreria senza
+ * ripassare dalla finestra di scelta. Il percorso deve essere una cartella vera e sotto una radice
+ * che l'utente ha già scansionato, così non si può chiedere di leggere mezzo disco di nascosto.
+ */
+ipcMain.handle('library:add-scanned', async (_e, dir) => {
+  if (typeof dir !== 'string' || !path.isAbsolute(dir)) throw new Error('Percorso non valido');
+  let st;
+  try { st = await fsp.stat(dir); } catch (err) { throw new Error('Cartella non trovata'); }
+  if (!st.isDirectory()) throw new Error('Non è una cartella');
+  if (!scannedRoots.size) throw new Error('Fai prima una scansione');
+  const ok = Array.from(scannedRoots).some((r) => dir === r || dir.startsWith(r.endsWith(path.sep) ? r : r + path.sep));
+  if (!ok) throw new Error('Questa cartella non fa parte di una scansione');
+  const r = await libWalk(dir);
+  r.files.forEach((f) => libraryPaths.add(f.path));
+  return Object.assign({ root: dir }, r);
 });
 ipcMain.handle('library:read', async (_e, p) => {
   if (typeof p !== 'string' || !libraryPaths.has(p)) throw new Error('File non presente nella libreria');

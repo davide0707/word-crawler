@@ -50,7 +50,7 @@
 
   // ---------------------------------------------------------------- libreria
   var importSettings = {};
-  var library = !D.library ? { refresh: function () {}, addFiles: function () {}, addFolder: function () {}, toast: function () {}, study: function () {} } : WCLibraryView.mount($('library'), {
+  var library = !D.library ? { refresh: function () {}, addFiles: function () {}, addFolder: function () {}, toast: function () {}, study: function () {}, addScannedFiles: function () {} } : WCLibraryView.mount($('library'), {
     lib: D.library,
     importer: WCLibImport.create({ pdfjs: loadPdfJs, ocr: OCR, settings: function () { return importSettings; } }),
     workerUrl: new URL('../../core/library-worker.js', location.href).href,
@@ -70,6 +70,13 @@
   var scanner = WCScanView.mount($('scanner'), {
     roots: D.scan.roots, pickFolder: D.scan.pickFolder, start: D.scan.start, cancel: D.scan.cancel, onEvent: D.scan.onEvent,
     exportCsv: D.scan.exportCsv, showItem: D.showItem, saveFile: D.saveFile,
+    // dallo scanner al cervello: la cartella trovata diventa documenti della libreria
+    toLibrary: !D.library || !D.library.addScanned ? null : function (dir) {
+      return D.library.addScanned(dir).then(function (r) {
+        show('library');
+        library.addScannedFiles(r);
+      }).catch(function (e) { library.toast('Non riesco ad aggiungere «' + dir + '»: ' + e.message); });
+    },
     history: D.scan.history, compare: D.scan.compare, trash: D.scan.trash,
     settings: { load: function () { return D.settings.load('scanner'); }, save: function (v) { return D.settings.save('scanner', v); } }
   });

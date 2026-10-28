@@ -60,7 +60,8 @@ contextBridge.exposeInMainWorld('wcDesktop', {
     brainImport: () => ipcRenderer.invoke('library:brain-import'),
     backupAll: () => ipcRenderer.invoke('library:backup-all'),
     countAll: () => ipcRenderer.invoke('library:count-all'),
-    eraseAll: (confirm) => ipcRenderer.invoke('library:erase-all', confirm)
+    eraseAll: (confirm) => ipcRenderer.invoke('library:erase-all', confirm),
+    addScanned: (dir) => ipcRenderer.invoke('library:add-scanned', dir)
   },
   showItem: (p) => ipcRenderer.invoke('shell:show', p),
   openExternal: (url) => ipcRenderer.invoke('shell:external', url),

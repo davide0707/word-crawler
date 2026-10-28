@@ -268,7 +268,13 @@
         if (s.paths) {
           var b = el('button', { type: 'button', class: 'wc-link', text: 'Mostra' });
           b.addEventListener('click', function () { api.showItem(s.paths[ri]); });
-          tr.appendChild(el('td', {}, [b]));
+          var acts = [b];
+          if (api.toLibrary && s.id === 'dirs') {
+            var add = el('button', { type: 'button', class: 'wc-link sc-tolib', text: '→ cervello', title: 'Aggiungi questa cartella alla libreria' });
+            add.addEventListener('click', function () { api.toLibrary(s.paths[ri]); });
+            acts.push(add);
+          }
+          tr.appendChild(el('td', {}, acts));
         }
         tbody.appendChild(tr);
       });
@@ -292,10 +298,12 @@
       var crumbs = el('nav', { class: 'sc-crumbs', 'aria-label': 'Percorso nella mappa' });
       var upBtn = el('button', { type: 'button', class: 'wc-btn', text: '↑ Su' });
       var showBtn = el('button', { type: 'button', class: 'wc-btn', text: 'Apri la cartella' });
+      var viewSel = el('select', { 'aria-label': 'Come disegnare la mappa' }, [
+        el('option', { value: 'tm', text: 'A riquadri' }), el('option', { value: 'sb', text: 'A raggiera (sunburst)' })]);
       var cv = el('canvas', { class: 'sc-tm', role: 'img', tabindex: '0' });
       var info = el('p', { class: 'wc-note sc-tm-info', role: 'status', text: 'Passa sopra un riquadro per i dettagli; clic per entrare nella cartella.' });
       panel.appendChild(el('p', { class: 'wc-note sc-note', text: 'Ogni riquadro è una cartella, grande quanto lo spazio che occupa (sottocartelle comprese). In grigio i file sciolti nella cartella e le cartelle troppo piccole per essere disegnate.' }));
-      panel.appendChild(el('div', { class: 'sc-tm-bar' }, [upBtn, crumbs, showBtn]));
+      panel.appendChild(el('div', { class: 'sc-tm-bar' }, [upBtn, crumbs, viewSel, showBtn]));
       panel.appendChild(cv);
       panel.appendChild(info);
       var cx2 = cv.getContext('2d');
@@ -307,12 +315,73 @@
         if (other > tree.total[i] * 0.002) list.push({ value: other, idx: -1, name: 'cartelle piccole', grey: true });
         return list;
       }
+      /*
+       * La raggiera: la stessa cosa dei riquadri, ma in cerchi concentrici. Il centro è la cartella
+       * dove sei, ogni anello è un livello più in basso, e l'ampiezza dello spicchio è lo spazio
+       * occupato. Si legge meglio quando le cartelle sono annidate in profondità.
+       */
+      var RINGS = 4;
+      function sunburst(w, h) {
+        var out = [], cx3 = w / 2, cy3 = h / 2, R0 = 26, step = Math.min(w, h) / 2 / (RINGS + 1);
+        function ring(idx, a0, a1, depth) {
+          if (depth > RINGS || a1 - a0 < 0.012) return;
+          var list = kids[idx] || [];
+          var tot = tree.total[idx] || 1, at = a0;
+          list.forEach(function (k) {
+            var span = (tree.total[k] / tot) * (a1 - a0);
+            if (span < 0.004) { at += span; return; }
+            out.push({ it: { idx: k, name: tree.names[k], value: tree.total[k] }, a0: at, a1: at + span,
+              r0: R0 + (depth - 1) * step, r1: R0 + depth * step, cx: cx3, cy: cy3, depth: depth });
+            ring(k, at, at + span, depth + 1);
+            at += span;
+          });
+        }
+        ring(cur, -Math.PI / 2, Math.PI * 1.5, 1);
+        out.push({ it: { idx: cur, name: tree.names[cur] || '.', value: tree.total[cur] }, a0: 0, a1: Math.PI * 2, r0: 0, r1: R0, cx: cx3, cy: cy3, depth: 0, center: true });
+        return out;
+      }
+      function drawSun(w, h) {
+        rects = sunburst(w, h);
+        rects.forEach(function (rr) {
+          var it = rr.it, on = hover === rr;
+          cx2.beginPath();
+          cx2.arc(rr.cx, rr.cy, rr.r1, rr.a0, rr.a1);
+          cx2.arc(rr.cx, rr.cy, rr.r0, rr.a1, rr.a0, true);
+          cx2.closePath();
+          cx2.fillStyle = rr.center ? (on ? '#4a4a55' : '#34343d') : 'hsl(' + hue(it.name) + ',' + (on ? 62 : 46) + '%,' + (on ? 44 : 34 - rr.depth * 3) + '%)';
+          cx2.fill();
+          cx2.strokeStyle = 'rgba(11,11,14,0.75)';
+          cx2.lineWidth = 1;
+          cx2.stroke();
+          // il nome, solo dove c'è spazio e girato come lo spicchio
+          var mid2 = (rr.a0 + rr.a1) / 2, arc = (rr.a1 - rr.a0) * ((rr.r0 + rr.r1) / 2);
+          if (!rr.center && arc > 46 && rr.r1 - rr.r0 > 14) {
+            cx2.save();
+            cx2.translate(rr.cx + Math.cos(mid2) * (rr.r0 + rr.r1) / 2, rr.cy + Math.sin(mid2) * (rr.r0 + rr.r1) / 2);
+            var flip = mid2 > Math.PI / 2 && mid2 < Math.PI * 1.5;
+            cx2.rotate(flip ? mid2 + Math.PI : mid2);
+            cx2.fillStyle = '#ffffff';
+            cx2.font = '600 11px system-ui, sans-serif';
+            cx2.textAlign = 'center';
+            cx2.textBaseline = 'middle';
+            cx2.fillText(it.name.length > 18 ? it.name.slice(0, 17) + '…' : it.name, 0, 0);
+            cx2.restore();
+          }
+        });
+        cx2.fillStyle = '#ffffff';
+        cx2.font = '600 12px system-ui, sans-serif';
+        cx2.textAlign = 'center';
+        cx2.textBaseline = 'middle';
+        cx2.fillText(R.bytes(tree.total[cur]), w / 2, h / 2);
+        cx2.textAlign = 'left';
+      }
       function draw() {
-        var w = Math.max(300, panel.clientWidth || 800), h = Math.max(320, Math.min(560, Math.round(w * 0.5)));
+        var w = Math.max(300, panel.clientWidth || 800), h = Math.max(320, Math.min(560, Math.round(w * (viewSel.value === 'sb' ? 0.62 : 0.5))));
         var d = Math.min(2, window.devicePixelRatio || 1);
         cv.width = Math.round(w * d); cv.height = Math.round(h * d); cv.style.width = w + 'px'; cv.style.height = h + 'px';
         cx2.setTransform(d, 0, 0, d, 0, 0);
         cx2.fillStyle = '#0b0b0e'; cx2.fillRect(0, 0, w, h);
+        if (viewSel.value === 'sb') { drawSun(w, h); paintCrumbs2(); return; }
         rects = R.squarify(items(cur), 0, 0, w, h);
         rects.forEach(function (rr) {
           var it = rr.it, on = hover === rr;
@@ -331,6 +400,9 @@
             cx2.restore();
           }
         });
+        paintCrumbs2();
+      }
+      function paintCrumbs2() {
         crumbs.textContent = '';
         var chain = [];
         for (var k = cur; k >= 0; k = tree.parent[k]) chain.unshift(k);
@@ -341,10 +413,21 @@
           crumbs.appendChild(b);
         });
         upBtn.disabled = cur === 0;
-        cv.setAttribute('aria-label', 'Mappa dello spazio di ' + R.treePath(tree, cur) + ': ' + rects.length + ' riquadri');
+        cv.setAttribute('aria-label', 'Mappa dello spazio di ' + R.treePath(tree, cur) + ': ' + rects.length + (viewSel.value === 'sb' ? ' spicchi' : ' riquadri'));
       }
       function at(e) {
         var b = cv.getBoundingClientRect(), x = e.clientX - b.left, y = e.clientY - b.top;
+        if (viewSel.value === 'sb') {
+          for (var j = 0; j < rects.length; j++) {
+            var sr = rects[j], dx = x - sr.cx, dy = y - sr.cy, rad = Math.sqrt(dx * dx + dy * dy);
+            if (rad < sr.r0 || rad > sr.r1) continue;
+            if (sr.center) return sr;
+            var ang = Math.atan2(dy, dx);
+            while (ang < sr.a0) ang += Math.PI * 2;
+            if (ang >= sr.a0 && ang <= sr.a1) return sr;
+          }
+          return null;
+        }
         for (var i = 0; i < rects.length; i++) { var rr = rects[i]; if (x >= rr.x && x < rr.x + rr.w && y >= rr.y && y < rr.y + rr.h) return rr; }
         return null;
       }
@@ -361,8 +444,14 @@
       cv.addEventListener('mouseleave', function () { hover = null; draw(); });
       cv.addEventListener('click', function (e) { var rr = at(e); if (rr && rr.it.idx >= 0 && kids[rr.it.idx].length) { cur = rr.it.idx; hover = null; draw(); } });
       cv.addEventListener('keydown', function (e) { if ((e.key === 'Backspace' || e.key === 'ArrowUp') && cur > 0) { e.preventDefault(); cur = tree.parent[cur]; draw(); } });
+      viewSel.addEventListener('change', function () { hover = null; draw(); });
       upBtn.addEventListener('click', function () { if (cur > 0) { cur = tree.parent[cur]; hover = null; draw(); } });
       showBtn.addEventListener('click', function () { api.showItem(R.treePath(tree, cur)); });
+      if (api.toLibrary) {
+        var libBtn = el('button', { type: 'button', class: 'wc-btn', text: 'Aggiungi al cervello' });
+        libBtn.addEventListener('click', function () { api.toLibrary(R.treePath(tree, cur)); });
+        showBtn.parentNode.appendChild(libBtn);
+      }
       var ro2 = new ResizeObserver(function () { draw(); });
       ro2.observe(panel);
       tmCleanup = function () { ro2.disconnect(); };
