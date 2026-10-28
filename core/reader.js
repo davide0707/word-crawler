@@ -66,6 +66,7 @@
     var settings = g.WCSettings.defaults();
     var doc = null;          // { title, format, source }
     var tokens = [], plan = null, results = null, engine = null, pages = [], io = null, offVer = 0, headings = [];
+    var pdfBytes = null; // i byte del PDF aperto: servono per scriverci dentro le annotazioni
     var dirty = false, openSeq = 0, runSeq = 0, userMarks = [], ocrEngine = null, objectUrls = [], focus = null;
 
     // ------------------------------------------------------------ struttura
@@ -163,7 +164,7 @@
     function annotated() { return g.WCAnnotate.capture(tokens, plan ? plan.sentences : [], userMarks); }
     var rui = g.WCResultsUI.render(right, {
       idPrefix: 'wcr',
-      exports: host.exports || ['md', 'txt', 'html', 'anki', 'docx', 'ahtml'].concat(host.printPdf ? ['pdf'] : []).concat(['json']),
+      exports: host.exports || ['md', 'txt', 'html', 'anki', 'docx', 'ahtml'].concat(host.printPdf ? ['pdf'] : []).concat(g.WCPdfWrite ? ['pdfa'] : []).concat(['json']),
       onJump: jumpTo,
       onSave: function (entry) { return host.archive ? host.archive.save(entry) : false; },
       onExport: function (kind, entry) {
@@ -173,12 +174,68 @@
           if (!host.printPdf) return false;
           return host.printPdf(g.WCAnnotate.html(entry, model), g.WCExport.safeName(entry.title) + ' - segnato.pdf');
         }
+        if (kind === 'pdfa') return exportPdfAnnots(entry);
         return Promise.resolve(g.WCExport.build(kind, entry, model)).then(function (f) { return host.saveFile(f.name, f.content, f.mime); });
       },
       onCopy: host.copy,
       onRemoveMark: function (id) { pen.remove(id); },
       onEditMark: function (id, x, y) { pen.edit(id, x, y); }
     });
+
+    /*
+     * Le evidenziazioni e le note diventano annotazioni vere dentro una copia del PDF di partenza:
+     * si riaprono in Acrobat, in Anteprima, nel browser. Si usa il riquadro di ogni parola e la
+     * conversione di PDF.js dallo schermo ai punti della pagina, così torna anche se la pagina è
+     * ruotata. Se il PDF non si lascia modificare (pagine compresse, file protetto) lo si dice.
+     */
+    function pdfAnnots() {
+      if (!pdfBytes || !pages.length || !g.WCPdfWrite) return [];
+      var out = [];
+      userMarks.forEach(function (m) {
+        var perPage = new Map();
+        for (var i = m.from; i < m.to && i < tokens.length; i++) {
+          var t = tokens[i];
+          if (!t || t.page == null) continue;
+          var P = pages[t.page];
+          if (!P || !P.vp || !P.vp.convertToPdfPoint) continue;
+          var r = t.rect(), off = pageOffset(P);
+          if (!r || !off) continue;
+          var lx = r.x - off[0], ly = r.y - off[1];
+          var a = P.vp.convertToPdfPoint(lx, ly), b = P.vp.convertToPdfPoint(lx + r.w, ly + r.h);
+          var x0 = Math.min(a[0], b[0]), x1 = Math.max(a[0], b[0]), y0 = Math.min(a[1], b[1]), y1 = Math.max(a[1], b[1]);
+          if (!perPage.has(t.page)) perPage.set(t.page, []);
+          var list = perPage.get(t.page), last = list[list.length - 1];
+          // parole sulla stessa riga: un quadrilatero solo, più pulito da leggere
+          if (last && Math.abs(last[1] - y1) < 1.5 && x0 - last[2] < 12) { last[2] = Math.max(last[2], x1); last[0] = Math.min(last[0], x0); last[3] = Math.min(last[3], y0); }
+          else list.push([x0, y1, x1, y0]);
+        }
+        perPage.forEach(function (boxes, pi) {
+          var quads = boxes.map(function (q) { return [q[0], q[1], q[2], q[1], q[0], q[3], q[2], q[3]]; });
+          out.push({
+            page: pi, type: m.type === 'under' ? 'underline' : (m.type === 'note' ? 'highlight' : 'highlight'),
+            quads: quads, color: m.type === 'note' ? '#ff8a3d' : '#ffd43b',
+            contents: m.note || (m.type === 'note' ? m.text : '') || ''
+          });
+          if (m.type === 'note' && m.note) {
+            var q0 = quads[0];
+            out.push({ page: pi, type: 'note', rect: [q0[2], q0[1] - 18, q0[2] + 18, q0[1]], color: '#ff8a3d', contents: m.note });
+          }
+        });
+      });
+      return out;
+    }
+    function exportPdfAnnots(entry) {
+      if (!pdfBytes) { busy('Le annotazioni dentro il file valgono solo per i PDF.'); return false; }
+      var annots = pdfAnnots();
+      if (!annots.length) { busy('Non ci sono evidenziazioni o note da scrivere nel PDF.'); return false; }
+      try {
+        var out = g.WCPdfWrite.annotate(pdfBytes, annots, { author: 'Word Crawler' });
+        return host.saveFile(g.WCExport.safeName(entry.title) + ' - annotato.pdf', out, 'application/pdf');
+      } catch (e) {
+        busy(e.message + ' Puoi usare «Documento segnato, PDF», che ne stampa uno nuovo.');
+        return false;
+      }
+    }
 
     // ------------------------------------------------------------ penna
     var pen = g.WCPen.attach({
@@ -229,7 +286,7 @@
       if (io) { io.disconnect(); io = null; }
       objectUrls.forEach(function (u) { URL.revokeObjectURL(u); });
       objectUrls = [];
-      tokens = []; plan = null; results = null; pages = []; headings = [];
+      tokens = []; plan = null; results = null; pages = []; headings = []; pdfBytes = null;
       userMarks = [];
       pen.setMarks([]);
       article.textContent = ''; pagesBox.textContent = '';
@@ -405,6 +462,7 @@
     // ------------------------------------------------------------ PDF
     async function openPdf(model, bytes) {
       var my = openSeq;
+      pdfBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
       var lib = host.pdfjs ? await host.pdfjs() : null;
       if (!lib) { showError(host.pdfHelp || 'Per leggere i PDF serve PDF.js.'); return; }
       var pdf;

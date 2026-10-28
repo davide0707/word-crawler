@@ -15,7 +15,7 @@
   var KINDS = [
     ['md', 'Riepilogo in Markdown (.md)'], ['txt', 'Riepilogo in testo (.txt)'], ['html', 'Riepilogo, pagina web (.html)'],
     ['anki', 'Schede per Anki (.txt)'], ['docx', 'Documento segnato, Word (.docx)', true], ['ahtml', 'Documento segnato, pagina web (.html)', true],
-    ['pdf', 'Documento segnato, PDF', true], ['json', 'Dati (.json)']
+    ['pdf', 'Documento segnato, PDF', true], ['pdfa', 'Annotazioni dentro il PDF originale'], ['json', 'Dati (.json)']
   ];
 
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }

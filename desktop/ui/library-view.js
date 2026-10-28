@@ -562,7 +562,12 @@
         ib.addEventListener('click', showInsights);
         var cb = el('button', { type: 'button', class: 'wc-btn', text: 'Confronta con un altro cervello' });
         cb.addEventListener('click', showCompare);
-        panel.appendChild(el('div', { class: 'lb-actions' }, brainList.length > 1 ? [ib, cb] : [ib]));
+        var vb = el('button', { type: 'button', class: 'wc-btn', text: 'Confronta due versioni' });
+        vb.addEventListener('click', function () { showVersions(null); });
+        var row = [ib];
+        if (docs.length > 1) row.push(vb);
+        if (brainList.length > 1) row.push(cb);
+        panel.appendChild(el('div', { class: 'lb-actions' }, row));
         panel.appendChild(el('p', { class: 'wc-note', text: 'Suggerimenti: metti una frase tra virgolette per cercarla così com’è; cerca una sigla o un nome per trovare anche le sue forme estese; apri la mappa per vedere come si collegano i concetti.' }));
       }).catch(function () {});
     }
@@ -2180,6 +2185,101 @@
         if (b) { e.preventDefault(); b.click(); }
       }
     });
+
+    // ------------------------------------------------------------ versioni dello stesso documento
+    /*
+     * Due stesure dello stesso testo: si confrontano i passaggi, non le righe, così un documento
+     * riformattato non risulta cambiato da cima a fondo.
+     */
+    function showVersions(preset) {
+      selected = { versions: true };
+      panel.textContent = '';
+      panel.appendChild(backLink());
+      panel.appendChild(el('h2', { text: 'Confronta due versioni' }));
+      var a = el('select', { 'aria-label': 'Versione più vecchia' }), b = el('select', { 'aria-label': 'Versione più nuova' });
+      var ok = docs.filter(function (d) { return d.status !== 'error'; });
+      ok.forEach(function (d) {
+        a.appendChild(el('option', { value: d.id, text: d.name }));
+        b.appendChild(el('option', { value: d.id, text: d.name }));
+      });
+      if (preset) { a.value = preset[0]; b.value = preset[1]; }
+      else if (ok.length > 1) b.value = ok[1].id;
+      var go = el('button', { type: 'button', class: 'wc-btn wc-primary', text: 'Confronta' });
+      panel.appendChild(el('div', { class: 'lb-vsel' }, [a, el('span', { class: 'wc-note', text: '→' }), b, go]));
+      var out = el('div', { class: 'lb-cmp' });
+      panel.appendChild(out);
+      // coppie che sembrano versioni della stessa cosa
+      kb.call('version-pairs').then(function (pairs) {
+        if (!pairs.length || preset) return;
+        var p2 = el('p', { class: 'wc-note', text: 'Sembrano versioni della stessa cosa: ' });
+        pairs.slice(0, 6).forEach(function (pp, i) {
+          if (i) p2.appendChild(el('span', { text: ' · ' }));
+          var btn = el('button', { type: 'button', class: 'wc-link', text: pp.docs.map(function (d) { return d.name; }).join(' → ') });
+          btn.addEventListener('click', function () { showVersions([pp.docs[0].id, pp.docs[pp.docs.length - 1].id]); });
+          p2.appendChild(btn);
+        });
+        panel.insertBefore(p2, out);
+      }).catch(function () {});
+      go.addEventListener('click', function () {
+        if (a.value === b.value) { toast('Scegli due documenti diversi.'); return; }
+        out.textContent = '';
+        out.appendChild(el('p', { class: 'wc-note', text: 'Confronto…' }));
+        kb.call('versions', { a: a.value, b: b.value }).then(function (d) {
+          out.textContent = '';
+          if (!d) { out.appendChild(el('p', { class: 'wc-note', text: 'Non riesco a confrontarli.' })); return; }
+          var t = d.stats;
+          out.appendChild(el('p', { text: Math.round(t.equal * 100) + '% uguale: ' + t.same + ' passaggi identici, ' + t.changed + ' cambiati, ' +
+            t.gone + ' spariti, ' + t.added + ' nuovi.' }));
+          var filt = el('div', { class: 'wc-chips', role: 'group', 'aria-label': 'Cosa mostrare' });
+          var showAll = { same: false, changed: true, gone: true, new: true };
+          var LAB = { same: 'uguali', changed: 'cambiati', gone: 'spariti', new: 'nuovi' };
+          Object.keys(LAB).forEach(function (k) {
+            var c = el('button', { type: 'button', class: 'wc-chip' + (showAll[k] ? ' on' : ''), text: LAB[k], 'aria-pressed': showAll[k] ? 'true' : 'false' });
+            c.addEventListener('click', function () {
+              showAll[k] = !showAll[k];
+              c.classList.toggle('on', showAll[k]);
+              c.setAttribute('aria-pressed', showAll[k] ? 'true' : 'false');
+              paint();
+            });
+            filt.appendChild(c);
+          });
+          out.appendChild(filt);
+          var listBox = el('div', { class: 'lb-diff' });
+          out.appendChild(listBox);
+          function paint() {
+            listBox.textContent = '';
+            var shown = d.items.filter(function (x) { return showAll[x.state]; });
+            if (!shown.length) { listBox.appendChild(el('p', { class: 'wc-note', text: 'Niente da mostrare con questi filtri.' })); return; }
+            shown.slice(0, 400).forEach(function (x) {
+              var row = el('div', { class: 'lb-dline is-' + x.state });
+              row.appendChild(el('span', { class: 'lb-dtag', text: LAB[x.state] }));
+              var body = el('div', { class: 'lb-dtext' });
+              if (x.state === 'changed') {
+                body.appendChild(el('p', { class: 'lb-dold', text: x.text }));
+                body.appendChild(el('p', { class: 'lb-dnew', text: x.textB }));
+              } else body.appendChild(el('p', { text: x.text }));
+              var src = el('p', { class: 'wc-note' });
+              if (x.a != null) {
+                var ba = el('button', { type: 'button', class: 'wc-link', text: d.a.name + (x.whereA ? ', ' + x.whereA : '') });
+                ba.addEventListener('click', function () { host.openAt(d.a.path, d.a.name, { n: x.a, text: x.text }); });
+                src.appendChild(ba);
+              }
+              if (x.b != null) {
+                if (x.a != null) src.appendChild(el('span', { text: ' · ' }));
+                var bb = el('button', { type: 'button', class: 'wc-link', text: d.b.name + (x.whereB ? ', ' + x.whereB : '') });
+                bb.addEventListener('click', function () { host.openAt(d.b.path, d.b.name, { n: x.b, text: x.textB || x.text }); });
+                src.appendChild(bb);
+              }
+              body.appendChild(src);
+              row.appendChild(body);
+              listBox.appendChild(row);
+            });
+            if (shown.length > 400) listBox.appendChild(el('p', { class: 'wc-note', text: 'Mostrati i primi 400 di ' + shown.length + '.' }));
+          }
+          paint();
+        }).catch(function (e) { out.textContent = ''; out.appendChild(el('p', { class: 'wc-note', text: 'Confronto non riuscito: ' + e.message })); });
+      });
+    }
 
     // ------------------------------------------------------------ cosa ho notato
     /*

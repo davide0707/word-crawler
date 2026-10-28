@@ -78,9 +78,39 @@
     var slash = family === 'braces' || family === 'css' || family === 'data';
     var dashes = family === 'sql';
     var semi = family === 'data';
-    var i2 = 0;
+    var i2 = 0, prev = '';
+    /*
+     * Un'espressione regolare si riconosce da quello che la precede: dopo un valore la barra è una
+     * divisione, dopo una parentesi aperta, una virgola, un uguale o un operatore è l'inizio di una
+     * regex. Vanno mascherate come le stringhe, altrimenti un apostrofo dentro /["']/ fa credere che
+     * cominci una stringa e si mangia il codice che segue.
+     */
+    function regexHere(at) {
+      if (text[at] !== '/' || text[at + 1] === '/' || text[at + 1] === '*') return false;
+      if (!prev) return true;
+      if ('(,=:[!&|?{};+-*%~^<>'.indexOf(prev) >= 0) return true;
+      return /\b(return|typeof|instanceof|in|of|case|do|else|yield|await|delete|void|new|throw|match|replace|split|search|test|exec)$/.test(before);
+    }
+    var before = '';
     while (i2 < n) {
       var c = text[i2], c2 = text[i2 + 1];
+      if (family === 'braces' && c === '/' && regexHere(i2)) {
+        var rs = i2;
+        out[i2] = ' ';
+        i2++;
+        var inClass = false;
+        while (i2 < n && text[i2] !== '\n') {
+          var ch = text[i2];
+          if (ch === '\\') { out[i2] = ' '; out[i2 + 1] = text[i2 + 1] === '\n' ? '\n' : ' '; i2 += 2; continue; }
+          if (ch === '[') inClass = true;
+          else if (ch === ']') inClass = false;
+          out[i2] = ' ';
+          i2++;
+          if (ch === '/' && !inClass) break;
+        }
+        while (i2 < n && /[a-z]/.test(text[i2])) { out[i2] = ' '; i2++; } // i flag: g, i, m, u, y, s
+        if (i2 > rs + 1) { ranges.push([rs, i2, 'str']); prev = '/'; before = ''; continue; }
+      }
       // stringhe
       if (c === '"' || c === "'" || c === '`') {
         var triple = (family === 'python' || family === 'ruby') && c2 === c && text[i2 + 2] === c;
@@ -94,6 +124,7 @@
           i2++;
         }
         ranges.push([start, i2, triple ? 'com' : 'str']);
+        prev = 'x'; before = '';
         // le stringhe lunghe di Python sono documentazione
         if (triple) comments.push({ line: lineOf(start), text: text.slice(start + 3, i2 - 3).trim(), block: true, doc: true });
         continue;
@@ -124,6 +155,7 @@
         continue;
       }
       out[i2] = c;
+      if (!/\s/.test(c)) { prev = c; before = /[\w$]/.test(c) ? (before + c).slice(-12) : ''; }
       i2++;
     }
     for (var k = 0; k < n; k++) if (out[k] === undefined) out[k] = ' ';

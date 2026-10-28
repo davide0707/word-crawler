@@ -41,6 +41,7 @@
 | **Riassume senza AI** | Parole chiave con statistiche in stile YAKE, rarità delle parole e grafo delle parole vicine; riassunto estrattivo con TextRank e MMR. Ogni numero è calcolato, niente è inventato. |
 | **Aiuta a studiare** | Schede dalle definizioni, frasi da completare, quiz a scelta multipla ed esportazione per Anki. |
 | **La tua penna** | Evidenzia, sottolinea, annota e cancella, anche sui PDF e sulle pagine web. |
+| **Scrive dentro il tuo PDF** | Evidenziazioni e note si possono scrivere dentro una copia del PDF originale come annotazioni vere: Acrobat, Anteprima e i browser le leggono, le spostano e le cancellano. I byte di partenza non vengono toccati. |
 | **Esporta il documento segnato** | Word (.docx, con le note come commenti), pagina web e PDF, più riepiloghi in Markdown, testo, JSON e Anki. |
 | **Ricorda le pagine** | L'estensione rimette i segni quando riapri una pagina salvata. |
 | **Costruisce una base di conoscenza** | La Libreria legge tanti file insieme, anche cartelle intere: cerchi in tutti i documenti insieme, vedi come si collegano i concetti su una mappa interattiva e apri ogni risultato alla pagina giusta. |
@@ -64,6 +65,9 @@ Puoi tenere **più cervelli**: uno per esame, uno per progetto, uno per il lavor
 - **Concetti uniti tra i file.** Parole chiave, nomi, termini definiti e sigle diventano concetti. Singolare e plurale, lo stesso termine in file diversi e una sigla scritta con la sua forma estesa sono un concetto solo. I casi incerti — una sigla in un file e la forma estesa in un altro, due nomi quasi uguali — sono solo suggeriti: decidi tu.
 - **Una mappa dei concetti interattiva.** I concetti sono collegati quando compaiono negli stessi passaggi, e le definizioni aggiungono relazioni con un nome (*QAM — è un tipo di → modulazione digitale*). I concetti centrali sono blu, quelli presenti in più documenti viola. Ingrandisci, spostati, trascina i nodi, filtra ed esporta in PNG, in Markdown con i `[[collegamenti]]` per Obsidian o in JSON.
 - **L'ultima parola è tua.** Rinomina i concetti, aggiungi alias, unisci o separa, aggiungi o togli collegamenti: ogni modifica resta, finisce nella cronologia del concetto e si riapplica quando aggiungi altri documenti. Un documento tolto si può rimettere.
+- **Quello che nota da solo.** Lacune (concetti che usi spesso e che nessun documento spiega), contraddizioni fra due fonti, concetti isolati, funzioni citate negli appunti che nel codice non esistono. Ogni segnalazione dice il perché e porta alle frasi da cui viene.
+- **Spiega.** Una spiegazione di un concetto costruita soltanto con le frasi dei tuoi documenti, ognuna con la sua fonte, da salvare come riassunto del ramo.
+- **Confronti.** Due versioni dello stesso documento messe a fianco passaggio per passaggio, e due cervelli confrontati per vedere che cosa hanno in comune.
 - **Una mappa viva.** I concetti continuano ad assestarsi invece di bloccarsi dopo la prima disposizione: ne trascini uno e i vicini reagiscono, la telecamera scorre invece di saltare, i concetti nuovi crescono al loro posto. Si simula solo quello che è inquadrato, così anche migliaia di concetti restano fluidi — e con `prefers-reduced-motion` il movimento si spegne.
 
 | | |

@@ -58,6 +58,22 @@ void inviaDati(float v) {
 
 void maiUsata() { return; }
 `,
+  'Relazione v1.md': `# Relazione
+
+La modulazione digitale trasforma i bit in un segnale analogico adatto al canale di trasmissione.
+
+Il rumore termico limita la velocità massima raggiungibile su ogni collegamento.
+
+Questo paragrafo sparirà nella seconda stesura perché non aggiunge niente al discorso.
+`,
+  'Relazione v2.md': `# Relazione
+
+La modulazione digitale trasforma i bit in un segnale analogico adatto al canale di trasmissione.
+
+Il rumore termico limita la velocità massima raggiungibile su ogni collegamento radio.
+
+Questo paragrafo invece è nuovo e parla della codifica di canale e della ridondanza aggiunta.
+`,
   'Reti_e_Segnali.md': `# Reti e segnali
 
 ## Modulazione digitale
@@ -860,6 +876,30 @@ async function check(name, fn) {
     await waitFor(() => /La tua nota/.test(document.querySelector('.lb-panel').textContent), null, 15000);
     assert.ok(/esame/.test(await page.textContent('.lb-tags')), 'l’etichetta è salvata');
     assert.strictEqual(await page.inputValue('.lb-meta select'), 'reviewed', 'e lo stato pure');
+  });
+
+  await check('confronto fra due versioni dello stesso documento', async () => {
+    await page.click('.lb-tabs [role="tab"]:text-is("Risultati")');
+    if (!(await page.$('.lb-panel button:text-is("Confronta due versioni")'))) {
+      await page.click('.lb-panel .lb-back').catch(() => {});
+      await waitFor(() => /La tua base di conoscenza/.test(document.querySelector('.lb-panel').textContent), null, 15000);
+    }
+    await page.click('.lb-panel button:text-is("Confronta due versioni")');
+    await page.waitForSelector('.lb-vsel');
+    // le coppie si riconoscono da sole
+    await waitFor(() => /Sembrano versioni/.test(document.querySelector('.lb-panel').textContent), null, 15000);
+    assert.ok(/Relazione v1\.md → Relazione v2\.md/.test(await page.textContent('.lb-panel')), 'propone la coppia giusta');
+    await page.click('.lb-panel .wc-link:has-text("Relazione v1.md → Relazione v2.md")');
+    await page.waitForSelector('.lb-vsel');
+    await page.click('.lb-panel button:text-is("Confronta")');
+    await waitFor(() => /% uguale/.test(document.querySelector('.lb-cmp').textContent), null, 25000);
+    const t = await page.textContent('.lb-cmp');
+    assert.ok(/% uguale/.test(t) && /identici/.test(t), 'il riepilogo: ' + t.slice(0, 160));
+    assert.ok(await page.$('.lb-dline.is-changed'), 'un passaggio cambiato');
+    assert.ok(await page.$('.lb-dline.is-gone'), 'uno sparito');
+    assert.ok(await page.$('.lb-dline.is-new'), 'uno nuovo');
+    assert.ok(await page.$('.lb-dold') && await page.$('.lb-dnew'), 'il prima e il dopo');
+    await shot('lib-23-versioni.png');
   });
 
   await check('elimina tutte le info: backup proposto e doppia conferma', async () => {

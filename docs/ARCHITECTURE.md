@@ -79,6 +79,10 @@ by `chrome.scripting.executeScript`, and by `require` in the Node test suites.
 | `core/archive-ui.js` | Archive of saved readings |
 | `core/library.js` | Library engine: passages, concepts across documents, acronym merging, concept graph, BM25 search, user edits, Markdown export, map layout |
 | `core/library-worker.js` | Runs the library and study engines in two Web Workers (one imports documents, one serves search, the graph and the questions) |
+| `core/code.js` | Reads code: masks strings and comments, then finds functions, classes, variables, imports, endpoints, tables and TODOs per language family; call graph, dead code, syntax highlighting |
+| `core/gamify.js` | Points, levels, badges and the day streak, all derived from the study log |
+| `core/math.js` | A small LaTeX subset rendered to HTML, for formulas in cards and explanations |
+| `core/pdfwrite.js` | Writes real annotations into a copy of a PDF, as an incremental update |
 | `core/study.js` | Study engine: which concepts are worth knowing, questions from definitions and passages, answer matching, SM-2 schedule, mastery, study path, Anki export |
 | `core/library-import.js` | Reads a file for the library: blocks, PDF words with their box on the page, OCR of scanned pages and images |
 | `desktop/ui/library-view.js` | Library tab: import queue, document list, search results, concept map on canvas, concept page |
@@ -296,6 +300,29 @@ export.
 members, so merging, splitting or renaming concepts never loses a review history. State lives in
 `library/study.json`, separate from the map edits, and is written after a short debounce.
 
+## Writing into a PDF
+
+`core/pdfwrite.js` adds real annotations — highlights, underlines, strike-outs, boxes and sticky notes
+— to a copy of the original PDF, with no library. It uses an **incremental update**, the mechanism the
+format itself provides: the original bytes are left untouched and the file grows by the new annotation
+objects, a rewritten copy of each touched page with its `/Annots` extended, a small `xref` table and a
+trailer whose `/Prev` points at the previous one. Readers show the latest version; the earlier one is
+still in the file.
+
+Objects are found by scanning for `N G obj` headers, and the page list by walking `/Root → /Pages →
+/Kids`. That covers PDFs whose pages are ordinary objects. When the pages live inside compressed object
+streams, or the file is encrypted, nothing can be appended without rewriting the whole document: the
+module says so and the Reader falls back to printing a new marked PDF. Text is written as UTF-16BE so
+accents survive, quad points come from PDF.js's `convertToPdfPoint`, so a rotated page still lands
+right.
+
+## Comparing two versions
+
+`versions(a, b)` matches **passages**, not lines, so a reformatted document does not read as entirely
+changed: identical passages pair first, then those sharing more than 60% of their words, in order. What
+is left over is "gone" on one side and "new" on the other. `versionPairs()` guesses which documents are
+versions of the same thing by stripping version words and numbers from their names.
+
 ## Desktop app
 
 - One `BrowserWindow` with `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`.
@@ -368,6 +395,9 @@ flowchart LR
 | `tests/scanner.test.js` | Scanner results, read-only guarantee, comparison and every Trash safety rule |
 | `tests/main.test.js` | Electron main process with a stubbed `electron` module: IPC validation, protocol, dialogs |
 | `tests/library.test.js` | Library engine: passages, acronyms, concepts across documents, graph and relations, suggestions, search, every user edit, Markdown export, performance |
+| `tests/code.test.js` | Reading code: symbols and exact lines per language, imports, calls, dead code across files, strings and comments not confusing the parser, complexity, notebooks, and code inside the brain |
+| `tests/insights.test.js` | Gaps, contradictions, doc/code drift, isolated concepts, "explain" with its sources, comparing two brains |
+| `tests/pdfwrite.test.js` | Annotations written into a PDF: original bytes untouched, every subtype, accents, and PDF.js reading them back; comparing two versions of a document |
 | `tests/study.test.js` | Study engine: blanking with stems, answer matching, SM-2 intervals and mastery, questions with their sources, rotation, study path, per-document filter, survival across merges, reset, Anki export |
 | `tests/library-ui.test.js` | The Library tab in Chromium with the real workers and PDF.js: folder import (Word, PowerPoint, PDF, scanned PDF), search, open at position, map, concept page, merge, rename, links, exports, undo, a full study session (typed answer, grading, keyboard, saved progress), the map coloured by mastery and actually moving, Anki export |
 | `tests/reader.test.js` | The reader in Chromium with the real PDF.js, OCR mapping from recorded Tesseract output, the pen |

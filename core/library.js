@@ -1440,6 +1440,86 @@
     }
     function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
+    /*
+     * Confronto fra due versioni dello stesso documento: quali passaggi sono rimasti uguali, quali
+     * sono cambiati, quali sono spariti e quali sono nuovi. Si confrontano i pezzi, non le righe:
+     * due documenti riformattati diversamente non risultano "tutti cambiati".
+     * L'accoppiamento è il più semplice che funziona: prima i pezzi identici, poi quelli che si
+     * somigliano abbastanza (parole in comune sopra il 60%), nell'ordine in cui compaiono.
+     */
+    function versions(idA, idB) {
+      var ra = docs[byId.get(idA)], rb = docs[byId.get(idB)];
+      if (!ra || !rb) return null;
+      var A = ra.chunks || [], B = rb.chunks || [];
+      function words(t) { return fold(t).split(/\W+/).filter(function (w) { return w.length > 2; }); }
+      var setB = B.map(function (c) { return new Set(words(c.text)); });
+      var takenB = new Set(), out = [], same = 0, changed = 0;
+      var byText = new Map();
+      B.forEach(function (c, i) { var k = fold(c.text); if (!byText.has(k)) byText.set(k, []); byText.get(k).push(i); });
+      A.forEach(function (ca) {
+        var k = fold(ca.text), exact = (byText.get(k) || []).find(function (i) { return !takenB.has(i); });
+        if (exact !== undefined) {
+          takenB.add(exact);
+          same++;
+          out.push({ state: 'same', a: ca.n, b: B[exact].n, text: ca.text, whereA: where(ra, ca), whereB: where(rb, B[exact]) });
+          return;
+        }
+        var wa = new Set(words(ca.text)), best = -1, bestScore = 0;
+        if (wa.size) {
+          for (var i = 0; i < B.length; i++) {
+            if (takenB.has(i)) continue;
+            var inter = 0;
+            setB[i].forEach(function (w) { if (wa.has(w)) inter++; });
+            var sc = inter / Math.max(wa.size, setB[i].size || 1);
+            if (sc > bestScore) { bestScore = sc; best = i; }
+          }
+        }
+        if (best >= 0 && bestScore >= 0.6) {
+          takenB.add(best);
+          changed++;
+          out.push({ state: 'changed', a: ca.n, b: B[best].n, text: ca.text, textB: B[best].text, score: round(bestScore, 2), whereA: where(ra, ca), whereB: where(rb, B[best]) });
+          return;
+        }
+        out.push({ state: 'gone', a: ca.n, text: ca.text, whereA: where(ra, ca) });
+      });
+      B.forEach(function (cb, i) {
+        if (takenB.has(i)) return;
+        out.push({ state: 'new', b: cb.n, text: cb.text, whereB: where(rb, cb) });
+      });
+      out.sort(function (x, y) { return (x.a == null ? 1e9 : x.a) - (y.a == null ? 1e9 : y.a); });
+      var gone = out.filter(function (x) { return x.state === 'gone'; }).length;
+      var added = out.filter(function (x) { return x.state === 'new'; }).length;
+      return {
+        a: { id: ra.id, name: ra.name, path: ra.path, chunks: A.length, mtime: ra.mtime, words: ra.words },
+        b: { id: rb.id, name: rb.name, path: rb.path, chunks: B.length, mtime: rb.mtime, words: rb.words },
+        items: out.slice(0, 1200),
+        stats: { same: same, changed: changed, gone: gone, added: added, total: out.length,
+          equal: A.length && B.length ? round(same / Math.max(A.length, B.length), 3) : 0 }
+      };
+    }
+    // coppie di documenti che sembrano due versioni della stessa cosa
+    function versionPairs() {
+      function norm(n) {
+        return fold(String(n || '')).replace(/\.[^.]+$/, '')
+          .replace(/\b(v|ver|versione|version|rev|bozza|draft|final|finale|def|definitivo|copia|copy|new|nuovo|old|vecchio)\b/g, ' ')
+          .replace(/\d{1,4}([-_.]\d{1,2}){0,2}/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+      }
+      var by = new Map();
+      docs.forEach(function (r) {
+        var k = norm(r.name);
+        if (k.length < 4) return;
+        if (!by.has(k)) by.set(k, []);
+        by.get(k).push({ id: r.id, name: r.name, mtime: r.mtime, words: r.words });
+      });
+      var out = [];
+      by.forEach(function (list, k) {
+        if (list.length < 2) return;
+        list.sort(function (a, b) { return String(a.mtime || '').localeCompare(String(b.mtime || '')); });
+        out.push({ key: k, docs: list });
+      });
+      return out;
+    }
+
     function stats() {
       var G = graphCache;
       return {
@@ -1453,6 +1533,8 @@
       search: search,
       pool: pool,
       insights: insights,
+      versions: versions,
+      versionPairs: versionPairs,
       explain: explain,
       branch: branch,
       code: code,

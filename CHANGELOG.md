@@ -7,6 +7,22 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- **Code is a document too**: 42 extensions (JavaScript, TypeScript, Python, C, C++, Arduino, Java, C#, Go, Rust, PHP, Swift, Kotlin, Ruby, Verilog, SQL, shell, CSS, config files, Jupyter notebooks) are read for their structure, with no new dependency. Functions, classes, variables, imports, endpoints and tables become concepts of the brain, with the line as the source and the comment above as the definition; calls become real edges ("loop uses inviaDati", "Store inherits from Base").
+- **Code tab**: who calls this function, what it needs, what nobody uses (dead code judged across the whole brain), what is left to do, the most tangled functions, what each file contains, which file depends on which — each answer with file and line, one click from the Reader. Exports as Markdown documentation with a Mermaid dependency diagram, glossary, complexity table and TODO list.
+- **More kinds of question**: multiple choice in both directions (wrong answers are other real concepts of the brain, never invented), an open question, and three about code. A timed **challenge** and a **simulated exam** that stays silent until you hand it in, then scores out of a hundred and lists what to go over.
+- **Points, levels, badges and a day streak**, all derived from the answer log, so they cannot drift from the real progress.
+- Cards render **LaTeX** formulas, highlight **code snippets**, and read themselves aloud with the system voice.
+- **Map layouts**: tree (general to specific), rings of mastery, constellation (one cluster per document), plus four themes (night, blueprint, paper, code), a depth effect, a minimap, a trail of visited concepts, double-click to expand a concept's neighbours and shift-drag to lasso a group.
+- **What I noticed**: concepts named often and never defined, concepts isolated from everything else, the same concept defined two ways that cannot both be true, and functions cited in notes that no longer exist in the code.
+- **Explain**: an explanation of a concept built only from the sentences in your documents, each with its source, saveable as a Markdown summary of the branch.
+- **Compare two brains**: what they share, what only one has, which concepts are central in one and marginal in the other.
+- **Concept fields**: review state (draft, reviewed, approved, stale), free tags, your own note, the dates it entered the brain and was last touched. A link found by the spider can be confirmed or marked wrong.
+- **Erase everything**, behind a count of what will go, an offered backup of all brains as one JSON, and a typed confirmation; the folder still goes to the app's trash.
+- **Scanner**: a sunburst view of the disk map, a "Code on disk" section grouping extensions by language, and a button that hands a scanned folder straight to the Library.
+- **Real PDF annotations**: highlights and notes are written into a copy of the original PDF as proper annotations, readable and editable in Acrobat, Preview and browsers. The original bytes are untouched — it is an incremental update — and when a PDF cannot take them (compressed page objects, encryption) the app says so and offers the printed PDF instead.
+- **Compare two versions** of the same document, passage by passage rather than line by line, with the pairs that look like versions of the same thing suggested automatically.
+
 ## [2.4.0] - 2026-10-28
 
 ### Added

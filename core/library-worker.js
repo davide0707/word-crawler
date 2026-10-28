@@ -18,6 +18,8 @@
  *   code          { op }            chi chiama, usi, codice morto, cose da fare, complessità, glossario, dipendenze
  *   code-markdown { doc? }          documentazione automatica in Markdown
  *   insights    { doc? }            lacune, concetti isolati, contraddizioni, divergenze doc/codice
+ *   versions    { a, b }            confronto fra due versioni dello stesso documento
+ *   version-pairs {}                documenti che sembrano versioni della stessa cosa
  *   explain     { cid }             spiegazione fatta con le frasi dei documenti
  *   branch      { cid }             riassunto di un ramo, in Markdown
  *   diff        { other }           confronto con il grafo di un altro cervello
@@ -83,6 +85,8 @@ var handlers = {
 
   code: function (d) { return base().code(d.op || {}); },
   insights: function (d) { return base().insights({ doc: d.doc, limit: d.limit }); },
+  versions: function (d) { return base().versions(d.a, d.b); },
+  'version-pairs': function () { return base().versionPairs(); },
   explain: function (d) { return base().explain(d.cid, { related: d.related }); },
   branch: function (d) { return base().branch(d.cid); },
   // confronto: il grafo dell'altro cervello arriva già pronto da chi chiama

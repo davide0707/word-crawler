@@ -378,8 +378,10 @@ async function check(name, fn) {
   await check('dallo scanner al cervello: solo cartelle già scansionate', async () => {
     // senza scansione non si può pescare niente
     await assert.rejects(() => handlers['library:add-scanned']({}, LIB), /scansione/i);
-    await handlers['scan:start']({}, { root: LIB, dups: 'off' });
-    await new Promise((r) => setTimeout(r, 50));
+    // una scansione vera, con un finto destinatario degli eventi come nelle altre prove
+    const quiet = { sender: { isDestroyed: () => false, send: () => {} } };
+    await handlers['scan:start'](quiet, { root: LIB, legs: 2, duplicates: 'off', minDupSize: 0 });
+    await new Promise((r) => setTimeout(r, 400));
     const got = await handlers['library:add-scanned']({}, LIB);
     assert.strictEqual(got.root, LIB);
     assert.ok(got.files.length >= 1, 'trova i documenti: ' + got.files.length);

@@ -41,6 +41,7 @@
 | **Summarises without AI** | Keywords from YAKE-style statistics, word-frequency rarity and a co-occurrence graph; extractive summary with TextRank and MMR. Every figure is computed, nothing is generated. |
 | **Helps you study** | Flashcards from definitions, fill-in-the-blank cards from key sentences, a multiple-choice quiz and Anki export. |
 | **Your own pen** | Highlight, underline, annotate and erase, on PDFs and web pages too. |
+| **Writes into your PDF** | Highlights and notes can be written into a copy of the original PDF as real annotations — Acrobat, Preview and browsers read, move and delete them. The original bytes stay untouched. |
 | **Exports the marked document** | Word (.docx, with your notes as comments), HTML and PDF, plus Markdown, text, JSON and Anki summaries. |
 | **Remembers pages** | The browser extension restores your marks when you reopen a saved page. |
 | **Builds a knowledge base** | The Library reads many files at once — even whole folders — and lets you search all of them together, see how their concepts connect on an interactive map and open every result at the exact page. |
@@ -64,6 +65,9 @@ You can keep **several brains**: one per exam, one per project, one for work. Ea
 - **Concepts merged across files.** Keywords, names, defined terms and acronyms become concepts. Singular and plural, the same term in different files and an acronym written with its long form are one concept. Uncertain cases — an acronym in one file and its long form in another, two nearly identical names — are only suggested: you confirm or reject.
 - **An interactive concept map.** Concepts are linked when they appear in the same passages, and definitions add typed relations (*QAM — is a type of → digital modulation*). Central concepts are blue, concepts found in several documents purple. Zoom, pan, drag nodes into place, filter, and export to PNG, Markdown with `[[links]]` for Obsidian, or JSON.
 - **You stay in control.** Rename concepts, add aliases, merge or split them, add or remove links: every change is kept, logged in the concept's history and re-applied when you add more documents. Removing a document can be undone.
+- **What it notices by itself.** Concepts you name often and never define, two sources that contradict each other, concepts isolated from everything else, functions cited in your notes that no longer exist in the code. Each finding says why and links to the sentences it came from.
+- **Explain.** An explanation of a concept built only from the sentences in your documents, each with its source, saveable as a summary of the branch.
+- **Comparisons.** Two versions of the same document side by side, passage by passage, and two brains compared to see what they share.
 - **A map that is alive.** The concepts keep settling instead of freezing after the first layout: drag one and its neighbours react, the camera glides instead of jumping, new concepts grow in. Only what is on screen is simulated, so thousands of concepts stay smooth — and `prefers-reduced-motion` turns the movement off.
 
 | | |

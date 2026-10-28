@@ -165,6 +165,20 @@ const INO = L(
     assert.deepStrictEqual(names(r).sort(), ['msg', 'vera'], 'trovati: ' + names(r).join(', '));
   });
 
+  await check('le espressioni regolari non rompono la lettura', () => {
+    // un apostrofo dentro /["']/ faceva credere che cominciasse una stringa, e si mangiava il codice dopo
+    const r = WCCode.parse(L(
+      'var re = /^["\']?([A-Za-z_]+)["\']?\\s*[:=]/;',
+      'function vera(x) { return re.test(x); }',
+      'var div = 10 / 2 / 1;',
+      'function altra() { return div; }'), 'x.js');
+    assert.deepStrictEqual(names(r, 'function').sort(), ['altra', 'vera'], 'trovate: ' + names(r).join(', '));
+    assert.ok(!names(r).some((n) => /^tion$|^["\']/.test(n)), 'niente pezzi di parole: ' + names(r).join(', '));
+    const h = WCCode.highlight('var re = /["\']/; var x = 1;', 'x.js');
+    assert.ok(h.some((p) => p[1] === 'str' && /\//.test(p[0])), 'la regex è evidenziata come una stringa');
+    assert.ok(h.some((p) => p[1] === 'num' && p[0] === '1'), 'e il codice dopo si legge ancora');
+  });
+
   await check('SQL, shell, CSS e configurazioni', () => {
     const sql = WCCode.parse(L('-- gli utenti', 'CREATE TABLE utenti (id INT);', 'CREATE VIEW attivi AS SELECT 1;'), 'db.sql');
     assert.deepStrictEqual(names(sql), ['utenti', 'attivi']);
