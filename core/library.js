@@ -1034,6 +1034,169 @@
       return out.join('\n');
     }
 
+    /*
+     * Domande sul codice, risposte con la struttura già letta (niente AI):
+     *  who-calls   chi chiama X        uses       di cosa ha bisogno X
+     *  dead        codice mai usato    todos      le cose da fare
+     *  complexity  le funzioni più intricate      glossary  tutti i simboli per file
+     *  deps        quale file dipende da quale
+     * Ogni risposta porta file e riga, così si apre il punto esatto.
+     */
+    function codeDocs() { return docs.filter(function (r) { return r.code && r.code.symbols; }); }
+    function symbolsOf(r) {
+      return (r.code.symbols || []).map(function (s) { return { name: s.name, kind: s.kind, line: s.line, endLine: s.endLine, doc: s.doc, signature: s.signature, complexity: s.complexity, exported: s.exported, params: s.params }; });
+    }
+    function srcOf(r, line) {
+      var at = null;
+      (r.chunks || []).forEach(function (ch) { if (ch.line === line && at === null) at = ch.n; });
+      // "file" e non "name": chi chiama aggiunge il nome del simbolo, e i due non devono pestarsi
+      return { doc: r.id, file: r.name, path: r.path, line: line, n: at == null ? 0 : at, where: 'riga ' + line };
+    }
+
+    function code(op) {
+      var o = op || {}, files = codeDocs();
+      if (o.doc) files = files.filter(function (r) { return r.id === o.doc; });
+      var kind = o.kind || 'overview';
+      var name = String(o.name || '').trim();
+      var fold2 = fold(name);
+
+      if (kind === 'who-calls') {
+        var out = [];
+        files.forEach(function (r) {
+          (r.code.calls || []).forEach(function (c) {
+            if (fold(c.to) !== fold2) return;
+            out.push(Object.assign(srcOf(r, c.line), { caller: c.from || '(fuori da una funzione)', target: c.to }));
+          });
+        });
+        return { kind: kind, name: name, items: out };
+      }
+      if (kind === 'uses') {
+        var sym = null, host = null;
+        files.forEach(function (r) { (r.code.symbols || []).forEach(function (s2) { if (!sym && fold(s2.name) === fold2) { sym = s2; host = r; } }); });
+        if (!sym) return { kind: kind, name: name, items: [], imports: [] };
+        var inner = (host.code.calls || []).filter(function (c) { return c.from && fold(c.from) === fold2; })
+          .map(function (c) { return Object.assign(srcOf(host, c.line), { target: c.to, known: !!c.known }); });
+        return { kind: kind, name: sym.name, symbol: sym, inFile: host.name, items: inner, imports: host.code.imports || [] };
+      }
+      if (kind === 'dead') {
+        if (!g.WCCode) return { kind: kind, items: [] };
+        var dd = g.WCCode.dead(files.map(function (r) {
+          return { name: r.name, path: r.path, doc: r.id, symbols: r.code.symbols, calls: r.code.calls, imports: r.code.imports, usage: r.code.usage };
+        }));
+        return { kind: kind, items: dd.map(function (x) {
+          var r2 = docs[byId.get(x.doc)] || files[0];
+          return Object.assign(srcOf(r2, x.line), { name: x.name, symbolKind: x.kind });
+        }) };
+      }
+      if (kind === 'todos') {
+        var td = [];
+        files.forEach(function (r) { (r.code.todos || []).forEach(function (t) { td.push(Object.assign(srcOf(r, t.line), { tag: t.tag, text: t.text })); }); });
+        td.sort(function (a, b) { return a.file.localeCompare(b.file) || a.line - b.line; });
+        return { kind: kind, items: td };
+      }
+      if (kind === 'complexity') {
+        var cx = [];
+        files.forEach(function (r) {
+          symbolsOf(r).forEach(function (s3) {
+            if (s3.kind !== 'function' && s3.kind !== 'method') return;
+            cx.push(Object.assign(srcOf(r, s3.line), { name: s3.name, complexity: s3.complexity, length: (s3.endLine - s3.line + 1), signature: s3.signature }));
+          });
+        });
+        cx.sort(function (a, b) { return b.complexity - a.complexity || b.length - a.length; });
+        return { kind: kind, items: cx.slice(0, o.limit || 60) };
+      }
+      if (kind === 'glossary') {
+        return { kind: kind, files: files.map(function (r) {
+          return { doc: r.id, name: r.name, path: r.path, lang: r.code.langName, stats: r.code.stats, symbols: symbolsOf(r) };
+        }) };
+      }
+      if (kind === 'deps') {
+        // quale file importa quale: si confronta il nome del modulo col nome dei file della libreria
+        var base = new Map();
+        files.forEach(function (r) { base.set(String(r.name).replace(/\.[^.]+$/, '').toLowerCase(), r); });
+        var nodes = files.map(function (r) { return { doc: r.id, name: r.name, lang: r.code.langName, symbols: (r.code.symbols || []).length }; });
+        var links = [], out2 = [];
+        files.forEach(function (r) {
+          (r.code.imports || []).forEach(function (im) {
+            var t = String(im.from || '').split(/[\\/]/).pop().replace(/\.[^.]+$/, '').toLowerCase();
+            var hit = base.get(t);
+            if (hit && hit !== r) links.push({ from: r.id, to: hit.id, fromName: r.name, toName: hit.name, line: im.line });
+            else if (im.from) out2.push({ from: r.id, fromName: r.name, module: im.from, line: im.line });
+          });
+        });
+        var ext = new Map();
+        out2.forEach(function (x) { ext.set(x.module, (ext.get(x.module) || 0) + 1); });
+        return { kind: kind, nodes: nodes, links: links, external: Array.from(ext.entries()).map(function (e) { return { module: e[0], count: e[1] }; }).sort(function (a, b) { return b.count - a.count; }) };
+      }
+      // riepilogo
+      var tot = { files: files.length, lines: 0, code: 0, comment: 0, symbols: 0, functions: 0, classes: 0, todos: 0, imports: 0, maxComplexity: 0 };
+      var langs2 = new Map();
+      files.forEach(function (r) {
+        var st = r.code.stats || {};
+        tot.lines += st.lines || 0; tot.code += st.code || 0; tot.comment += st.comment || 0;
+        tot.symbols += (r.code.symbols || []).length; tot.todos += (r.code.todos || []).length; tot.imports += (r.code.imports || []).length;
+        tot.maxComplexity = Math.max(tot.maxComplexity, st.maxComplexity || 0);
+        (r.code.symbols || []).forEach(function (s4) { if (s4.kind === 'function' || s4.kind === 'method') tot.functions++; else if (s4.kind === 'class') tot.classes++; });
+        langs2.set(r.code.langName, (langs2.get(r.code.langName) || 0) + 1);
+      });
+      tot.langs = Array.from(langs2.entries()).map(function (e) { return { name: e[0], files: e[1] }; }).sort(function (a, b) { return b.files - a.files; });
+      tot.dead = g.WCCode ? g.WCCode.dead(files.map(function (r) {
+        return { name: r.name, path: r.path, doc: r.id, symbols: r.code.symbols, calls: r.code.calls, imports: r.code.imports, usage: r.code.usage };
+      })).length : 0;
+      return { kind: 'overview', stats: tot, files: files.map(function (r) { return { doc: r.id, name: r.name, lang: r.code.langName, symbols: (r.code.symbols || []).length, lines: (r.code.stats || {}).lines || 0 }; }) };
+    }
+
+    /* Documentazione automatica del codice, in Markdown: glossario, dipendenze, complessità, cose da fare. */
+    function codeMarkdown(op) {
+      var ov = code({ kind: 'overview', doc: (op || {}).doc });
+      if (!ov.stats.files) return '# Codice\n\nNessun file di codice in questo cervello.\n';
+      var gl = code({ kind: 'glossary', doc: (op || {}).doc });
+      var dp = code({ kind: 'deps', doc: (op || {}).doc });
+      var cx = code({ kind: 'complexity', doc: (op || {}).doc, limit: 20 });
+      var dd = code({ kind: 'dead', doc: (op || {}).doc });
+      var td = code({ kind: 'todos', doc: (op || {}).doc });
+      var CK = (g.WCCode || {}).KIND_IT || {};
+      var o = ['# Documentazione del codice', '',
+        ov.stats.files + ' file · ' + ov.stats.lines.toLocaleString('it-IT') + ' righe · ' + ov.stats.symbols + ' elementi · ' +
+        ov.stats.functions + ' funzioni · ' + ov.stats.classes + ' classi', '',
+        'Linguaggi: ' + ov.stats.langs.map(function (l) { return l.name + ' (' + l.files + ')'; }).join(', '), ''];
+      if (dp.links.length) {
+        o.push('## Dipendenze tra i file', '', '```mermaid', 'graph LR');
+        dp.links.slice(0, 200).forEach(function (l) { o.push('  ' + mid(l.fromName) + '[' + l.fromName + '] --> ' + mid(l.toName) + '[' + l.toName + ']'); });
+        o.push('```', '');
+      }
+      if (dp.external.length) {
+        o.push('## Librerie esterne', '');
+        dp.external.slice(0, 40).forEach(function (e) { o.push('- `' + e.module + '` — usata in ' + e.count + (e.count === 1 ? ' file' : ' file')); });
+        o.push('');
+      }
+      o.push('## Glossario', '');
+      gl.files.forEach(function (f) {
+        o.push('### ' + f.name, '', f.lang + ' · ' + (f.stats.lines || 0) + ' righe', '');
+        f.symbols.slice(0, 300).forEach(function (s5) {
+          o.push('- **' + s5.name + '** — ' + (CK[s5.kind] || s5.kind) + ', riga ' + s5.line + (s5.doc ? '. ' + s5.doc : ''));
+        });
+        o.push('');
+      });
+      if (cx.items.length) {
+        o.push('## Funzioni più intricate', '', '| Funzione | File | Riga | Complessità | Righe |', '|---|---|---|---|---|');
+        cx.items.forEach(function (x) { o.push('| ' + x.name + ' | ' + x.file + ' | ' + x.line + ' | ' + x.complexity + ' | ' + x.length + ' |'); });
+        o.push('');
+      }
+      if (dd.items.length) {
+        o.push('## Forse codice morto', '', 'Nessuno li chiama, non sono esportati e non sono punti di ingresso.', '');
+        dd.items.forEach(function (x) { o.push('- `' + x.name + '` (' + (CK[x.symbolKind] || x.symbolKind) + ') — ' + x.file + ', riga ' + x.line); });
+        o.push('');
+      }
+      if (td.items.length) {
+        o.push('## Da fare', '');
+        td.items.forEach(function (x) { o.push('- **' + x.tag + '** ' + x.text + ' — ' + x.file + ', riga ' + x.line); });
+        o.push('');
+      }
+      return o.join('\n');
+    }
+    function mid(s) { return 'n' + hash32(String(s)).toString(36); }
+
     function stats() {
       var G = graphCache;
       return {
@@ -1045,6 +1208,8 @@
 
     return {
       search: search,
+      code: code,
+      codeMarkdown: codeMarkdown,
       graph: graphOut,
       concept: concept,
       applyEdit: applyEdit,

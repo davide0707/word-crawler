@@ -14,6 +14,9 @@
  *   edit     { op }                  modifica dell'utente -> { edits, graph? }
  *   markdown {}                      mappa in Markdown
  *   docs     {}                      elenco dei documenti
+ * Codice (core/code.js, letto in library.js):
+ *   code          { op }            chi chiama, usi, codice morto, cose da fare, complessità, glossario, dipendenze
+ *   code-markdown { doc? }          documentazione automatica in Markdown
  * Studio (core/study.js), sullo stesso grafo:
  *   study-load  { state }            carica i progressi salvati
  *   study-stats { doc? }             quanti concetti nuovi, da ripassare, saldi
@@ -74,6 +77,8 @@ var handlers = {
   docs: function () { return base().docs(); },
   stats: function () { return base().stats(); },
 
+  code: function (d) { return base().code(d.op || {}); },
+  'code-markdown': function (d) { return base().codeMarkdown({ doc: d.doc }); },
   'study-load': function (d) { studyState = d.state && d.state.cards ? d.state : null; study = null; return learn().stats(); },
   'study-stats': function (d) { return learn().stats({ doc: d.doc }); },
   'study-path': function (d) { return learn().path({ doc: d.doc, limit: d.limit }); },

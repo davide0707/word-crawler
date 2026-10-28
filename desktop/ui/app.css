@@ -243,6 +243,15 @@ body { padding-top: var(--wc-top, 52px); }
 .lb-g3 { border-color: #244a5a; color: var(--wc-cyan); }
 
 .lb-path h3 { margin: 0 0 2px; }
+.lb-code { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
+.lb-cdfind { min-width: 260px; flex: 1; }
+.lb-cdbody { display: flex; flex-direction: column; gap: 10px; }
+.lb-cdbody h3 { margin: 6px 0 0; }
+.lb-cdlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; }
+.lb-cdlist li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; padding: 3px 6px; border-radius: 6px; }
+.lb-cdlist li:hover { background: var(--wc-panel-2); }
+.lb-cdlist code { font: 12.5px var(--wc-mono); color: var(--wc-cyan); }
+.lb-tag { font: 11px var(--wc-mono); color: var(--wc-orange); }
 .lb-steps { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .lb-step { display: grid; grid-template-columns: 54px minmax(0, 1fr) max-content; gap: 10px; align-items: center; padding: 5px 8px 5px calc(8px + var(--lv) * 18px);
   border-radius: 7px; border-left: 2px solid transparent; }

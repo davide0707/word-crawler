@@ -30,6 +30,34 @@ const PDFJS = pdfjsDir();
 
 // documenti di prova sulle telecomunicazioni (gli altri sono i file veri di tests/fixtures)
 const DOCS = {
+  'radio.ino': `#include <LoRa.h>
+#include "SCL3300.h"
+
+SCL3300 sensore;
+float angolo;
+int maiLetta = 3;
+
+// prepara la radio e il sensore di inclinazione
+void setup() {
+  LoRa.begin(433E6);
+  sensore.begin();
+}
+
+void loop() {
+  angolo = sensore.getAngle();
+  inviaDati(angolo);
+}
+
+/* invia al ricevitore il valore letto dal sensore */
+void inviaDati(float v) {
+  // TODO: gestire l'errore di trasmissione
+  LoRa.beginPacket();
+  LoRa.print(v);
+  LoRa.endPacket();
+}
+
+void maiUsata() { return; }
+`,
   'Reti_e_Segnali.md': `# Reti e segnali
 
 ## Modulazione digitale
@@ -546,6 +574,58 @@ async function check(name, fn) {
     await page.click('.lb-brain .lb-ask .wc-danger');
     await waitFor((k) => window.__lib.brains.length === k - 1, before, 15000);
     assert.ok(!(await page.$('.lb-brain-name:text-is("Analisi II")')), 'sparito dall’elenco');
+  });
+
+  await check('codice: riepilogo, chi chiama, codice morto e cose da fare', async () => {
+    await page.click('.lb-tabs [role="tab"]:text-is("Codice")');
+    await page.waitForSelector('.lb-code:not([hidden])');
+    await waitFor(() => document.querySelectorAll('.lb-cdbody .sc-tile').length >= 5, null, 20000);
+    const tiles = await page.textContent('.lb-cdbody');
+    assert.ok(/Arduino/.test(tiles), 'il linguaggio riconosciuto: ' + tiles.slice(0, 200));
+    await shot('lib-12-codice.png');
+
+    // chi chiama inviaDati
+    await page.fill('.lb-cdfind', 'inviaDati');
+    await page.press('.lb-cdfind', 'Enter');
+    await waitFor(() => /Chi la chiama/.test(document.querySelector('.lb-cdbody').textContent), null, 15000);
+    const body = await page.textContent('.lb-cdbody');
+    assert.ok(/loop/.test(body), 'la chiama loop: ' + body.slice(0, 300));
+    assert.ok(/riga 16/.test(body), 'con la riga esatta: ' + body.slice(0, 300));
+    assert.ok(/Di cosa ha bisogno/.test(body) && /beginPacket/.test(body), 'e cosa usa lei');
+
+    // codice morto
+    await page.fill('.lb-cdfind', '');
+    await page.selectOption('.lb-code select', 'dead');
+    await waitFor(() => /maiUsata/.test(document.querySelector('.lb-cdbody').textContent), null, 15000);
+    const dead = await page.textContent('.lb-cdbody');
+    assert.ok(/maiLetta/.test(dead), 'anche la variabile mai letta: ' + dead.slice(0, 200));
+    assert.ok(!/\binviaDati\b/.test(dead.split('Nessuno li chiama')[0]), 'inviaDati è usata, non è morta');
+
+    // cose da fare
+    await page.selectOption('.lb-code select', 'todos');
+    await waitFor(() => /TODO/.test(document.querySelector('.lb-cdbody').textContent), null, 15000);
+    assert.ok(/trasmissione/.test(await page.textContent('.lb-cdbody')));
+
+    // esportazione della documentazione
+    const n0 = await page.evaluate(() => window.__saved.length);
+    await page.click('text=Esporta la documentazione');
+    await waitFor((k) => window.__saved.length > k, n0, 15000);
+    const md = await page.evaluate(() => window.__saved[window.__saved.length - 1]);
+    assert.strictEqual(md.name, 'documentazione del codice.md');
+    assert.ok(/# Documentazione del codice/.test(md.text) && /Glossario/.test(md.text), md.text.slice(0, 200));
+  });
+
+  await check('un simbolo del codice è un concetto come gli altri', async () => {
+    await page.click('.lb-tabs [role="tab"]:text-is("Mappa dei concetti")');
+    await page.waitForSelector('.lb-map:not([hidden])');
+    await page.fill('.lb-maptools input[type="search"]', 'inviaDati');
+    await page.press('.lb-maptools input[type="search"]', 'Enter');
+    await waitFor(() => /inviaDati/.test((document.querySelector('.lb-panel .lb-title') || {}).textContent || ''), null, 15000);
+    const panel = await page.textContent('.lb-panel');
+    assert.ok(/funzione/.test(panel), 'la scheda dice che è una funzione: ' + panel.slice(0, 300));
+    assert.ok(/riga 20/.test(panel), 'con la riga: ' + panel.slice(0, 300));
+    assert.ok(/invia al ricevitore/.test(panel), 'il commento fa da definizione');
+    assert.ok(/usato da/.test(panel) || /loop/.test(panel), 'e il collegamento con loop');
   });
 
   await check('nessun errore nella pagina', () => { assert.deepStrictEqual(errs, []); });

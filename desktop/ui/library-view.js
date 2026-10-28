@@ -110,9 +110,10 @@
     var tabResults = el('button', { type: 'button', role: 'tab', class: 'wc-tab', 'aria-selected': 'true', text: 'Risultati' });
     var tabMap = el('button', { type: 'button', role: 'tab', class: 'wc-tab', 'aria-selected': 'false', text: 'Mappa dei concetti' });
     var tabStudy = el('button', { type: 'button', role: 'tab', class: 'wc-tab', 'aria-selected': 'false', text: 'Studio' });
+    var tabCode = el('button', { type: 'button', role: 'tab', class: 'wc-tab', 'aria-selected': 'false', text: 'Codice', hidden: 'hidden' });
     var dueBadge = el('span', { class: 'lb-badge', hidden: 'hidden' });
     tabStudy.appendChild(dueBadge);
-    var bar = el('div', { class: 'lb-bar' }, [el('div', { class: 'wc-tabs lb-tabs', role: 'tablist' }, [tabResults, tabMap, tabStudy]), el('div', { class: 'lb-filters' }, [docSel, langSel])]);
+    var bar = el('div', { class: 'lb-bar' }, [el('div', { class: 'wc-tabs lb-tabs', role: 'tablist' }, [tabResults, tabMap, tabStudy, tabCode]), el('div', { class: 'lb-filters' }, [docSel, langSel])]);
     var resultsBox = el('div', { class: 'lb-results', 'aria-live': 'polite' });
     var mapFind = el('input', { type: 'search', placeholder: 'Trova un concetto sulla mappa…', 'aria-label': 'Trova un concetto sulla mappa', list: 'lb-labels' });
     var labelList = el('datalist', { id: 'lb-labels' });
@@ -160,12 +161,24 @@
     var stCard = el('div', { class: 'lb-card', hidden: 'hidden' });
     var stPath = el('div', { class: 'lb-path' });
     var studyBox = el('div', { class: 'lb-study', hidden: 'hidden' }, [stTools, stTiles, stCard, stPath]);
+
+    // codice
+    var cdWhat = el('select', { 'aria-label': 'Cosa mostrare del codice' }, [
+      el('option', { value: 'overview', text: 'Riepilogo' }), el('option', { value: 'deps', text: 'Dipendenze tra i file' }),
+      el('option', { value: 'glossary', text: 'Glossario' }), el('option', { value: 'complexity', text: 'Funzioni più intricate' }),
+      el('option', { value: 'dead', text: 'Forse codice morto' }), el('option', { value: 'todos', text: 'Da fare' })]);
+    var cdFind = el('input', { type: 'search', class: 'lb-cdfind', placeholder: 'Chi chiama… / di cosa ha bisogno…', 'aria-label': 'Cerca una funzione nel codice', list: 'lb-labels' });
+    var cdScope = el('select', { 'aria-label': 'In quale file' });
+    var cdExport = el('button', { type: 'button', class: 'wc-btn', text: 'Esporta la documentazione' });
+    var cdTools = el('div', { class: 'lb-sttools' }, [cdWhat, cdScope, cdFind, cdExport]);
+    var cdBody = el('div', { class: 'lb-cdbody', 'aria-live': 'polite' });
+    var codeBox = el('div', { class: 'lb-code', hidden: 'hidden' }, [cdTools, cdBody]);
     var emptyBox = el('div', { class: 'lb-empty', hidden: 'hidden' }, [
       el('div', { class: 'wc-empty-mark', 'aria-hidden': 'true' }),
       el('h1', { text: 'La tua libreria è vuota' }),
       el('p', { text: 'Aggiungi dispense, slide, libri, appunti o una cartella intera. Il ragno li legge tutti, divide il testo in passaggi, riconosce i concetti e li collega tra un documento e l’altro.' }),
       el('p', { class: 'wc-note', text: 'Poi puoi cercare in tutti i documenti insieme, vedere la mappa dei concetti e aprire ogni risultato alla pagina giusta. Senza intelligenza artificiale e senza internet.' })]);
-    var main = el('main', { class: 'lb-main' }, [qForm, bar, emptyBox, resultsBox, mapBox, studyBox]);
+    var main = el('main', { class: 'lb-main' }, [qForm, bar, emptyBox, resultsBox, mapBox, studyBox, codeBox]);
     var panel = el('div', { class: 'lb-panel' });
     var right = el('aside', { class: 'wc-side wc-right lb-right', 'aria-label': 'Dettagli' }, [panel]);
     root.appendChild(left); root.appendChild(main); root.appendChild(right);
@@ -177,6 +190,8 @@
         .forEach(function (k) { o[k] = r[k]; });
       o.chunks = Array.isArray(r.chunks) ? r.chunks.length : r.chunks || 0;
       o.concepts = Array.isArray(r.concepts) ? r.concepts.length : r.concepts || 0;
+      // del codice basta sapere che c'è: la struttura resta nel thread della libreria
+      o.code = r.code ? { lang: r.code.lang, langName: r.code.langName, symbols: Array.isArray(r.code.symbols) ? r.code.symbols.length : r.code.symbols || 0 } : null;
       return o;
     }
     function setDoc(r) {
@@ -190,6 +205,7 @@
         .filter(function (d) { return !f || g.WCText.fold(d.name + ' ' + (d.title || '')).indexOf(f) >= 0; });
       docCount.textContent = 'Documenti (' + docs.length + ')';
       clearBtn.hidden = !docs.length || importing;
+      updateCodeTab();
       docList.textContent = '';
       if (!list.length) docList.appendChild(el('li', { class: 'wc-note', text: docs.length ? 'Nessun documento con questo nome.' : 'Ancora nessun documento.' }));
       list.forEach(function (d) {
@@ -768,18 +784,22 @@
       tabResults.setAttribute('aria-selected', v === 'results' ? 'true' : 'false');
       tabMap.setAttribute('aria-selected', v === 'map' ? 'true' : 'false');
       tabStudy.setAttribute('aria-selected', v === 'study' ? 'true' : 'false');
+      tabCode.setAttribute('aria-selected', v === 'code' ? 'true' : 'false');
       resultsBox.hidden = v !== 'results' || !docs.length;
       mapBox.hidden = v !== 'map' || !docs.length;
       studyBox.hidden = v !== 'study' || !docs.length;
+      codeBox.hidden = v !== 'code' || !docs.length;
       if (v === 'results' && !quiet && !resultsBox.childNodes.length) renderOverviewResults();
       if (v === 'results' && !resultsBox.childNodes.length) renderOverviewResults();
       if (v === 'map' && docs.length) { if (!graph || !mapNodes.length) loadGraph(); else { resize(); kick(0.08); } }
       else stopLoop();
       if (v === 'study' && docs.length) renderStudy();
+      if (v === 'code' && docs.length) renderCode();
     }
     tabResults.addEventListener('click', function () { showView('results'); });
     tabMap.addEventListener('click', function () { showView('map'); });
     tabStudy.addEventListener('click', function () { showView('study'); });
+    tabCode.addEventListener('click', function () { showView('code'); });
 
     // ------------------------------------------------------------ mappa dei concetti
     /*
@@ -1534,6 +1554,161 @@
         var b = stCard.querySelector('.lb-g' + (+e.key - 1));
         if (b) { e.preventDefault(); b.click(); }
       }
+    });
+
+    // ------------------------------------------------------------ codice
+    /*
+     * La scheda Codice: le risposte arrivano dal thread separato, già pronte, e ognuna porta file e
+     * riga, così un clic apre il punto esatto nel Lettore.
+     */
+    var CK_IT = { function: 'funzione', method: 'metodo', class: 'classe', interface: 'interfaccia', struct: 'struttura', enum: 'enumerazione',
+      variable: 'variabile', constant: 'costante', endpoint: 'endpoint', table: 'tabella', style: 'stile', setting: 'configurazione' };
+    var codeDocsCount = 0;
+
+    function updateCodeTab() {
+      codeDocsCount = docs.filter(function (d) { return d.code; }).length;
+      tabCode.hidden = !codeDocsCount;
+      if (!codeDocsCount && view === 'code') showView('results');
+    }
+    function cdFill() {
+      var keep = cdScope.value;
+      cdScope.textContent = '';
+      cdScope.appendChild(el('option', { value: '', text: 'Tutti i file di codice' }));
+      docs.filter(function (d) { return d.code; }).forEach(function (d) { cdScope.appendChild(el('option', { value: d.id, text: d.name })); });
+      if (keep && docById.has(keep)) cdScope.value = keep;
+    }
+    function srcLink(x, label) {
+      var b = el('button', { type: 'button', class: 'wc-link', text: label || (x.file + ' · riga ' + x.line) });
+      b.addEventListener('click', function () {
+        var d = docById.get(x.doc);
+        if (d) host.openAt(d.path, d.name, { n: x.n, page: null, line: x.line });
+      });
+      return b;
+    }
+    function renderCode() {
+      cdFill();
+      var what = cdWhat.value, doc = cdScope.value || undefined;
+      var q = cdFind.value.trim();
+      cdBody.textContent = '';
+      cdBody.appendChild(el('p', { class: 'wc-note', text: 'Leggo il codice…' }));
+      if (q) return renderCodeFind(q, doc);
+      kb.call('code', { op: { kind: what, doc: doc, limit: 80 } }).then(function (r) {
+        cdBody.textContent = '';
+        if (what === 'overview') return cdOverview(r);
+        if (what === 'deps') return cdDeps(r);
+        if (what === 'glossary') return cdGlossary(r);
+        cdList(r);
+      }).catch(function (e) { cdBody.textContent = ''; cdBody.appendChild(el('p', { class: 'wc-note', text: 'Non riesco a leggere il codice: ' + e.message })); });
+    }
+    function cdOverview(r) {
+      var s2 = r.stats;
+      var tiles = el('div', { class: 'lb-sttiles' });
+      [['File', s2.files], ['Righe', s2.lines], ['Funzioni', s2.functions], ['Classi', s2.classes], ['Da fare', s2.todos]].forEach(function (t) {
+        tiles.appendChild(el('div', { class: 'sc-tile' }, [el('span', { text: t[0] }), el('b', { text: (t[1] || 0).toLocaleString('it-IT') })]));
+      });
+      cdBody.appendChild(tiles);
+      cdBody.appendChild(el('p', { class: 'wc-note', text: 'Linguaggi: ' + s2.langs.map(function (l) { return l.name + ' (' + l.files + ')'; }).join(', ') +
+        ' · ' + plural(s2.imports, 'dipendenza', 'dipendenze') + ' · complessità massima ' + s2.maxComplexity + (s2.dead ? ' · ' + plural(s2.dead, 'elemento forse morto', 'elementi forse morti') : '') }));
+      cdBody.appendChild(el('h3', { class: 'sc-subhead', text: 'File' }));
+      var ul = el('ul', { class: 'lb-cdlist' });
+      r.files.forEach(function (f) {
+        var b = el('button', { type: 'button', class: 'wc-link', text: f.name });
+        b.addEventListener('click', function () { var d = docById.get(f.doc); if (d) showDoc(d); });
+        ul.appendChild(el('li', {}, [b, el('span', { class: 'wc-note', text: ' · ' + f.lang + ' · ' + plural(f.lines, 'riga', 'righe') + ' · ' + plural(f.symbols, 'elemento', 'elementi') })]));
+      });
+      cdBody.appendChild(ul);
+      cdBody.appendChild(el('p', { class: 'wc-note', text: 'Scrivi il nome di una funzione qui sopra per vedere chi la chiama e di cosa ha bisogno.' }));
+    }
+    function cdDeps(r) {
+      if (!r.links.length && !r.external.length) { cdBody.appendChild(el('p', { class: 'wc-note', text: 'Nessuna dipendenza trovata.' })); return; }
+      if (r.links.length) {
+        cdBody.appendChild(el('h3', { class: 'sc-subhead', text: 'Tra i tuoi file' }));
+        var ul = el('ul', { class: 'lb-cdlist' });
+        r.links.forEach(function (l) {
+          ul.appendChild(el('li', {}, [el('b', { text: l.fromName }), el('span', { class: 'wc-note', text: ' dipende da ' }), el('b', { text: l.toName }),
+            el('span', { class: 'wc-note', text: ' · riga ' + l.line })]));
+        });
+        cdBody.appendChild(ul);
+      }
+      if (r.external.length) {
+        cdBody.appendChild(el('h3', { class: 'sc-subhead', text: 'Librerie esterne' }));
+        var ul2 = el('ul', { class: 'lb-cdlist' });
+        r.external.slice(0, 60).forEach(function (e2) {
+          ul2.appendChild(el('li', {}, [el('code', { text: e2.module }), el('span', { class: 'wc-note', text: ' · in ' + plural(e2.count, 'file', 'file') })]));
+        });
+        cdBody.appendChild(ul2);
+      }
+    }
+    function cdGlossary(r) {
+      r.files.forEach(function (f) {
+        cdBody.appendChild(el('h3', { class: 'sc-subhead', text: f.name + ' · ' + f.lang }));
+        var ul = el('ul', { class: 'lb-cdlist' });
+        f.symbols.slice(0, 400).forEach(function (sy) {
+          var b = el('button', { type: 'button', class: 'wc-link', text: sy.name });
+          b.addEventListener('click', function () { cdFind.value = sy.name; renderCode(); });
+          ul.appendChild(el('li', {}, [b, el('span', { class: 'wc-note', text: ' · ' + (CK_IT[sy.kind] || sy.kind) + ' · riga ' + sy.line + (sy.doc ? ' · ' + sy.doc : '') })]));
+        });
+        cdBody.appendChild(ul);
+      });
+    }
+    function cdList(r) {
+      if (!r.items.length) { cdBody.appendChild(el('p', { class: 'wc-note', text: 'Niente da mostrare qui.' })); return; }
+      var ul = el('ul', { class: 'lb-cdlist' });
+      r.items.forEach(function (x) {
+        var line = [];
+        if (r.kind === 'dead') line = [el('code', { text: x.name }), el('span', { class: 'wc-note', text: ' · ' + (CK_IT[x.symbolKind] || x.symbolKind) + ' · ' })];
+        else if (r.kind === 'todos') line = [el('b', { class: 'lb-tag', text: x.tag }), el('span', { text: ' ' + x.text + ' · ' })];
+        else if (r.kind === 'complexity') line = [el('code', { text: x.signature || x.name }), el('span', { class: 'wc-note', text: ' · complessità ' + x.complexity + ' · ' + plural(x.length, 'riga', 'righe') + ' · ' })];
+        line.push(srcLink(x));
+        ul.appendChild(el('li', {}, line));
+      });
+      cdBody.appendChild(ul);
+      if (r.kind === 'dead') cdBody.appendChild(el('p', { class: 'wc-note', text: 'Nessuno li chiama, non sono esportati e non sono punti di ingresso come setup, loop o main. Controlla prima di cancellare: possono essere usati da qualcosa che non è nella libreria.' }));
+    }
+    function renderCodeFind(q, doc) {
+      Promise.all([kb.call('code', { op: { kind: 'who-calls', name: q, doc: doc } }), kb.call('code', { op: { kind: 'uses', name: q, doc: doc } })]).then(function (rr) {
+        var chi = rr[0], usa = rr[1];
+        cdBody.textContent = '';
+        cdBody.appendChild(el('h3', { class: 'sc-subhead', text: '«' + q + '»' }));
+        if (usa.symbol) {
+          cdBody.appendChild(el('p', { class: 'lb-codebar' }, [el('code', { text: usa.symbol.signature || usa.symbol.name }),
+            el('span', { class: 'wc-note', text: (CK_IT[usa.symbol.kind] || usa.symbol.kind) + ' · ' + usa.inFile + ' · riga ' + usa.symbol.line +
+              (usa.symbol.complexity > 1 ? ' · complessità ' + usa.symbol.complexity : '') })]));
+          if (usa.symbol.doc) cdBody.appendChild(el('p', { text: usa.symbol.doc }));
+        }
+        cdBody.appendChild(el('h3', { class: 'sc-subhead', text: 'Chi la chiama (' + chi.items.length + ')' }));
+        if (!chi.items.length) cdBody.appendChild(el('p', { class: 'wc-note', text: 'Nessuno, nei file che hai aggiunto.' }));
+        else {
+          var u1 = el('ul', { class: 'lb-cdlist' });
+          chi.items.forEach(function (x) { u1.appendChild(el('li', {}, [el('code', { text: x.caller }), el('span', { class: 'wc-note', text: ' · ' }), srcLink(x)])); });
+          cdBody.appendChild(u1);
+        }
+        cdBody.appendChild(el('h3', { class: 'sc-subhead', text: 'Di cosa ha bisogno (' + usa.items.length + ')' }));
+        if (!usa.items.length) cdBody.appendChild(el('p', { class: 'wc-note', text: 'Non chiama niente.' }));
+        else {
+          var u2 = el('ul', { class: 'lb-cdlist' });
+          usa.items.forEach(function (x) {
+            var b = el('button', { type: 'button', class: 'wc-link', text: x.target });
+            b.addEventListener('click', function () { cdFind.value = x.target; renderCode(); });
+            u2.appendChild(el('li', {}, [b, el('span', { class: 'wc-note', text: x.known ? ' · definita nella libreria · ' : ' · viene da fuori · ' }), srcLink(x)]));
+          });
+          cdBody.appendChild(u2);
+        }
+        if (usa.imports && usa.imports.length) {
+          cdBody.appendChild(el('h3', { class: 'sc-subhead', text: 'Il file importa' }));
+          cdBody.appendChild(el('p', { class: 'wc-note', text: usa.imports.map(function (im) { return im.from; }).join(', ') }));
+        }
+      }).catch(function (e) { cdBody.textContent = ''; cdBody.appendChild(el('p', { class: 'wc-note', text: e.message })); });
+    }
+    cdWhat.addEventListener('change', function () { cdFind.value = ''; renderCode(); });
+    cdScope.addEventListener('change', renderCode);
+    cdFind.addEventListener('change', renderCode);
+    cdFind.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); renderCode(); } });
+    cdExport.addEventListener('click', function () {
+      kb.call('code-markdown', { doc: cdScope.value || undefined }).then(function (md) {
+        host.saveFile('documentazione del codice.md', md, 'text/markdown');
+        toast('Documentazione esportata.');
+      }).catch(function (e) { toast('Esportazione non riuscita: ' + e.message); });
     });
 
     // ------------------------------------------------------------ cervelli

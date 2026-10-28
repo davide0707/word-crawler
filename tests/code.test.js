@@ -265,6 +265,78 @@ const INO = L(
     assert.ok(todo.total >= 1, 'le cose da fare si cercano: ' + todo.total);
   });
 
+  await check('domande sul codice: chi chiama, di cosa ha bisogno, cosa è morto', async () => {
+    const recs = [
+      await WCLibrary.buildRecord(codeInput('radio.ino', INO), {}),
+      await WCLibrary.buildRecord(codeInput('util.js', L('export function aiuta(x) { return x; }', '// TODO: scrivere i test', 'function sola() { return 1; }')), {})
+    ];
+    const kb = WCLibrary.open(recs, WCLibrary.emptyEdits());
+
+    const chi = kb.code({ kind: 'who-calls', name: 'inviaDati' });
+    assert.strictEqual(chi.items.length, 1, JSON.stringify(chi.items));
+    assert.strictEqual(chi.items[0].caller, 'loop');
+    assert.strictEqual(chi.items[0].file, 'radio.ino');
+    assert.strictEqual(chi.items[0].line, 16);
+    assert.strictEqual(chi.items[0].where, 'riga 16');
+
+    const usa = kb.code({ kind: 'uses', name: 'loop' });
+    assert.ok(usa.items.some((x) => x.target === 'inviaDati' && x.known), 'loop usa inviaDati: ' + JSON.stringify(usa.items));
+    assert.ok(usa.items.some((x) => x.target === 'getAngle' && !x.known), 'e getAngle, che viene da fuori');
+
+    const morto = kb.code({ kind: 'dead' });
+    const nomi = morto.items.map((x) => x.name).sort();
+    assert.deepStrictEqual(nomi, ['maiLetta', 'maiUsata', 'sola'], 'morti: ' + nomi.join(', '));
+    assert.ok(morto.items.every((x) => x.file && x.line > 0), 'ognuno con file e riga');
+
+    const todo = kb.code({ kind: 'todos' });
+    assert.strictEqual(todo.items.length, 2, JSON.stringify(todo.items));
+    assert.ok(todo.items.some((x) => x.file === 'util.js' && /test/.test(x.text)));
+
+    const cx = kb.code({ kind: 'complexity' });
+    assert.ok(cx.items.length >= 4 && cx.items[0].complexity >= cx.items[cx.items.length - 1].complexity, 'in ordine di complessità');
+    assert.ok(cx.items.every((x) => x.file && x.signature !== undefined));
+
+    const solo = kb.code({ kind: 'todos', doc: recs[1].id });
+    assert.strictEqual(solo.items.length, 1, 'il filtro per documento funziona');
+  });
+
+  await check('riepilogo, glossario e dipendenze tra i file', async () => {
+    const recs = [
+      await WCLibrary.buildRecord(codeInput('util.js', L('export function aiuta(x) { return x; }')), {}),
+      await WCLibrary.buildRecord(codeInput('app.js', L('import { aiuta } from "./util";', 'import React from "react";', 'console.log(aiuta(1));')), {})
+    ];
+    const kb = WCLibrary.open(recs, WCLibrary.emptyEdits());
+    const ov = kb.code({});
+    assert.strictEqual(ov.stats.files, 2);
+    assert.ok(ov.stats.functions >= 1 && ov.stats.lines >= 4, JSON.stringify(ov.stats));
+    assert.ok(ov.stats.langs.some((l) => l.name === 'JavaScript'));
+
+    const dp = kb.code({ kind: 'deps' });
+    assert.strictEqual(dp.links.length, 1, 'app.js dipende da util.js: ' + JSON.stringify(dp.links));
+    assert.strictEqual(dp.links[0].fromName, 'app.js');
+    assert.strictEqual(dp.links[0].toName, 'util.js');
+    assert.ok(dp.external.some((e) => e.module === 'react'), 'le librerie esterne a parte: ' + JSON.stringify(dp.external));
+
+    const gl = kb.code({ kind: 'glossary' });
+    assert.strictEqual(gl.files.length, 2);
+    assert.ok(gl.files.some((f) => f.symbols.some((s) => s.name === 'aiuta')));
+
+    const md = kb.codeMarkdown({});
+    assert.ok(/# Documentazione del codice/.test(md));
+    assert.ok(/```mermaid/.test(md) && /app\.js/.test(md), 'il diagramma delle dipendenze');
+    assert.ok(/## Glossario/.test(md) && /aiuta/.test(md));
+    assert.ok(/## Librerie esterne/.test(md) && /react/.test(md));
+    assert.ok(md.indexOf('x.name2') < 0, 'niente residui');
+  });
+
+  await check('un cervello senza codice risponde comunque', async () => {
+    const kb = WCLibrary.open([], WCLibrary.emptyEdits());
+    assert.strictEqual(kb.code({}).stats.files, 0);
+    assert.deepStrictEqual(kb.code({ kind: 'dead' }).items, []);
+    assert.deepStrictEqual(kb.code({ kind: 'who-calls', name: 'x' }).items, []);
+    assert.ok(/Nessun file di codice/.test(kb.codeMarkdown({})));
+  });
+
   console.log(failures ? '\n' + failures + ' prove fallite' : '\ntutte le prove del codice sono passate');
   process.exit(failures ? 1 : 0);
 })();
