@@ -7,6 +7,8 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-10-28
+
 ### Added
 - **Code is a document too**: 42 extensions (JavaScript, TypeScript, Python, C, C++, Arduino, Java, C#, Go, Rust, PHP, Swift, Kotlin, Ruby, Verilog, SQL, shell, CSS, config files, Jupyter notebooks) are read for their structure, with no new dependency. Functions, classes, variables, imports, endpoints and tables become concepts of the brain, with the line as the source and the comment above as the definition; calls become real edges ("loop uses inviaDati", "Store inherits from Base").
 - **Code tab**: who calls this function, what it needs, what nobody uses (dead code judged across the whole brain), what is left to do, the most tangled functions, what each file contains, which file depends on which — each answer with file and line, one click from the Reader. Exports as Markdown documentation with a Mermaid dependency diagram, glossary, complexity table and TODO list.
@@ -22,10 +24,8 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Scanner**: a sunburst view of the disk map, a "Code on disk" section grouping extensions by language, and a button that hands a scanned folder straight to the Library.
 - **Real PDF annotations**: highlights and notes are written into a copy of the original PDF as proper annotations, readable and editable in Acrobat, Preview and browsers. The original bytes are untouched — it is an incremental update — and when a PDF cannot take them (compressed page objects, encryption) the app says so and offers the printed PDF instead.
 - **Compare two versions** of the same document, passage by passage rather than line by line, with the pairs that look like versions of the same thing suggested automatically.
-
-## [2.4.0] - 2026-10-28
-
-### Added
+- **Search by meaning, not only by word** (tick "anche per significato"): ask "quanto veloce va la rete" and the passages that say *throughput* or *banda* come up too, even though they share no word with the question. The meaning is learned from your own documents — two words used in the same contexts mean nearby things — so nothing is downloaded, no model is fetched and nothing leaves the computer. Results found this way are labelled "per significato" and the words the brain treated as nearby are listed above the list; a phrase in quotes stays literal. A concept card can show **Simili di significato**: concepts used in the same discussions even if they never met in a sentence, the quickest way to spot two names for one thing and merge them.
+- **Find a file on disk by meaning**: in the scan report, "Trova un file" searches every file of the scan by name and, if you want, by meaning — "la bolletta della luce" finds `fattura-enel-gennaio.pdf`. The sense of the words comes from how you organised your own folders; no file is opened, only names and paths are read.
 - **Several brains**: the library is no longer one. Each brain is a library of its own — documents, concepts, map edits and study progress kept apart — with a name, an icon and a colour: one per exam, one per project, one for work. A picker in the sidebar switches between them; **Manage brains** opens the list, with document and study counts and the date each was last touched.
   - Create, rename, recolour, **duplicate**, **export** and **import** a brain. The export is a plain JSON file (`word-crawler-brain`), so nothing is locked inside the app; an import only keeps records whose id matches the path they carry.
   - Deleting a brain moves its folder to the app's trash, where it stays recoverable by hand for 30 days; at least one brain always remains. Files on your computer are never touched.
@@ -104,8 +104,8 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Browser extension (Manifest V3) with side panel, document reader and archive.
 - Automated tests and a multi-platform build workflow.
 
-[Unreleased]: https://github.com/davide0707/word-crawler/compare/v2.4.0...HEAD
-[2.4.0]: https://github.com/davide0707/word-crawler/compare/v2.3.0...v2.4.0
+[Unreleased]: https://github.com/davide0707/word-crawler/compare/v2.3.1...HEAD
+[2.3.1]: https://github.com/davide0707/word-crawler/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/davide0707/word-crawler/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/davide0707/word-crawler/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/davide0707/word-crawler/releases/tag/v2.1.0

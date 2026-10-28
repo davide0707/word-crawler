@@ -45,6 +45,7 @@
 | **Esporta il documento segnato** | Word (.docx, con le note come commenti), pagina web e PDF, più riepiloghi in Markdown, testo, JSON e Anki. |
 | **Ricorda le pagine** | L'estensione rimette i segni quando riapri una pagina salvata. |
 | **Costruisce una base di conoscenza** | La Libreria legge tanti file insieme, anche cartelle intere: cerchi in tutti i documenti insieme, vedi come si collegano i concetti su una mappa interattiva e apri ogni risultato alla pagina giusta. |
+| **Trova quello che intendevi** | Ricerca per significato, non solo per parola: chiedi «quanto veloce va la rete» e saltano fuori anche i passaggi che dicono *throughput*. Il senso delle parole lo impara dai tuoi documenti: niente da scaricare, niente esce dal computer. Anche lo scanner del disco cerca i nomi dei file così. |
 | **Un cervello per materia** | La libreria non è una sola: ogni cervello ha i suoi documenti, i suoi concetti, la sua mappa e i suoi progressi, con nome, icona e colore. Lo duplichi, lo esporti in JSON aperto, lo reimporti. |
 | **Sa quanto sai** | Lo Studio ti interroga sui concetti dei tuoi documenti, allunga l'intervallo tra un ripasso e l'altro man mano che li sai, li mette in ordine dal generale allo specifico e colora la mappa in base a quanto conosci ognuno. |
 | **Fa la mappa del disco** | Scanner in sola lettura con mappa a riquadri, duplicati, file e cartelle più grandi, confronto tra scansioni e spostamento sicuro dei duplicati nel Cestino. |
@@ -220,7 +221,7 @@ Le regole per contribuire sono in [CONTRIBUTING.md](CONTRIBUTING.md); la storia 
 
 ## Stato del progetto
 
-Versione **2.4.0**. Limiti noti:
+Versione **2.3.1**. Limiti noti:
 
 - Il motore OCR (tesseract.js) è provato nei test con l'uscita registrata di Tesseract; il motore WebAssembly vero gira solo nell'app e nell'estensione.
 - Non si aprono i vecchi .ppt/.xls né le immagini TIFF (salvarli come .pptx/.xlsx o PNG/PDF).

@@ -255,7 +255,7 @@ async function check(name, fn) {
       scan: { roots: async () => [], pickFolder: async () => null, start: async () => 'x', cancel: async () => true, exportCsv: async () => true, history: async () => [], compare: async () => null, trash: async () => ({}), onEvent: () => () => {} },
       showItem: async () => true,
       openExternal: async () => true,
-      info: async () => ({ version: '2.4.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
+      info: async () => ({ version: '2.3.1', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
       onMenu: () => () => {},
       onFileOpened: () => () => {}
     };
@@ -317,6 +317,34 @@ async function check(name, fn) {
     assert.ok(chips.some((c) => /^QAM/.test(c)), 'concetto riconosciuto: ' + chips.join(', '));
     assert.ok(await page.$('.lb-hit mark'), 'parole evidenziate');
     await shot('lib-03-ricerca.png');
+  });
+
+  await check('ricerca anche per significato: l’interruttore, le parole vicine, il segno', async () => {
+    await page.fill('.lb-q', 'modulazione');
+    await page.press('.lb-q', 'Enter');
+    await page.waitForSelector('.lb-hit');
+    const soloParole = await page.$$eval('.lb-hit', (hs) => hs.length);
+    assert.ok(!(await page.$('.lb-hit.bymeaning')), 'spenta: nessuno esce per significato');
+    assert.ok(!(await page.$('.lb-near')), 'spenta: nessuna parola vicina');
+    // accesa: il cervello impara le parole della libreria e la ricerca si allarga
+    await page.check('#lb-sem');
+    await waitFor(() => !!document.querySelector('.lb-near') || /non riuscita/.test(document.querySelector('.lb-results').textContent), null, 40000);
+    const near = await page.$('.lb-near');
+    assert.ok(near, 'dice con quali parole ha cercato — invece: ' + (await page.textContent('.lb-results')).slice(0, 300));
+    const txt = await near.textContent();
+    assert.ok(/Cercato anche come/.test(txt), txt);
+    const conSenso = await page.$$eval('.lb-hit', (hs) => hs.length);
+    assert.ok(conSenso >= soloParole, 'non si perde niente: ' + soloParole + ' -> ' + conSenso);
+    const why = await page.$$eval('.lb-why', (ws) => ws.map((w) => w.textContent));
+    if (why.length) assert.ok(why.every((w) => /per significato/.test(w)), why.join(', '));
+    await shot('lib-03b-significato.png');
+    // la scheda di un concetto: i simili di significato arrivano perché il modello c'è già
+    const chip = await page.$('.lb-chip');
+    if (chip) {
+      await chip.click();
+      await waitFor(() => /Simili di significato|vicino di significato/.test(document.querySelector('.lb-panel').textContent), null, 20000);
+    }
+    await page.uncheck('#lb-sem');
   });
 
   await check('apri alla posizione esatta: PDF nel Lettore, passaggio evidenziato', async () => {

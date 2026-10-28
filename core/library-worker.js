@@ -35,7 +35,7 @@
  */
 /* global importScripts, WCLibrary, WCStudy, WCGamify */
 'use strict';
-importScripts('settings.js', 'lang.js', 'text.js', 'analysis.js', 'code.js', 'library.js', 'study.js', 'gamify.js');
+importScripts('settings.js', 'lang.js', 'text.js', 'analysis.js', 'code.js', 'semantic.js', 'library.js', 'study.js', 'gamify.js');
 
 var records = [], edits = null, kb = null, study = null, studyState = null;
 function base() {
@@ -71,7 +71,7 @@ var handlers = {
   },
   search: function (d) { return base().search(d.query, d.filters || {}); },
   graph: function () { return base().graph(); },
-  concept: function (d) { return base().concept(d.cid); },
+  concept: function (d) { return base().concept(d.cid, { similar: !!d.similar }); },
   edit: function (d) {
     var k = base(), out = k.applyEdit(d.op);
     edits = out.edits;
@@ -84,6 +84,8 @@ var handlers = {
   stats: function () { return base().stats(); },
 
   code: function (d) { return base().code(d.op || {}); },
+  semantic: function () { return base().semantic(); },
+  meaning: function (d) { return base().meaningOf(d.word); },
   insights: function (d) { return base().insights({ doc: d.doc, limit: d.limit }); },
   versions: function (d) { return base().versions(d.a, d.b); },
   'version-pairs': function () { return base().versionPairs(); },

@@ -35,6 +35,8 @@ function serve() {
   const events = [];
   const report = await scan({ root: SCAN_DIR, legs: 8, duplicates: 'fast', minDupSize: 1024, visDepth: 5 }, (m) => events.push(m));
   report.id = '2026-10-27T10-00-00-000Z';
+  report.csvPath = '/scans/2026-10-27T10-00-00-000Z/elenco-file.csv';
+  report.csvRows = report.totals.files;
   events.push({ type: 'done', report: report });
   // una scansione "precedente" finta: alcune cartelle più piccole e qualche file in meno
   const old = JSON.parse(JSON.stringify(report));
@@ -88,6 +90,15 @@ function serve() {
         },
         cancel: async () => true,
         exportCsv: async () => true,
+        // la ricerca sul disco: il vero lavoro è in desktop/scan-tools.js e ha i suoi test
+        find: async (csvPath, query, opts) => ({
+          query, scanned: 120, total: 2, truncated: false,
+          hits: [
+            { path: scanDir + '/fatture/fattura-enel.pdf', size: 12345, mtime: '2026-02-03T10:00:00.000Z', ext: 'pdf', cat: 'Documenti', score: 4.5, sem: 0, byMeaning: false },
+            { path: scanDir + '/fatture/ricevuta-affitto.pdf', size: 2222, mtime: '2026-02-04T10:00:00.000Z', ext: 'pdf', cat: 'Documenti', score: 1.2, sem: 0.71, byMeaning: true }
+          ],
+          semantic: opts && opts.semantic ? { on: true, near: [{ term: 'ricevut', score: 0.8 }, { term: 'bollett', score: 0.7 }] } : { on: false }
+        }),
         history: async () => [{ id: '2026-10-27T10-00-00-000Z', root: scanDir, finishedAt: '2026-10-27T10:00:00.000Z', files: 1, bytes: 1 },
           { id: '2026-10-01T10-00-00-000Z', root: scanDir, finishedAt: '2026-10-01T10:00:00.000Z', files: 1, bytes: 1 }],
         compare: async () => comparison,
@@ -110,7 +121,7 @@ function serve() {
         addScanned: async (dir) => ({ root: dir, files: [], skipped: 0, truncated: false }) },
       showItem: async () => true,
       openExternal: async () => true,
-      info: async () => ({ version: '2.4.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
+      info: async () => ({ version: '2.3.1', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
       onMenu: () => () => {},
       onFileOpened: () => () => {}
     };
@@ -209,6 +220,24 @@ function serve() {
   if (await page.locator('.sc-moved').count() < 1) fail('file spostati non segnati');
   await page.screenshot({ path: path.join(SHOTS, '07b-duplicati-cestino.png') });
   console.log('gruppi di duplicati mostrati: ' + groups);
+  // trova un file sul disco: per nome e per significato
+  await page.click('.sc-report [role="tab"]:has-text("Trova un file")');
+  await page.waitForSelector('.sc-find-q');
+  await page.fill('.sc-find-q', 'fattura della luce');
+  await page.click('.sc-find button[type="submit"]');
+  await page.waitForSelector('.sc-find-hit');
+  if (await page.locator('.sc-find-hit').count() !== 2) fail('file trovati: ' + await page.locator('.sc-find-hit').count());
+  if (await page.locator('.sc-find-hit.bymeaning').count() !== 1) fail('il file trovato per significato non è segnato');
+  if (!/per significato/.test(await page.locator('.sc-find-hit.bymeaning').textContent())) fail('manca il perché');
+  if (!/Cercato anche come: ricevut/.test(await page.locator('.sc-find-out .lb-near').textContent())) fail('mancano le parole vicine');
+  if (!/2 file trovati fra 120 esaminati/.test(await page.locator('.sc-find-out .wc-note').first().textContent())) fail('manca il conteggio');
+  await page.screenshot({ path: path.join(SHOTS, '07d-trova-file.png') });
+  // spenta: nessuna parola vicina
+  await page.uncheck('#sc-find-sem');
+  await page.click('.sc-find button[type="submit"]');
+  await page.waitForTimeout(200);
+  if (await page.locator('.sc-find-out .lb-near').count()) fail('spenta, non deve dire le parole vicine');
+
   // confronto con la scansione precedente
   await page.selectOption('.sc-export select', '2026-10-01T10-00-00-000Z');
   await page.waitForSelector('.sc-report [role="tab"]:has-text("Confronto")');

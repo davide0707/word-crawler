@@ -539,6 +539,69 @@
       });
     }
 
+    /*
+     * Trovare un file sul disco quando non ricordi come l'hai chiamato.
+     *
+     * Per nome funziona se il nome lo sai. "Anche per significato" impara le parole dalla tua
+     * alberatura — cartelle, nomi, estensioni — e trova la ricevuta quando cerchi la fattura,
+     * perché nelle tue cartelle quelle due parole stanno negli stessi posti. Tutto sul computer.
+     */
+    function renderFind(panel, r) {
+      var inp = el('input', { type: 'search', class: 'sc-find-q', placeholder: 'Che file cerchi? Anche a parole tue: «la bolletta della luce»…', 'aria-label': 'Cerca un file sul disco', autocomplete: 'off' });
+      var semBox = el('input', { type: 'checkbox', id: 'sc-find-sem' });
+      semBox.checked = true;
+      var go = el('button', { type: 'submit', class: 'wc-btn wc-primary', text: 'Cerca' });
+      var form = el('form', { class: 'sc-find' }, [inp, go,
+        el('label', { class: 'lb-semlab', for: 'sc-find-sem' }, [semBox, el('span', { text: 'anche per significato' })])]);
+      var out = el('div', { class: 'sc-find-out', 'aria-live': 'polite' });
+      panel.appendChild(el('p', { class: 'wc-note sc-note', text: 'Cerca fra i ' + R.num(r.csvRows) + ' file di questa scansione. Il senso delle parole viene da come hai organizzato tu le cartelle: niente da scaricare, niente internet, nessun file viene aperto.' }));
+      panel.appendChild(form);
+      panel.appendChild(out);
+      var busy = false;
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var q = inp.value.trim();
+        if (!q || busy) return;
+        busy = true; go.disabled = true;
+        out.textContent = '';
+        out.appendChild(el('p', { class: 'wc-note', text: 'Cerco…' }));
+        api.find(r.csvPath, q, { semantic: semBox.checked, limit: 80 }).then(function (res) {
+          out.textContent = '';
+          out.appendChild(el('p', { class: 'wc-note', text: res.total
+            ? R.num(res.total) + (res.total === 1 ? ' file trovato' : ' file trovati') + (res.total > res.hits.length ? ' (i primi ' + res.hits.length + ')' : '') + ' fra ' + R.num(res.scanned) + ' esaminati.'
+            : 'Nessun file corrisponde, né per nome né per significato.' }));
+          if (res.truncated) out.appendChild(el('p', { class: 'wc-note', text: 'Elenco molto grande: la ricerca si è fermata ai primi ' + R.num(res.scanned) + ' file.' }));
+          if (res.semantic && res.semantic.on && res.semantic.near.length) {
+            out.appendChild(el('p', { class: 'wc-note lb-near', text: 'Cercato anche come: ' + res.semantic.near.slice(0, 6).map(function (x) { return x.word || x.term; }).join(', ') + '.' }));
+          }
+          if (!res.hits.length) return;
+          var ul = el('ul', { class: 'wc-list sc-find-list' });
+          res.hits.forEach(function (h) {
+            var open = el('button', { type: 'button', class: 'wc-link', text: 'Mostra' });
+            open.addEventListener('click', function () { api.showItem(h.path); });
+            var acts = [open];
+            if (api.toLibrary) {
+              var add = el('button', { type: 'button', class: 'wc-link sc-tolib', text: '→ cervello', title: 'Aggiungi questo file alla libreria' });
+              add.addEventListener('click', function () { api.toLibrary(h.path); });
+              acts.push(add);
+            }
+            ul.appendChild(el('li', { class: 'sc-find-hit' + (h.byMeaning ? ' bymeaning' : '') }, [
+              el('div', { class: 'sc-find-main' }, [
+                el('b', { text: h.path.split(/[\\/]/).pop() }),
+                h.byMeaning ? el('span', { class: 'lb-why', text: 'per significato', title: 'Il nome non contiene le parole cercate, ma sta dove stanno i file di cui parli (somiglianza ' + h.sem + ').' }) : null,
+                el('p', { class: 'wc-note sc-find-path', text: h.path }),
+                el('p', { class: 'wc-note', text: R.bytes(h.size) + (h.mtime ? ' · ' + h.mtime.slice(0, 10) : '') + (h.cat ? ' · ' + h.cat : '') })]),
+              el('div', { class: 'wc-inline' }, acts)]));
+          });
+          out.appendChild(ul);
+        }).catch(function (e) {
+          out.textContent = '';
+          out.appendChild(el('p', { class: 'wc-note', text: 'Ricerca non riuscita: ' + e.message }));
+        }).then(function () { busy = false; go.disabled = false; });
+      });
+      setTimeout(function () { inp.focus(); }, 0);
+    }
+
     function showReport(r) {
       if (tmCleanup) { tmCleanup(); tmCleanup = null; }
       reportBox.textContent = '';
@@ -573,6 +636,7 @@
       reportBox.appendChild(note);
       reportBox.appendChild(tilesBox);
       var defs = [{ title: 'Mappa', render: function (pn) { renderTreemap(pn, r); } }];
+      if (r.csvPath && api.find) defs.push({ title: 'Trova un file', render: function (pn) { renderFind(pn, r); } });
       R.sections(r).forEach(function (s) {
         defs.push({ title: s.title, render: function (pn) { if (s.id === 'dup' && api.trash && r.id) renderDups(pn, r, s); else renderSection(pn, s); } });
       });

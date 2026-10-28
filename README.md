@@ -45,6 +45,7 @@
 | **Exports the marked document** | Word (.docx, with your notes as comments), HTML and PDF, plus Markdown, text, JSON and Anki summaries. |
 | **Remembers pages** | The browser extension restores your marks when you reopen a saved page. |
 | **Builds a knowledge base** | The Library reads many files at once — even whole folders — and lets you search all of them together, see how their concepts connect on an interactive map and open every result at the exact page. |
+| **Finds what you meant** | Search by meaning, not only by word: ask "quanto veloce va la rete" and the passages that say *throughput* come up too. The sense of the words is learned from your own documents — nothing is downloaded, nothing leaves the computer. The disk scanner can search file names the same way. |
 | **One brain per subject** | The library is not one: each brain keeps its own documents, concepts, map and study progress, with a name, an icon and a colour. Duplicate one, export it as open JSON, import it back. |
 | **Knows what you know** | Study asks you about the concepts of your own documents, grows the interval between reviews as you get them right, orders them from the general to the specific and colours the map by how well you know each one. |
 | **Maps your disk** | Read-only scanner with a zoomable treemap, duplicates, largest files and folders, scan-to-scan comparison and a safe "move duplicates to Trash". |
@@ -220,7 +221,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and [CHANGELOG.md](CHANGE
 
 ## Project status
 
-Version **2.4.0**. Known limitations:
+Version **2.3.1**. Known limitations:
 
 - The OCR engine (tesseract.js) is exercised in tests through recorded Tesseract output; the WebAssembly engine itself runs only in the packaged app and extension.
 - Legacy .ppt/.xls and TIFF images are not supported (save them as .pptx/.xlsx or PNG/PDF).

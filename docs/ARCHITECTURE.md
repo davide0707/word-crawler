@@ -83,13 +83,14 @@ by `chrome.scripting.executeScript`, and by `require` in the Node test suites.
 | `core/gamify.js` | Points, levels, badges and the day streak, all derived from the study log |
 | `core/math.js` | A small LaTeX subset rendered to HTML, for formulas in cards and explanations |
 | `core/pdfwrite.js` | Writes real annotations into a copy of a PDF, as an incremental update |
+| `core/semantic.js` | Search by meaning: random indexing over the brain's own passages, with no model to download |
 | `core/study.js` | Study engine: which concepts are worth knowing, questions from definitions and passages, answer matching, SM-2 schedule, mastery, study path, Anki export |
 | `core/library-import.js` | Reads a file for the library: blocks, PDF words with their box on the page, OCR of scanned pages and images |
 | `desktop/ui/library-view.js` | Library tab: import queue, document list, search results, concept map on canvas, concept page |
 | `desktop/main.js` | Electron main process: window, `app://` protocol, IPC, file dialogs, PDF printing |
 | `desktop/preload.js` | The only bridge between the window and the system |
 | `desktop/scanner.js`, `scan-worker.js` | Read-only disk scan in a worker thread |
-| `desktop/scan-tools.js` | Scan comparison and the guarded "move duplicates to the Trash" action |
+| `desktop/scan-tools.js` | Scan comparison, searching the scanned file list by name and by meaning, and the guarded "move duplicates to the Trash" action |
 | `extension/background.js` | Service worker: toolbar action, shortcut, context menus, mark restoration |
 | `extension/content.js` | The spider on web pages, driven by the side panel |
 
@@ -316,6 +317,42 @@ module says so and the Reader falls back to printing a new marked PDF. Text is w
 accents survive, quad points come from PDF.js's `convertToPdfPoint`, so a rotated page still lands
 right.
 
+## Search by meaning
+
+`core/semantic.js`. BM25 finds the words you typed. This finds what you meant: ask
+*"quanto veloce va la rete"* and the passages that say *throughput* or *banda* come up too, though
+they share no word with the question.
+
+The method is **random indexing**, the computable shortcut to the idea neural embeddings are built
+on — words that occur in the same contexts mean nearby things:
+
+1. every term gets a **seed vector**: 192 dimensions, 8 of them ±1, placed by a hash of the term
+   itself, so the same word gets the same seed on every machine and every rebuild;
+2. one pass over the passages. For each passage the seeds of its terms are summed, and each term
+   receives the sum of the *others*, weighted by how rare it is (idf). Terms that keep the same
+   company end up pointing the same way;
+3. a passage, a concept or a question is the idf-weighted sum of its term vectors, normalised.
+   Closeness is the cosine.
+
+Terms seen only once are dropped (they teach nothing) and terms present in more than 60% of
+passages are dropped too (they distinguish nothing); on a small or very repetitive library that
+ceiling is relaxed rather than leaving the model empty. The surface form of each stem is kept, so
+the interface can show *segnale* where the model holds `segnal`.
+
+`search()` blends the two scores: BM25 is unbounded and the cosine is between 0 and 1, so a perfect
+semantic match is worth 0.55 of the best keyword match, and decides alone when the words found
+nothing. A phrase in quotes disables it. Results that no word reached are flagged `byMeaning`.
+
+Building it costs one pass: about 1,200 passages in 75 ms, 3,000 in under a second. It is built the
+first time it is needed and dropped whenever the library changes, so a concept card never pays for
+it unless the model already exists or the card is asked for `similar` explicitly.
+
+The model knows only your documents — *campo* sits near *elettrico* if you study physics and near
+*modulo* if you write software. That is the limit and also the point: nothing is downloaded, no
+network is used, and the same machinery searches the disk scanner's file names
+(`desktop/scan-tools.js`, `findOnDisk`), where the sense of the words comes from how the user
+organised their own folders.
+
 ## Comparing two versions
 
 `versions(a, b)` matches **passages**, not lines, so a reformatted document does not read as entirely
@@ -397,6 +434,7 @@ flowchart LR
 | `tests/library.test.js` | Library engine: passages, acronyms, concepts across documents, graph and relations, suggestions, search, every user edit, Markdown export, performance |
 | `tests/code.test.js` | Reading code: symbols and exact lines per language, imports, calls, dead code across files, strings and comments not confusing the parser, complexity, notebooks, and code inside the brain |
 | `tests/insights.test.js` | Gaps, contradictions, doc/code drift, isolated concepts, "explain" with its sources, comparing two brains |
+| `tests/semantic.test.js` | Search by meaning: two synonyms that never share a sentence come out close, an unrelated topic does not, the hybrid search finds what words cannot, quotes stay literal, similar concepts arrive only when asked, seeds are reproducible, and 1,200 passages are learned in under a second |
 | `tests/pdfwrite.test.js` | Annotations written into a PDF: original bytes untouched, every subtype, accents, and PDF.js reading them back; comparing two versions of a document |
 | `tests/study.test.js` | Study engine: blanking with stems, answer matching, SM-2 intervals and mastery, questions with their sources, rotation, study path, per-document filter, survival across merges, reset, Anki export |
 | `tests/library-ui.test.js` | The Library tab in Chromium with the real workers and PDF.js: folder import (Word, PowerPoint, PDF, scanned PDF), search, open at position, map, concept page, merge, rename, links, exports, undo, a full study session (typed answer, grading, keyboard, saved progress), the map coloured by mastery and actually moving, Anki export |

@@ -64,6 +64,8 @@
     return out;
   }
   // chiave di un concetto: radici delle parole che contano, nella lingua del documento
+  var SEM_MIN = 0.3;   // sotto questa somiglianza un passaggio non c'entra: non vale mostrarlo
+
   function ckey(label, lang) {
     var seq = keySeq(prepared(label, lang), lang);
     return seq.length ? seq.join(' ') : fold(label).trim();
@@ -377,6 +379,7 @@
     var lens = [], avgLen = 1;
     var langs = new Set();
     var graphCache = null;
+    var semCache = null;   // il modello semantico (core/semantic.js), costruito la prima volta che serve
 
     // -------------------------------------------------------------- indice delle parole
     function indexRecord(rec, di) {
@@ -761,6 +764,19 @@
       if (!graphCache) graphCache = buildGraph();
       return graphCache;
     }
+    /*
+     * Il modello del significato: si impara dai documenti di questo cervello, una volta sola, e si
+     * butta quando la libreria cambia. Se semantic.js non c'è, tutto continua a funzionare senza.
+     */
+    function semanticBuilt() { return !!semCache; }
+    function semantic() {
+      if (semCache) return semCache;
+      if (!g.WCSemantic) return (semCache = { ready: false, query: function () { return []; }, near: function () { return []; }, termVector: function () { return null; }, similarTo: function () { return []; }, stats: function () { return { terms: 0, chunks: 0 }; } });
+      semCache = g.WCSemantic.build(docs.map(function (r) {
+        return { id: r.id, lang: r.lang, chunks: (r.chunks || []).map(function (c) { return { n: c.n, text: c.text }; }) };
+      }));
+      return semCache;
+    }
 
     // -------------------------------------------------------------- ricerca
     function parseQuery(q) {
@@ -837,9 +853,22 @@
           if (i !== undefined) { scores[i] += 3; hitWords[i] |= 0x80000000; }
         });
       });
+      /*
+       * La ricerca per significato: chiesta a parte perché costa un modello da costruire. Chi
+       * domanda "quanto veloce va la rete" trova anche i passaggi che dicono "throughput", che
+       * nessuna ricerca per parole può raggiungere. Le frasi tra virgolette restano letterali.
+       */
+      var semMap = null;
+      if (f.semantic && !q.phrases.length) {
+        var S = semantic();
+        if (S.ready) {
+          semMap = new Map();
+          S.query(query, 400, null, langs[0]).forEach(function (h) { semMap.set(h.doc + ':' + h.n, h.score); });
+        }
+      }
       // frasi tra virgolette: devono esserci così come sono
       var phraseF = q.phrases.map(fold);
-      var cands = [];
+      var cands = [], maxBm = 0;
       for (var i = 0; i < N; i++) {
         if (!docOk[chunksAll[i].d]) continue;
         if (f.concept && !(hitWords[i] & 0x80000000)) continue;
@@ -850,10 +879,22 @@
           if (!scores[i]) scores[i] = 0.5;
           scores[i] += 2 * phraseF.length;
         }
-        if (scores[i] <= 0) continue;
+        var sem = semMap ? (semMap.get(docs[chunksAll[i].d].id + ':' + chunksAll[i].c.n) || 0) : 0;
+        if (scores[i] <= 0 && sem < SEM_MIN) continue;
         // più parole della domanda nello stesso pezzo: più in alto
         var matched = popcount(hitWords[i] & 0x7fffffff), total = Math.min(32, allWords.length) || 1;
-        cands.push([i, scores[i] * (1 + 0.6 * matched / total)]);
+        var bm = scores[i] * (1 + 0.6 * matched / total);
+        if (bm > maxBm) maxBm = bm;
+        cands.push([i, bm, sem]);
+      }
+      /*
+       * Mettere insieme due punteggi che non parlano la stessa lingua: BM25 non ha un tetto, il
+       * coseno sta fra 0 e 1. Il significato vale al massimo come mezzo risultato per parole fra i
+       * migliori — se le parole non hanno trovato niente, decide da solo.
+       */
+      if (semMap) {
+        var semW = (maxBm || 2) * 0.55;
+        cands.forEach(function (x) { x[1] += x[2] * semW; });
       }
       cands.sort(function (x, y) { return y[1] - x[1]; });
       var limit = Math.max(1, Math.min(200, f.limit || 60));
@@ -863,10 +904,12 @@
         return {
           doc: r.id, name: r.name, title: r.title, ext: r.ext, format: r.format, path: r.path, lang: r.lang,
           n: ch.n, kind: ch.kind, page: ch.page, pageTo: ch.pageTo, slide: ch.slide, line: ch.line, section: ch.section, where: where(r, ch), box: ch.box,
-          text: snip.text, marks: snip.marks, full: ch.text, score: round(x[1], 2), concepts: conceptsOfChunk(G, e.d, ch.n, 4)
+          text: snip.text, marks: snip.marks, full: ch.text, score: round(x[1], 2), concepts: conceptsOfChunk(G, e.d, ch.n, 4),
+          sem: x[2] ? round(x[2], 3) : 0, byMeaning: !!(x[2] && !snip.marks.length)
         };
       });
-      return { query: query, total: cands.length, results: results, concepts: conceptHits, words: q.words, phrases: q.phrases, ms: Date.now() - t0 };
+      return { query: query, total: cands.length, results: results, concepts: conceptHits, words: q.words, phrases: q.phrases,
+        semantic: semMap ? { on: true, near: semantic().near(query, 8, langs[0]) } : { on: false }, ms: Date.now() - t0 };
     }
 
     var chunkConcepts = null;
@@ -939,9 +982,41 @@
       return out.slice(0, limit || 400);
     }
 
-    function concept(id) {
+    /*
+     * I concetti vicini di significato. Non sono i collegamenti del grafo — quelli dicono che due
+     * concetti compaiono insieme — ma concetti che stanno negli stessi discorsi: possono non
+     * essersi mai incontrati in una frase e dire quasi la stessa cosa. Serve a scoprire i doppioni
+     * e a capire un termine nuovo partendo da quelli che si conoscono già.
+     */
+    var semNodes = null;
+    function similar(nd, n) {
+      if (!nd) return [];
+      var S = semantic();
+      if (!S.ready) return [];
+      if (!semNodes) {
+        semNodes = [];
+        graph().nodes.forEach(function (o) {
+          var v = S.termVector(o.label, o.lang);
+          if (v) semNodes.push({ id: o.id, label: o.label, v: v, rank: o.rank });
+        });
+      }
+      var mine = S.termVector(nd.label, nd.lang);
+      if (!mine) return [];
+      var out = [];
+      semNodes.forEach(function (o) {
+        if (o.id === nd.id) return;
+        var d = 0;
+        for (var i = 0; i < mine.length; i++) d += mine[i] * o.v[i];
+        if (d > 0.45) out.push({ id: o.id, label: o.label, score: round(d, 3) });
+      });
+      out.sort(function (a, b) { return b.score - a.score; });
+      return out.slice(0, n || 8);
+    }
+
+    function concept(id, opts) {
       var G = graph(), nd = G.nodes.get(G.nodeOfKey.get(id) || id);
       if (!nd) return null;
+      var wantSim = (opts && opts.similar) || semanticBuilt();
       var related = G.edges.filter(function (e) { return e.a === nd.id || e.b === nd.id; }).map(function (e) {
         var other = e.a === nd.id ? e.b : e.a, o = G.nodes.get(other);
         var label = e.label || REL[e.type];
@@ -968,7 +1043,12 @@
         docs: nd.docs.map(function (d) { var r = docs[byId.get(d.id)]; return { id: d.id, name: r.name, count: d.count }; }),
         related: related, central: nd.central, multi: nd.multi, count: nd.count, rank: round(nd.rank, 3), code: nd.code || null,
         tags: nd.tags, state: nd.state, note: nd.note, seen: nd.seen, kind: nd.code ? nd.code.kind : (nd.defs.length ? 'term' : (nd.name ? 'name' : 'concept')),
-        suggestions: G.suggestions.filter(function (s) { return s.a === nd.id || s.b === nd.id; }), log: log
+        suggestions: G.suggestions.filter(function (s) { return s.a === nd.id || s.b === nd.id; }), log: log,
+        /*
+         * I simili di significato costano un modello da imparare: la scheda deve aprirsi subito, così
+         * arrivano se il modello c'è già, altrimenti solo quando li si chiede.
+         */
+        similar: wantSim ? similar(nd, 8) : null
       };
     }
 
@@ -1085,6 +1165,8 @@
           throw new Error('modifica sconosciuta');
       }
       graphCache = null;
+      semCache = null;
+      semNodes = null;
       chunkConcepts = null;
       return { edits: edits };
     }
@@ -1531,6 +1613,9 @@
 
     return {
       search: search,
+      semantic: function () { var S = semantic(); return { ready: S.ready, stats: S.stats() }; },
+      semanticBuilt: semanticBuilt,
+      meaningOf: function (word) { var S = semantic(); return S.ready ? S.near(word, 14, langs[0]) : []; },
       pool: pool,
       insights: insights,
       versions: versions,

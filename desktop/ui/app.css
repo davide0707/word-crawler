@@ -59,6 +59,15 @@ body { padding-top: var(--wc-top, 52px); }
 .sc-tm-bar select { width: auto; min-width: 180px; flex: 0 0 auto; }
 .sc-tm-bar .sc-crumbs { flex: 1 1 200px; min-width: 0; }
 .sc-tolib { margin-left: 10px; }
+/* trova un file: la ricerca sul disco per nome o per significato */
+.sc-find { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.sc-find .sc-find-q { flex: 1; min-width: 240px; font-size: 15px; padding: 10px 12px; }
+.sc-find-list { display: flex; flex-direction: column; gap: 6px; }
+.sc-find-hit { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border: 1px solid var(--wc-line); border-radius: 8px; padding: 8px 12px; background: var(--wc-panel); }
+.sc-find-hit.bymeaning { border-left: 3px solid var(--wc-lav); }
+.sc-find-main { min-width: 0; }
+.sc-find-main p { margin: 2px 0 0; }
+.sc-find-path { word-break: break-all; font-family: var(--wc-mono); font-size: 11.5px; }
 .sc-crumbs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; flex: 1; min-width: 0; font-size: 13px; }
 .sc-crumbs .wc-link { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sc-crumb-sep { color: var(--wc-mute); }
@@ -82,6 +91,15 @@ body { padding-top: var(--wc-top, 52px); }
 .lb-main { min-width: 0; padding: 16px 20px 40px; display: flex; flex-direction: column; gap: 12px; }
 .lb-search { display: flex; gap: 8px; }
 .lb-search .lb-q { flex: 1; font-size: 16px; padding: 11px 14px; }
+/* la ricerca per significato: l'interruttore, le parole vicine, il segno su chi è uscito così */
+.lb-semlab { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12.5px; color: var(--wc-mute); cursor: pointer; }
+.lb-semlab input { width: auto; margin: 0; }
+.lb-semlab:hover { color: var(--wc-text); }
+.lb-near { font-style: italic; }
+.lb-why { font: 11px var(--wc-mono); color: var(--wc-lav); border: 1px solid var(--wc-lav); border-radius: 999px; padding: 0 6px; margin-left: 6px; }
+.lb-hit.bymeaning { border-left: 3px solid var(--wc-lav); }
+.lb-sim li.rel-sim .lb-rel-type { color: var(--wc-lav); min-width: 44px; }
+.lb-merge { padding: 1px 8px; font-size: 11.5px; }
 .lb-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--wc-line); }
 .lb-tabs { padding: 0; border-bottom: 0; }
 .lb-filters { display: flex; gap: 8px; padding-bottom: 6px; }

@@ -378,6 +378,19 @@ ipcMain.handle('scan:trash', async (event, scanId, items) => {
   res.log = path.join(scanDir(scanId), 'cestino.log');
   return res;
 });
+/*
+ * Trovare un file sul disco per nome o per significato (desktop/scan-tools.js). L'elenco si legge
+ * solo dalla cartella delle scansioni dell'app: nessun altro percorso è accettato.
+ */
+ipcMain.handle('scan:find', async (_e, csvPath, query, opts) => {
+  const scans = userDir('scans') + path.sep;
+  if (typeof csvPath !== 'string' || !path.resolve(csvPath).startsWith(scans)) throw new Error('Elenco non disponibile');
+  if (typeof query !== 'string') throw new Error('Richiesta non valida');
+  const o = opts && typeof opts === 'object' ? opts : {};
+  return scanTools.findOnDisk(csvPath, query.slice(0, 200), {
+    semantic: o.semantic !== false, limit: Math.min(300, Math.max(1, +o.limit || 60))
+  });
+});
 ipcMain.handle('scan:export-csv', async (_e, csvPath) => {
   const scans = userDir('scans') + path.sep;
   if (typeof csvPath !== 'string' || !path.resolve(csvPath).startsWith(scans)) throw new Error('Elenco non disponibile');

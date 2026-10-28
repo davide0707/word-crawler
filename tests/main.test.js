@@ -61,7 +61,7 @@ async function check(name, fn) {
   await check('tutti i canali IPC sono registrati', () => {
     ['file:open', 'url:fetch', 'file:save', 'settings:load', 'settings:save', 'archive:list', 'archive:save', 'archive:remove',
       'scan:roots', 'scan:pick-folder', 'scan:start', 'scan:cancel', 'scan:export-csv', 'shell:show', 'shell:external', 'app:info',
-      'export:pdf', 'scan:history', 'scan:compare', 'scan:trash',
+      'export:pdf', 'scan:history', 'scan:compare', 'scan:trash', 'scan:find',
       'library:add-files', 'library:add-folder', 'library:read', 'library:list', 'library:save', 'library:remove', 'library:restore',
       'library:stat', 'library:edits-load', 'library:edits-save', 'library:study-load', 'library:study-save',
       'library:brains', 'library:brain-create', 'library:brain-update', 'library:brain-use', 'library:brain-duplicate',
@@ -177,6 +177,18 @@ async function check(name, fn) {
     assert.deepStrictEqual(c.files.changed.top.map((f) => path.basename(f.path)), ['resta.txt']);
     assert.ok(c.folders.some((f) => f.path === 'grande' && f.before === null && f.after === 300000), JSON.stringify(c.folders));
     await assert.rejects(() => handlers['scan:compare']({}, '../../etc', second.id));
+  });
+  await check('trova un file sul disco: per nome e per significato', async () => {
+    const r = await handlers['scan:find']({}, second.csvPath, 'nuovo', { semantic: false, limit: 10 });
+    assert.ok(r.hits.some((h) => /nuovo\.txt$/.test(h.path)), JSON.stringify(r.hits.map((h) => h.path)));
+    assert.ok(r.hits.every((h) => !h.byMeaning), 'senza significato nessuno esce per significato');
+    assert.ok(r.scanned >= 3, 'file esaminati: ' + r.scanned);
+    const s2 = await handlers['scan:find']({}, second.csvPath, 'dati', { semantic: true, limit: 10 });
+    assert.ok(s2.hits.some((h) => /dati\.bin$/.test(h.path)));
+    assert.deepStrictEqual((await handlers['scan:find']({}, second.csvPath, '  ', {})).hits, []);
+    // l'elenco si legge solo dalla cartella delle scansioni dell'app
+    await assert.rejects(() => handlers['scan:find']({}, '/etc/passwd', 'root', {}));
+    await assert.rejects(() => handlers['scan:find']({}, second.csvPath, 42, {}));
   });
   await check('duplicati nel Cestino: controlli, conferma, registro', async () => {
     const groups = second.duplicates.groups;

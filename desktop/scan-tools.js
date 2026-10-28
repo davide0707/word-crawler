@@ -89,7 +89,7 @@ async function* csvRows(file) {
     pending = '';
     if (first) { first = false; line = line.replace(/^﻿/, ''); if (/^percorso;/.test(line)) continue; }
     const c = parseCsvLine(line);
-    if (c.length >= 6) yield { path: c[0], size: +c[4] || 0, mtime: c[5] };
+    if (c.length >= 6) yield { path: c[0], name: c[1], ext: c[2], cat: c[3], size: +c[4] || 0, mtime: c[5] };
   }
 }
 
@@ -204,4 +204,85 @@ async function runTrash(plan, trashItem, logFile) {
   return res;
 }
 
-module.exports = { compareReports, compareCsv, parseCsvLine, planTrash, runTrash, treeMap, inside };
+/*
+ * Cercare sul disco per significato, non solo per nome.
+ *
+ * Dopo una scansione i file sono decine di migliaia e il nome che ricordi non è quello che hai
+ * scritto: cerchi "fattura" e il file si chiama "ricevuta-2024.pdf", cerchi "contratto d'affitto"
+ * e si chiama "locazione-firmata.pdf". Qui un percorso diventa le sue parole — cartelle, nome,
+ * estensione, maiuscole interne — e le parole vicine si imparano dalla tua stessa alberatura con
+ * core/semantic.js: due parole usate nelle stesse cartelle vogliono dire cose vicine.
+ *
+ * Niente modelli da scaricare: il senso viene da come hai organizzato tu il disco.
+ */
+require('../core/settings.js'); require('../core/lang.js'); require('../core/text.js');
+require('../core/analysis.js'); require('../core/semantic.js');
+
+function wordsOfPath(p) {
+  return String(p || '')
+    .replace(/([a-z\d])([A-Z])/g, '$1 $2')          // nomiInCamelCase
+    .replace(/[\\/._\-()[\]{}+#@,;'"!&=~]+/g, ' ')  // separatori di ogni specie
+    .replace(/\s+/g, ' ').trim();
+}
+
+async function findOnDisk(csvPath, query, opts) {
+  const o = opts || {};
+  const limit = Math.max(1, Math.min(500, o.limit || 60));
+  const q = String(query || '').trim();
+  if (!q) return { query: q, total: 0, hits: [], semantic: { on: false } };
+
+  const rows = [], MAXF = Math.max(1000, Math.min(400000, o.maxFiles || 200000));
+  let truncated = false;
+  for await (const r of csvRows(csvPath)) {
+    if (rows.length >= MAXF) { truncated = true; break; }
+    rows.push({ path: r.path, size: r.size, mtime: r.mtime, ext: r.ext, cat: r.cat });
+  }
+  if (!rows.length) return { query: q, total: 0, hits: [], semantic: { on: false } };
+
+  // prima le corrispondenze letterali: chi ricorda il nome deve trovarlo subito
+  const fold = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const terms = fold(wordsOfPath(q)).split(' ').filter(Boolean);
+  const scores = new Float64Array(rows.length);
+  rows.forEach((r, i) => {
+    const low = fold(r.path), base = fold(r.path.split(/[\\/]/).pop());
+    let hit = 0;
+    terms.forEach((t) => {
+      if (base.indexOf(t) >= 0) hit += 3;       // nel nome del file conta il doppio
+      else if (low.indexOf(t) >= 0) hit += 1.5; // in una cartella del percorso, un po' meno
+    });
+    if (hit && terms.length > 1) hit *= 1 + 0.4 * (terms.filter((t) => low.indexOf(t) >= 0).length / terms.length);
+    scores[i] = hit;
+  });
+
+  // poi il significato, se richiesto: il modello si impara dai percorsi stessi
+  let sem = null, near = [];
+  if (o.semantic !== false && globalThis.WCSemantic) {
+    const model = globalThis.WCSemantic.build(rows.map((r, i) => ({
+      id: String(i), lang: o.lang || 'it', chunks: [{ n: 0, text: wordsOfPath(r.path) }]
+    })), { maxTerms: 20000 });
+    if (model.ready) {
+      sem = new Map();
+      model.query(wordsOfPath(q), rows.length, null, o.lang || 'it').forEach((h) => { sem.set(+h.doc, h.score); });
+      near = model.near(wordsOfPath(q), 8, o.lang || 'it');
+    }
+  }
+
+  let maxLit = 0;
+  for (let i = 0; i < scores.length; i++) if (scores[i] > maxLit) maxLit = scores[i];
+  const semW = (maxLit || 3) * 0.55;
+  const hits = [];
+  for (let i = 0; i < rows.length; i++) {
+    const sm = sem ? (sem.get(i) || 0) : 0;
+    if (!scores[i] && sm < 0.35) continue;
+    hits.push({ path: rows[i].path, size: rows[i].size, mtime: rows[i].mtime, ext: rows[i].ext, cat: rows[i].cat,
+      score: scores[i] + sm * semW, sem: sm ? Math.round(sm * 1000) / 1000 : 0, byMeaning: !scores[i] });
+  }
+  hits.sort((a, b) => b.score - a.score);
+  return {
+    query: q, total: hits.length, scanned: rows.length, truncated,
+    hits: hits.slice(0, limit).map((h) => { h.score = Math.round(h.score * 100) / 100; return h; }),
+    semantic: sem ? { on: true, near } : { on: false }
+  };
+}
+
+module.exports = { compareReports, compareCsv, parseCsvLine, planTrash, runTrash, treeMap, inside, findOnDisk, wordsOfPath };

@@ -106,7 +106,15 @@
     var qBtn = el('button', { type: 'submit', class: 'wc-btn wc-primary', text: 'Cerca' });
     var docSel = el('select', { 'aria-label': 'Cerca in' });
     var langSel = el('select', { 'aria-label': 'Lingua' });
-    var qForm = el('form', { class: 'lb-search', role: 'search' }, [qInput, qBtn]);
+    /*
+     * "Anche per significato": la ricerca per parole trova quello che hai scritto, questa anche
+     * quello che volevi dire. Resta una scelta perché la prima volta il cervello deve imparare le
+     * parole della tua libreria, e perché a volte si vuole proprio la parola esatta.
+     */
+    var semOn = el('input', { type: 'checkbox', id: 'lb-sem' });
+    var semLab = el('label', { class: 'lb-semlab', for: 'lb-sem', title: 'Trova anche i passaggi che dicono la stessa cosa con altre parole. Tutto resta sul tuo computer: niente da scaricare, niente internet.' },
+      [semOn, el('span', { text: 'anche per significato' })]);
+    var qForm = el('form', { class: 'lb-search', role: 'search' }, [qInput, qBtn, semLab]);
     var tabResults = el('button', { type: 'button', role: 'tab', class: 'wc-tab', 'aria-selected': 'true', text: 'Risultati' });
     var tabMap = el('button', { type: 'button', role: 'tab', class: 'wc-tab', 'aria-selected': 'false', text: 'Mappa dei concetti' });
     var tabStudy = el('button', { type: 'button', role: 'tab', class: 'wc-tab', 'aria-selected': 'false', text: 'Studio' });
@@ -482,7 +490,8 @@
       var q = qInput.value.trim();
       lastSearch = { q: q };
       if (!q) { renderOverviewResults(); return Promise.resolve(); }
-      var f = { docs: filters.doc ? [filters.doc] : [], langs: langSel.value ? [langSel.value] : [], concept: lastSearch.concept || undefined };
+      var f = { docs: filters.doc ? [filters.doc] : [], langs: langSel.value ? [langSel.value] : [], concept: lastSearch.concept || undefined,
+        semantic: semOn.checked || undefined };
       return kb.call('search', { query: q, filters: f }).then(function (res) { showView('results'); renderResults(res); })
         .catch(function (e) { resultsBox.textContent = ''; resultsBox.appendChild(el('p', { class: 'wc-doc-msg', text: 'Ricerca non riuscita: ' + e.message })); });
     }
@@ -507,6 +516,10 @@
         });
         head.appendChild(chips);
       }
+      if (res.semantic && res.semantic.on && res.semantic.near && res.semantic.near.length) {
+        head.appendChild(el('p', { class: 'wc-note lb-near', text: 'Cercato anche come: ' +
+          res.semantic.near.slice(0, 6).map(function (x) { return x.word || x.term; }).join(', ') + ' — parole che nei tuoi documenti stanno negli stessi discorsi.' }));
+      }
       resultsBox.appendChild(head);
       var ol = el('ol', { class: 'lb-list' });
       res.results.forEach(function (r) {
@@ -514,8 +527,9 @@
         openB.addEventListener('click', function () { host.openAt(r.path, r.name, { text: r.full, page: r.page }); });
         var tags = el('div', { class: 'lb-tags' });
         r.concepts.forEach(function (c) { var t = el('button', { type: 'button', class: 'lb-tag', text: c.label }); t.addEventListener('click', function () { openConcept(c.id); }); tags.appendChild(t); });
-        ol.appendChild(el('li', { class: 'lb-hit' + (r.kind === 'h' ? ' heading' : '') }, [
-          el('p', { class: 'lb-src' }, [el('span', { class: 'lb-kind', text: KIND[r.ext] || r.format }), el('b', { text: r.name }), r.where ? el('span', { text: ' · ' + r.where }) : null]),
+        ol.appendChild(el('li', { class: 'lb-hit' + (r.kind === 'h' ? ' heading' : '') + (r.byMeaning ? ' bymeaning' : '') }, [
+          el('p', { class: 'lb-src' }, [el('span', { class: 'lb-kind', text: KIND[r.ext] || r.format }), el('b', { text: r.name }), r.where ? el('span', { text: ' · ' + r.where }) : null,
+            r.byMeaning ? el('span', { class: 'lb-why', text: 'per significato', title: 'Non contiene le parole cercate, ma parla della stessa cosa (somiglianza ' + r.sem + ').' }) : null]),
           el('p', { class: 'lb-snip' }, [marked(r.text, r.marks)]),
           el('div', { class: 'lb-hit-foot' }, [tags, openB])]));
       });
@@ -526,6 +540,7 @@
     qInput.addEventListener('input', function () { clearTimeout(qTimer); qTimer = setTimeout(function () { if (qInput.value.trim().length >= 2 || !qInput.value.trim()) { lastSearch = null; search(); } }, 320); });
     docSel.addEventListener('change', function () { filters.doc = docSel.value; renderDocs(); if (qInput.value.trim()) search(); if (view === 'map') drawSoon(); });
     langSel.addEventListener('change', function () { if (qInput.value.trim()) search(); });
+    semOn.addEventListener('change', function () { if (qInput.value.trim()) { lastSearch = null; search(); } });
 
     // ------------------------------------------------------------ pannello di destra
     function panelMessage(text) { panel.textContent = ''; panel.appendChild(el('p', { class: 'wc-note', text: text })); }
@@ -676,8 +691,8 @@
       return b;
     }
 
-    function openConcept(id) {
-      return kb.call('concept', { cid: id }).then(function (c) {
+    function openConcept(id, opts) {
+      return kb.call('concept', { cid: id, similar: !!(opts && opts.similar) }).then(function (c) {
         if (!c) { panelMessage('Questo concetto non c’è più (forse è stato unito a un altro).'); return; }
         selected = { concept: c.id };
         drawSoon();
@@ -746,7 +761,17 @@
       var meta2 = el('div', { class: 'lb-meta' });
       var stSel = el('select', { 'aria-label': 'Stato di revisione' }, [el('option', { value: '', text: 'senza stato' })].concat(
         Object.keys(SIT).map(function (k) { return el('option', { value: k, text: SIT[k], selected: c.state && c.state.s === k ? 'selected' : null }); })));
-      stSel.addEventListener('change', function () { edit({ type: 'state', id: c.id, state: stSel.value }).then(function () { openConcept(c.id); }); });
+      /*
+       * Lo stato si cambia senza ricostruire la scheda: chi ha appena aperto il modulo di
+       * un'etichetta o di una nota la stava scrivendo, e vedersela sparire sotto le dita è
+       * peggio che non avere il cambio di stato.
+       */
+      stSel.addEventListener('change', function () {
+        var v = stSel.value;
+        edit({ type: 'state', id: c.id, state: v }, v ? 'Stato: ' + SIT[v] + '.' : 'Stato tolto.').then(function () {
+          c.state = v ? { s: v } : null;
+        });
+      });
       meta2.appendChild(el('label', { class: 'wc-check' }, [el('span', { class: 'wc-note', text: 'Stato' }), stSel]));
       if (c.seen && (c.seen.first || c.seen.last)) {
         meta2.appendChild(el('span', { class: 'wc-note', text: 'visto dal ' + fmtDate(c.seen.first) + (c.seen.last && c.seen.last !== c.seen.first ? ' · ultimo aggiornamento ' + fmtDate(c.seen.last) : '') }));
@@ -872,6 +897,38 @@
             [el('span', { class: 'lb-rel-type', text: r.rel }), b, r.c ? el('span', { class: 'wc-note', text: ' ' + r.c + '×' }) : null, mark, x]));
         });
         panel.appendChild(rl);
+      }
+      /*
+       * Vicini di significato, non di posizione: concetti che stanno negli stessi discorsi anche se
+       * non si sono mai incontrati in una frase. È il modo per accorgersi dei doppioni.
+       */
+      if (!c.similar) {
+        // il modello non c'è ancora: la scheda si apre subito e i simili arrivano se li chiedi
+        var simBtn = el('button', { type: 'button', class: 'wc-link', text: 'Cerca i simili di significato' });
+        simBtn.addEventListener('click', function () {
+          simBtn.disabled = true;
+          simBtn.textContent = 'Imparo le parole della libreria…';
+          openConcept(c.id, { similar: true });
+        });
+        panel.appendChild(el('p', { class: 'wc-note' }, [simBtn,
+          el('span', { text: ' — concetti usati negli stessi discorsi, anche senza mai comparire nella stessa frase. La prima volta il cervello impara le parole dei tuoi documenti.' })]));
+      } else if (c.similar.length) {
+        panel.appendChild(el('h2', { text: 'Simili di significato' }));
+        panel.appendChild(el('p', { class: 'wc-note', text: 'Usati negli stessi discorsi, anche senza mai comparire nella stessa frase. Se due sono la stessa cosa, puoi unirli.' }));
+        var sl = el('ul', { class: 'lb-rel lb-sim' });
+        c.similar.forEach(function (r) {
+          var b = el('button', { type: 'button', class: 'wc-link', text: r.label });
+          b.addEventListener('click', function () { openConcept(r.id); });
+          var m = el('button', { type: 'button', class: 'wc-btn lb-merge', text: 'Unisci', title: 'Unisci «' + r.label + '» a «' + c.label + '»' });
+          m.addEventListener('click', function () {
+            if (!confirm('Unire «' + r.label + '» a «' + c.label + '»? Si può separare dopo.')) return;
+            edit({ type: 'merge', a: c.id, b: r.id }, 'Concetti uniti.').then(function () { openConcept(c.id); });
+          });
+          sl.appendChild(el('li', { class: 'rel-sim' }, [el('span', { class: 'lb-rel-type', text: Math.round(r.score * 100) + '%' }), b, m]));
+        });
+        panel.appendChild(sl);
+      } else {
+        panel.appendChild(el('p', { class: 'wc-note', text: 'Nessun concetto vicino di significato: questo sta per conto suo.' }));
       }
       panel.appendChild(el('h2', { text: 'Fonti' + (c.total > c.sources.length ? ' (prime ' + c.sources.length + ' di ' + c.total + ')' : ' (' + c.sources.length + ')') }));
       var sl = el('ol', { class: 'lb-sources' });

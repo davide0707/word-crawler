@@ -55,6 +55,11 @@ Of particular interest:
 - **Study**: review progress stays in `library/study.json` in the app's data folder, holds only concept
   stems, dates and counters, and is never sent anywhere. Exports (Anki, CSV) are written only where the user
   chooses.
+- **Search by meaning**: the model is learned in memory from the passages already in the brain (or, for
+  the disk search, from the file names in the scan's own list). Nothing is downloaded, no network call is
+  made, no model file is written, and the vectors are dropped whenever the library changes. The disk search
+  reads only the scan list inside the app's data folder — the path is checked in the main process — and
+  never opens the files it lists.
 - **Library**: files are only read; the main process serves only files the user added (or already in the
   library), records are written to the app's data folder and must match the id of their path; removing a
   document never touches the file.

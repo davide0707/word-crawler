@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('wcDesktop', {
     start: (opts) => ipcRenderer.invoke('scan:start', opts),
     cancel: () => ipcRenderer.invoke('scan:cancel'),
     exportCsv: (csvPath) => ipcRenderer.invoke('scan:export-csv', csvPath),
+    find: (csvPath, query, opts) => ipcRenderer.invoke('scan:find', csvPath, String(query || ''),
+      { semantic: !!(opts && opts.semantic), limit: opts && +opts.limit || 60 }),
     history: (root) => ipcRenderer.invoke('scan:history', root),
     compare: (oldId, newId) => ipcRenderer.invoke('scan:compare', oldId, newId),
     trash: (scanId, items) => ipcRenderer.invoke('scan:trash', scanId, items),
