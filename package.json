@@ -45,7 +45,7 @@
   },
   "scripts": {
     "start": "electron .",
-    "test": "npm run lint && node tests/analysis.test.js && node tests/code.test.js && node tests/library.test.js && node tests/study.test.js && node tests/export.test.js && node tests/scanner.test.js && node tests/main.test.js && node tests/formats.test.js && node tests/reader.test.js && node tests/library-ui.test.js",
+    "test": "npm run lint && node tests/analysis.test.js && node tests/code.test.js && node tests/library.test.js && node tests/study.test.js && node tests/insights.test.js && node tests/export.test.js && node tests/scanner.test.js && node tests/main.test.js && node tests/formats.test.js && node tests/reader.test.js && node tests/library-ui.test.js",
     "test:ui": "node tests/desktop-ui.test.js",
     "fixtures": "python3 tests/make-fixtures.py",
     "build:extension": "node scripts/build-extension.js",

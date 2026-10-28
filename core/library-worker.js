@@ -17,6 +17,10 @@
  * Codice (core/code.js, letto in library.js):
  *   code          { op }            chi chiama, usi, codice morto, cose da fare, complessità, glossario, dipendenze
  *   code-markdown { doc? }          documentazione automatica in Markdown
+ *   insights    { doc? }            lacune, concetti isolati, contraddizioni, divergenze doc/codice
+ *   explain     { cid }             spiegazione fatta con le frasi dei documenti
+ *   branch      { cid }             riassunto di un ramo, in Markdown
+ *   diff        { other }           confronto con il grafo di un altro cervello
  * Studio (core/study.js), sullo stesso grafo:
  *   study-load  { state }            carica i progressi salvati
  *   study-stats { doc? }             quanti concetti nuovi, da ripassare, saldi
@@ -78,6 +82,11 @@ var handlers = {
   stats: function () { return base().stats(); },
 
   code: function (d) { return base().code(d.op || {}); },
+  insights: function (d) { return base().insights({ doc: d.doc, limit: d.limit }); },
+  explain: function (d) { return base().explain(d.cid, { related: d.related }); },
+  branch: function (d) { return base().branch(d.cid); },
+  // confronto: il grafo dell'altro cervello arriva già pronto da chi chiama
+  diff: function (d) { return WCLibrary.diff(base().graph(), d.other); },
   'code-markdown': function (d) { return base().codeMarkdown({ doc: d.doc }); },
   'study-load': function (d) { studyState = d.state && d.state.cards ? d.state : null; study = null; return learn().stats(); },
   'study-stats': function (d) { return learn().stats({ doc: d.doc }); },

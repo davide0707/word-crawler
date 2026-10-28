@@ -558,6 +558,11 @@
           });
           panel.appendChild(ul);
         });
+        var ib = el('button', { type: 'button', class: 'wc-btn', text: 'Che cosa ho notato' });
+        ib.addEventListener('click', showInsights);
+        var cb = el('button', { type: 'button', class: 'wc-btn', text: 'Confronta con un altro cervello' });
+        cb.addEventListener('click', showCompare);
+        panel.appendChild(el('div', { class: 'lb-actions' }, brainList.length > 1 ? [ib, cb] : [ib]));
         panel.appendChild(el('p', { class: 'wc-note', text: 'Suggerimenti: metti una frase tra virgolette per cercarla così com’è; cerca una sigla o un nome per trovare anche le sue forme estese; apri la mappa per vedere come si collegano i concetti.' }));
       }).catch(function () {});
     }
@@ -608,6 +613,62 @@
       var showB = el('button', { type: 'button', class: 'wc-btn', text: 'Mostra nella cartella' });
       showB.addEventListener('click', function () { host.showItem(d.path); });
       panel.appendChild(el('div', { class: 'wc-inline' }, [openB, showB]));
+    }
+
+    /*
+     * "Spiega": una pagina costruita soltanto con le frasi dei documenti. Ogni riga ha la sua fonte,
+     * cliccabile. Non c'è niente di generato: se una cosa non è scritta da qualche parte, non compare.
+     */
+    function explainConcept(id) {
+      kb.call('explain', { cid: id, related: 8 }).then(function (e) {
+        if (!e) return;
+        selected = { concept: e.id };
+        panel.textContent = '';
+        panel.appendChild(backLink());
+        panel.appendChild(el('h2', { text: 'Spiegazione' }));
+        panel.appendChild(el('p', { class: 'lb-title', text: e.label }));
+        panel.appendChild(el('p', { class: 'wc-note', text: 'Costruita solo con le frasi dei tuoi documenti: ogni pezzo dice da dove viene.' }));
+        e.parts.filter(function (p2) { return p2.role !== 'rel'; }).forEach(function (p2) {
+          var box = el('div', { class: 'lb-def' });
+          box.appendChild(rich(p2.text, { block: true }));
+          if (p2.source) box.appendChild(srcBtn(p2.source));
+          panel.appendChild(box);
+        });
+        var rel = e.parts.filter(function (p2) { return p2.role === 'rel'; });
+        if (rel.length) {
+          panel.appendChild(el('h2', { text: 'E con che cosa c’entra' }));
+          var ul = el('ul', { class: 'lb-rel' });
+          rel.forEach(function (p2) {
+            var b = el('button', { type: 'button', class: 'wc-link', text: p2.label });
+            b.addEventListener('click', function () { openConcept(p2.id); });
+            var li = el('li', {}, [el('span', { class: 'lb-rel-type', text: p2.rel }), b]);
+            if (p2.text) li.appendChild(el('span', { class: 'wc-note', text: ' — ' + p2.text.slice(0, 160) }));
+            ul.appendChild(li);
+          });
+          panel.appendChild(ul);
+        }
+        if (e.read.length) {
+          panel.appendChild(el('h2', { text: 'Dove leggerlo' }));
+          var ul2 = el('ul', { class: 'lb-sources' });
+          e.read.forEach(function (r) { ul2.appendChild(el('li', {}, [srcBtn(r), el('p', { text: r.text })])); });
+          panel.appendChild(ul2);
+        }
+        var save = el('button', { type: 'button', class: 'wc-btn', text: 'Salva il ramo (.md)' });
+        save.addEventListener('click', function () {
+          kb.call('branch', { cid: e.id }).then(function (md) { host.saveFile(e.label.replace(/[\\/:*?"<>|]/g, '-') + '.md', md, 'text/markdown'); toast('Riassunto salvato.'); });
+        });
+        var back = el('button', { type: 'button', class: 'wc-btn', text: 'Torna alla scheda' });
+        back.addEventListener('click', function () { openConcept(e.id); });
+        panel.appendChild(el('div', { class: 'lb-actions' }, [save, back]));
+      }).catch(function (err) { toast('Non riesco a spiegare: ' + err.message); });
+    }
+    function srcBtn(s2) {
+      var b = el('button', { type: 'button', class: 'lb-srcbtn' }, [el('b', { text: s2.name }), el('span', { text: s2.where ? ' · ' + s2.where : '' })]);
+      b.addEventListener('click', function () {
+        var d = docById.get(s2.doc);
+        if (d) host.openAt(d.path, d.name, { n: s2.n, page: s2.page, line: s2.line, box: s2.box });
+      });
+      return b;
     }
 
     function openConcept(id) {
@@ -677,7 +738,8 @@
       panel.appendChild(el('p', { class: 'wc-note', text: plural(c.count, 'volta', 'volte') + ' in ' + plural(c.total, 'passaggio', 'passaggi') + ': ' + c.docs.map(function (d) { return d.name; }).join(', ') }));
       var actions = el('div', { class: 'lb-actions' });
       var formBox = el('div');
-      [['Cerca i passaggi', function () { searchConcept(c); }],
+      [['Spiega', function () { explainConcept(c.id); }],
+        ['Cerca i passaggi', function () { searchConcept(c); }],
         ['Mostra sulla mappa', function () { showView('map'); focusNode(c.id); }],
         ['Rinomina', function () { formBox.textContent = ''; formBox.appendChild(inlineForm('Nuovo nome', c.label, 'Rinomina', function (v) { edit({ type: 'rename', id: c.id, label: v }, 'Concetto rinominato.').then(function () { openConcept(c.id); }); })); }],
         ['Aggiungi alias', function () { formBox.textContent = ''; formBox.appendChild(inlineForm('Altro nome dello stesso concetto', 'es. modulazione in quadratura', 'Aggiungi', function (v) { edit({ type: 'alias', id: c.id, text: v }, 'Alias aggiunto.').then(function () { openConcept(c.id); }); })); }],
@@ -2065,6 +2127,134 @@
         if (b) { e.preventDefault(); b.click(); }
       }
     });
+
+    // ------------------------------------------------------------ cosa ho notato
+    /*
+     * Lacune, contraddizioni, concetti isolati e divergenze fra documentazione e codice. Sono
+     * osservazioni, non verdetti: ognuna dice il perché e porta alle frasi da cui viene.
+     */
+    function showInsights() {
+      selected = { insights: true };
+      panel.textContent = '';
+      panel.appendChild(backLink());
+      panel.appendChild(el('h2', { text: 'Che cosa ho notato' }));
+      panel.appendChild(el('p', { class: 'wc-note', text: 'Controlli su quello che è già stato letto. Niente di automatico viene applicato: decidi tu.' }));
+      var wait = el('p', { class: 'wc-note', text: 'Guardo…' });
+      panel.appendChild(wait);
+      kb.call('insights', { doc: filters.doc || undefined, limit: 30 }).then(function (r) {
+        wait.remove();
+        var any = false;
+        function section(title, items, draw, note) {
+          if (!items.length) return;
+          any = true;
+          panel.appendChild(el('h2', { text: title + ' (' + items.length + ')' }));
+          if (note) panel.appendChild(el('p', { class: 'wc-note', text: note }));
+          var ul = el('ul', { class: 'lb-rel' });
+          items.forEach(function (x) { ul.appendChild(draw(x)); });
+          panel.appendChild(ul);
+        }
+        section('Contraddizioni', r.contradictions, function (x) {
+          var li = el('li', { class: 'lb-contra' });
+          var b = el('button', { type: 'button', class: 'wc-link', text: x.label });
+          b.addEventListener('click', function () { openConcept(x.id); });
+          li.appendChild(el('div', {}, [b, el('span', { class: 'wc-note', text: ' · ' + x.why })]));
+          [x.a, x.b].forEach(function (sd) {
+            var box = el('div', { class: 'lb-def' });
+            box.appendChild(el('p', { text: sd.text }));
+            box.appendChild(srcBtn(sd));
+            li.appendChild(box);
+          });
+          return li;
+        }, 'Lo stesso concetto detto in due modi che non stanno insieme. Può essere un errore di appunti, o due fonti che davvero non concordano.');
+        section('Lacune', r.gaps, function (x) {
+          var b = el('button', { type: 'button', class: 'wc-link', text: x.label });
+          b.addEventListener('click', function () { openConcept(x.id); });
+          return el('li', {}, [b, el('span', { class: 'wc-note', text: ' · ' + x.why })]);
+        }, 'Concetti che usi spesso ma che nessun documento spiega.');
+        section('La documentazione non torna', r.drift, function (x) {
+          var b = el('button', { type: 'button', class: 'wc-link', text: x.name + '()' });
+          b.addEventListener('click', function () { var d = docById.get(x.doc); if (d) host.openAt(d.path, d.name, { n: x.n }); });
+          return el('li', {}, [b, el('span', { class: 'wc-note', text: ' · ' + x.file + (x.where ? ', ' + x.where : '') })]);
+        }, 'Funzioni citate nei documenti che nel codice non esistono.');
+        section('Concetti isolati', r.orphans, function (x) {
+          var b = el('button', { type: 'button', class: 'wc-link', text: x.label });
+          b.addEventListener('click', function () { openConcept(x.id); });
+          return el('li', {}, [b, el('span', { class: 'wc-note', text: ' · ' + x.why })]);
+        }, 'Non si collegano a niente: o sono fuori tema, o manca il pezzo che li lega al resto.');
+        section('Snodi', r.hubs, function (x) {
+          var b = el('button', { type: 'button', class: 'wc-link', text: x.label });
+          b.addEventListener('click', function () { openConcept(x.id); });
+          return el('li', {}, [b, el('span', { class: 'wc-note', text: ' · ' + x.why })]);
+        }, 'I concetti da cui passa tutto: se ne manca uno, manca molto.');
+        if (!any) panel.appendChild(el('p', { text: 'Non ho trovato niente da segnalare: nessuna contraddizione, nessuna lacuna evidente.' }));
+      }).catch(function (e) { wait.textContent = 'Non riesco a guardare: ' + e.message; });
+    }
+
+    // ------------------------------------------------------------ confronto fra cervelli
+    /*
+     * Si apre il grafo dell'altro cervello in un thread usa-e-getta, poi si confrontano i due.
+     * Il cervello aperto non viene toccato.
+     */
+    function showCompare() {
+      selected = { compare: true };
+      panel.textContent = '';
+      panel.appendChild(backLink());
+      panel.appendChild(el('h2', { text: 'Confronta due cervelli' }));
+      var sel = el('select', { 'aria-label': 'Con quale cervello' });
+      brainList.filter(function (b) { return b.id !== brainActive; }).forEach(function (b) {
+        sel.appendChild(el('option', { value: b.id, text: b.name + ' · ' + plural(b.docs, 'documento', 'documenti') }));
+      });
+      var go = el('button', { type: 'button', class: 'wc-btn wc-primary', text: 'Confronta' });
+      panel.appendChild(el('div', { class: 'wc-inline' }, [sel, go]));
+      var out = el('div', { class: 'lb-cmp' });
+      panel.appendChild(out);
+      go.addEventListener('click', function () {
+        var id = sel.value, other = brainList.find(function (b) { return b.id === id; });
+        if (!id) return;
+        out.textContent = '';
+        out.appendChild(el('p', { class: 'wc-note', text: 'Apro «' + other.name + '»…' }));
+        var tmp = rpc(host.workerUrl);
+        lib.brainUse(id)
+          .then(function () { return Promise.all([lib.list(), lib.loadEdits()]); })
+          .then(function (r) { return tmp.call('load', { records: r[0] || [], edits: r[1] }); })
+          .then(function () { return tmp.call('graph'); })
+          .then(function (G) { tmp.terminate(); return lib.brainUse(brainActive).then(function () { return G; }); })
+          .then(function (G) { return kb.call('diff', { other: G }); })
+          .then(function (d) { paintCompare(out, d, other); })
+          .catch(function (e) { tmp.terminate(); lib.brainUse(brainActive); out.textContent = ''; out.appendChild(el('p', { class: 'wc-note', text: 'Confronto non riuscito: ' + e.message })); });
+      });
+    }
+    function paintCompare(out, d, other) {
+      out.textContent = '';
+      var cur = currentBrain();
+      out.appendChild(el('p', { text: Math.round(d.stats.overlap * 100) + '% in comune: ' + plural(d.stats.shared, 'concetto', 'concetti') +
+        ' su ' + d.stats.a + ' di «' + (cur ? cur.name : 'questo') + '» e ' + d.stats.b + ' di «' + other.name + '».' }));
+      function list(title, items, note, pick) {
+        if (!items.length) return;
+        out.appendChild(el('h2', { text: title + ' (' + items.length + ')' }));
+        if (note) out.appendChild(el('p', { class: 'wc-note', text: note }));
+        var ul = el('ul', { class: 'lb-rel' });
+        items.slice(0, 40).forEach(function (x) { ul.appendChild(pick(x)); });
+        out.appendChild(ul);
+      }
+      list('Solo in «' + (cur ? cur.name : 'questo') + '»', d.onlyA, 'Qui ci sono, nell’altro no.', function (x) {
+        var b = el('button', { type: 'button', class: 'wc-link', text: x.label });
+        b.addEventListener('click', function () { openConcept(x.id); });
+        return el('li', {}, [b, el('span', { class: 'wc-note', text: ' · ' + x.count + '×' })]);
+      });
+      list('Solo in «' + other.name + '»', d.onlyB, 'Nell’altro cervello, qui mancano.', function (x) {
+        return el('li', {}, [el('span', { text: x.label }), el('span', { class: 'wc-note', text: ' · ' + x.count + '×' })]);
+      });
+      list('Pesano in modo diverso', d.moved, 'Argomenti centrali in uno e di contorno nell’altro.', function (x) {
+        return el('li', {}, [el('span', { text: x.label }),
+          el('span', { class: 'wc-note', text: ' · più importante in «' + (x.where === 'a' ? (cur ? cur.name : 'questo') : other.name) + '»' })]);
+      });
+      list('In tutti e due', d.shared, null, function (x) {
+        var b = el('button', { type: 'button', class: 'wc-link', text: x.label });
+        b.addEventListener('click', function () { openConcept(x.id); });
+        return el('li', {}, [b, el('span', { class: 'wc-note', text: ' · ' + x.a + '× qui, ' + x.b + '× là' })]);
+      });
+    }
 
     // ------------------------------------------------------------ codice
     /*

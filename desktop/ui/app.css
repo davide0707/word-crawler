@@ -201,6 +201,10 @@ body { padding-top: var(--wc-top, 52px); }
 .lb-x { margin-left: auto; border: 0; background: none; color: var(--wc-mute); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px; opacity: 0; }
 .lb-rel li:hover .lb-x, .lb-x:focus-visible { opacity: 1; }
 .lb-x:hover { color: #ff6b7d; }
+.lb-contra { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--wc-line); }
+.lb-contra .lb-def { border-left-color: #ff8a9a; }
+.lb-cmp { display: flex; flex-direction: column; gap: 8px; }
+.lb-cmp h2 { margin: 10px 0 0; }
 .lb-sources { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
 .lb-sources p { margin: 3px 0 0; font: 13.5px/1.5 var(--wc-serif); color: #d9d8e2; }
 .lb-srcbtn { border: 0; background: none; padding: 0; color: var(--wc-cyan); cursor: pointer; text-align: left; font-size: 12.5px; }

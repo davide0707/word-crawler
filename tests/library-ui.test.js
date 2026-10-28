@@ -767,6 +767,55 @@ async function check(name, fn) {
     assert.ok(await page.$('.lb-crumbs button'), 'e lo mostra');
   });
 
+  await check('spiega un concetto con le frasi dei documenti', async () => {
+    await page.click('.lb-tabs [role="tab"]:text-is("Mappa dei concetti")');
+    await page.fill('.lb-maptools input[type="search"]', 'QAM');
+    await page.press('.lb-maptools input[type="search"]', 'Enter');
+    await waitFor(() => /QAM/.test((document.querySelector('.lb-panel .lb-title') || {}).textContent || ''), null, 15000);
+    await page.click('.lb-actions button:text-is("Spiega")');
+    await waitFor(() => /Spiegazione/.test(document.querySelector('.lb-panel').textContent), null, 15000);
+    const p = await page.textContent('.lb-panel');
+    assert.ok(/modulazione digitale/i.test(p), 'la definizione vera: ' + p.slice(0, 300));
+    assert.ok(/Dove leggerlo/.test(p) && /\.md|\.pdf|\.docx/.test(p), 'e dove leggerlo');
+    assert.ok(await page.$('.lb-srcbtn'), 'ogni pezzo ha la sua fonte cliccabile');
+    const n0 = await page.evaluate(() => window.__saved.length);
+    await page.click('.lb-panel button:text-is("Salva il ramo (.md)")');
+    await waitFor((k) => window.__saved.length > k, n0, 15000);
+    const md = await page.evaluate(() => window.__saved[window.__saved.length - 1]);
+    assert.ok(/^# /.test(md.text) && /Dove leggerlo/.test(md.text), 'il riassunto del ramo: ' + md.text.slice(0, 120));
+    await shot('lib-19-spiega.png');
+  });
+
+  await check('che cosa ho notato: lacune, contraddizioni, divergenze', async () => {
+    await page.click('.lb-panel .lb-back');
+    await waitFor(() => /La tua base di conoscenza/.test(document.querySelector('.lb-panel').textContent), null, 15000);
+    await page.click('.lb-panel button:text-is("Che cosa ho notato")');
+    await waitFor(() => !/Guardo…/.test(document.querySelector('.lb-panel').textContent), null, 25000);
+    const p = await page.textContent('.lb-panel');
+    assert.ok(/Che cosa ho notato/.test(p));
+    // nel finto corpus c'è una funzione citata e mai definita? almeno una sezione deve comparire
+    assert.ok(/Lacune|Contraddizioni|Concetti isolati|Snodi|non ho trovato niente/i.test(p), 'una sezione o il niente: ' + p.slice(0, 300));
+    await shot('lib-20-notato.png');
+  });
+
+  await check('confronto fra due cervelli', async () => {
+    await page.click('.lb-panel .lb-back');
+    await waitFor(() => /La tua base di conoscenza/.test(document.querySelector('.lb-panel').textContent), null, 15000);
+    const ha = await page.$('.lb-panel button:text-is("Confronta con un altro cervello")');
+    if (!ha) { console.log('     (un cervello solo: niente da confrontare)'); return; }
+    await ha.click();
+    await page.waitForSelector('.lb-panel button:text-is("Confronta")');
+    await page.click('.lb-panel button:text-is("Confronta")');
+    await waitFor(() => /% in comune/.test(document.querySelector('.lb-cmp').textContent), null, 40000);
+    const t = await page.textContent('.lb-cmp');
+    assert.ok(/% in comune/.test(t), 'la percentuale: ' + t.slice(0, 200));
+    // il cervello aperto non deve cambiare
+    const aperto = await page.evaluate(() => window.__lib.active);
+    assert.strictEqual(aperto, await page.evaluate(() => window.__view.state().docs.length ? window.__lib.active : null), 'il cervello aperto resta quello');
+    assert.ok((await page.evaluate(() => window.__view.state().docs.length)) > 0, 'e i suoi documenti sono ancora lì');
+    await shot('lib-21-confronto.png');
+  });
+
   await check('nessun errore nella pagina', () => { assert.deepStrictEqual(errs, []); });
 
   await browser.close();

@@ -1211,6 +1211,168 @@
     }
     function mid(s) { return 'n' + hash32(String(s)).toString(36); }
 
+    /*
+     * Quello che il cervello nota da solo. Niente AI: sono controlli su quello che è già stato
+     * estratto, e ognuno dice perché, con la fonte.
+     *  - lacune: concetti nominati spesso ma mai definiti, e concetti isolati dal resto;
+     *  - contraddizioni: lo stesso concetto definito in due modi che non stanno insieme;
+     *  - divergenze: la documentazione cita una funzione che nel codice non c'è (o viceversa).
+     */
+    var NEG = { it: /\b(non|né|senza|mai)\b/i, en: /\b(not|never|without|no)\b/i, fr: /\b(ne|pas|jamais|sans)\b/i,
+      es: /\b(no|nunca|sin)\b/i, de: /\b(nicht|kein|nie|ohne)\b/i, pt: /\b(não|nunca|sem)\b/i };
+
+    function insights(opts) {
+      var o = opts || {}, G = graph(), out = { gaps: [], orphans: [], contradictions: [], drift: [], hubs: [] };
+      if (!G.nodes.size) return out;
+      var limit = o.limit || 40;
+
+      // G.nodes è la mappa dei nodi veri: defs e docs sono elenchi, non conteggi
+      G.nodes.forEach(function (n) {
+        if (o.doc && !n.docs.some(function (d) { return d.id === o.doc; })) return;
+        var nd2 = n.docs.length;
+        // nominato spesso, mai definito: è un buco negli appunti
+        if (!n.defs.length && n.count >= 4 && !n.code) out.gaps.push({ id: n.id, label: n.label, count: n.count, ndocs: nd2, why: 'nominato ' + n.count + ' volte, mai definito' });
+        // isolato: nessun collegamento con il resto
+        if (!n.deg && n.count >= 2) out.orphans.push({ id: n.id, label: n.label, count: n.count, ndocs: nd2, why: 'non è collegato a nessun altro concetto' });
+        if (n.deg >= 12) out.hubs.push({ id: n.id, label: n.label, deg: n.deg, why: plural(n.deg, 'collegamento', 'collegamenti') });
+      });
+      out.gaps.sort(function (a, b) { return b.count - a.count; });
+      out.orphans.sort(function (a, b) { return b.count - a.count; });
+      out.hubs.sort(function (a, b) { return b.deg - a.deg; });
+
+      /*
+       * Contraddizioni. Due definizioni dello stesso concetto si contraddicono quando dicono cose
+       * diverse su un punto verificabile: un numero diverso, oppure una negata e l'altra no. Il resto
+       * (due definizioni che si completano) non è una contraddizione, e non viene segnalato.
+       */
+      G.nodes.forEach(function (nd) {
+        if (o.doc && !nd.docs.some(function (d) { return d.id === o.doc; })) return;
+        if (nd.defs.length < 2) return;
+        for (var i = 0; i < nd.defs.length && out.contradictions.length < limit; i++) {
+          for (var j = i + 1; j < nd.defs.length; j++) {
+            var A = nd.defs[i], B = nd.defs[j];
+            if (A.d === B.d) continue; // stesso documento: è un ripasso, non un disaccordo
+            var ra = docs[A.d], rb = docs[B.d];
+            var why = disagree(A.text, B.text, ra.lang);
+            if (!why) continue;
+            out.contradictions.push({
+              id: nd.id, label: nd.label, why: why,
+              a: { text: A.text, doc: ra.id, name: ra.name, path: ra.path, n: A.n, where: where(ra, ra.chunks[A.n] || {}) },
+              b: { text: B.text, doc: rb.id, name: rb.name, path: rb.path, n: B.n, where: where(rb, rb.chunks[B.n] || {}) }
+            });
+            break;
+          }
+        }
+      });
+
+      // la documentazione cita una funzione che nel codice non c'è
+      var symbols = new Map();
+      docs.forEach(function (r) {
+        if (!r.code) return;
+        (r.code.symbols || []).forEach(function (sy) { if (!symbols.has(sy.name)) symbols.set(sy.name, { file: r.name, sym: sy }); });
+      });
+      if (symbols.size) {
+        var seenD = new Set();
+        docs.forEach(function (r) {
+          if (r.code || !r.chunks) return;
+          r.chunks.forEach(function (ch) {
+            var m, RE2 = /([A-Za-z_$][\w$]{2,40})\s*\(\s*\)/g;
+            while ((m = RE2.exec(ch.text)) && out.drift.length < limit) {
+              var nm = m[1];
+              if (symbols.has(nm) || seenD.has(nm) || /^(se|if|per|vedi|nota|figura|tabella|http|www)$/i.test(nm)) continue;
+              seenD.add(nm);
+              out.drift.push({ name: nm, doc: r.id, file: r.name, path: r.path, n: ch.n, where: where(r, ch),
+                text: ch.text.slice(0, 200), why: 'la documentazione cita «' + nm + '()», nel codice non c’è' });
+            }
+          });
+        });
+      }
+      out.gaps = out.gaps.slice(0, limit);
+      out.orphans = out.orphans.slice(0, limit);
+      out.hubs = out.hubs.slice(0, 12);
+      return out;
+    }
+
+    function disagree(a, b, lang) {
+      var na = String(a).match(/-?\d+(?:[.,]\d+)?/g) || [], nb = String(b).match(/-?\d+(?:[.,]\d+)?/g) || [];
+      if (na.length && nb.length && na[0] !== nb[0] && fold(a).slice(0, 25) !== fold(b).slice(0, 25)) {
+        return 'una dice ' + na[0] + ', l’altra ' + nb[0];
+      }
+      var re = NEG[lang] || NEG.it;
+      var ka = re.test(a), kb2 = re.test(b);
+      if (ka !== kb2) {
+        // stesse parole portanti, ma una è negata
+        var wa = new Set(fold(a).split(/\W+/).filter(function (w) { return w.length > 4; }));
+        var wb = fold(b).split(/\W+/).filter(function (w) { return w.length > 4; });
+        var same = wb.filter(function (w) { return wa.has(w); }).length;
+        if (same >= 3) return 'una nega quello che l’altra afferma';
+      }
+      return null;
+    }
+
+    /*
+     * "Spiega": una spiegazione costruita soltanto con le frasi che ci sono nei documenti. Prima la
+     * definizione, poi il capostipite, poi i concetti collegati con la loro frase, infine dove
+     * leggere il resto. Ogni riga porta la sua fonte: niente è inventato.
+     */
+    function explain(id, opts) {
+      var G = graph(), nd = G.nodes.get(G.nodeOfKey.get(id) || id);
+      if (!nd) return null;
+      var o = opts || {}, maxRel = o.related || 6;
+      function src(d, n) { var r = docs[d], ch = r.chunks[n] || {}; return { doc: r.id, name: r.name, path: r.path, n: n, where: where(r, ch) }; }
+      var parts = [];
+      nd.defs.slice(0, 2).forEach(function (df) { parts.push({ role: 'def', text: df.text, source: src(df.d, df.n) }); });
+      if (!parts.length) {
+        // nessuna definizione: si prende la frase più ricca in cui compare
+        var best = null;
+        nd.chunks.slice(0, 40).forEach(function (dc) {
+          var r = docs[dc[0]], ch = r.chunks[dc[1]];
+          if (!ch || ch.text.length < 60 || ch.text.length > 400) return;
+          if (!best || ch.text.length > best.ch.text.length) best = { r: r, ch: ch, d: dc[0], n: dc[1] };
+        });
+        if (best) parts.push({ role: 'use', text: best.ch.text, source: src(best.d, best.n) });
+      }
+      var edgesOf = G.edges.filter(function (e) { return e.a === nd.id || e.b === nd.id; })
+        .sort(function (a, b) { return (b.type !== 'co') - (a.type !== 'co') || b.w - a.w; }).slice(0, maxRel);
+      edgesOf.forEach(function (e) {
+        var other = G.nodes.get(e.a === nd.id ? e.b : e.a);
+        if (!other) return;
+        var rel = e.label || REL[e.type] || 'collegato a';
+        if (e.type === 'isa') rel = e.a === nd.id ? 'è un tipo di' : 'ha come tipo';
+        if (e.type === 'use') rel = e.a === nd.id ? 'usa' : 'è usato da';
+        var line = other.defs.length ? other.defs[0] : null;
+        parts.push({ role: 'rel', rel: rel, label: other.label, id: other.id,
+          text: line ? line.text : '', source: line ? src(line.d, line.n) : null });
+      });
+      var read = nd.chunks.slice(0, 6).map(function (dc) {
+        var r = docs[dc[0]], ch = r.chunks[dc[1]] || {};
+        return { doc: r.id, name: r.name, path: r.path, n: dc[1], where: where(r, ch), text: (ch.text || '').slice(0, 160) };
+      });
+      return { id: nd.id, label: nd.label, parts: parts, read: read, docs: nd.docs.map(function (d) { return d.id; }) };
+    }
+
+    /* Il riassunto di un ramo: il concetto e tutto quello che gli sta attorno, in Markdown. */
+    function branch(id) {
+      var e = explain(id, { related: 12 });
+      if (!e) return '';
+      var o = ['# ' + e.label, ''];
+      e.parts.forEach(function (p) {
+        if (p.role === 'def' || p.role === 'use') o.push('> ' + p.text, '> — *' + p.source.name + '*' + (p.source.where ? ', ' + p.source.where : ''), '');
+      });
+      var rel = e.parts.filter(function (p) { return p.role === 'rel'; });
+      if (rel.length) {
+        o.push('## Collegati', '');
+        rel.forEach(function (p) { o.push('- **' + p.label + '** — ' + p.rel + (p.text ? '. ' + p.text : '')); });
+        o.push('');
+      }
+      if (e.read.length) {
+        o.push('## Dove leggerlo', '');
+        e.read.forEach(function (r) { o.push('- ' + r.name + (r.where ? ', ' + r.where : '') + ' — ' + r.text); });
+      }
+      return o.join('\n');
+    }
+    function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
     function stats() {
       var G = graphCache;
       return {
@@ -1223,6 +1385,9 @@
     return {
       search: search,
       pool: pool,
+      insights: insights,
+      explain: explain,
+      branch: branch,
       code: code,
       codeMarkdown: codeMarkdown,
       graph: graphOut,
@@ -1368,5 +1533,55 @@
     return pos;
   }
 
-  g.WCLibrary = { VERSION: VERSION, buildRecord: buildRecord, open: open, ckey: ckey, findAcronyms: findAcronyms, chunkTokens: chunkTokens, emptyEdits: emptyEdits, where: where, layout: layout };
+  /*
+   * Confronto fra due cervelli. Si lavora sui due grafi già pronti (quelli che torna graph()), quindi
+   * si possono confrontare due librerie senza aprirle insieme. Un concetto è "lo stesso" quando ha la
+   * stessa radice o la stessa etichetta a meno di accenti e maiuscole.
+   *   -> { shared: [...], onlyA: [...], onlyB: [...], moved: [...], stats }
+   * "moved" sono i concetti che ci sono in tutti e due ma hanno peso molto diverso: argomenti che in
+   * un cervello sono centrali e nell'altro di contorno.
+   */
+  function diff(A, B) {
+    function index(G) {
+      var m = new Map();
+      (G.nodes || []).forEach(function (n) {
+        var keys = [fold(n.label)];
+        (n.members || []).forEach(function (k) { keys.push(k); });
+        keys.forEach(function (k) { if (k && !m.has(k)) m.set(k, n); });
+      });
+      return m;
+    }
+    var ia = index(A), ib = index(B);
+    var shared = [], onlyA = [], onlyB = [], moved = [], seen = new Set();
+    function look(idx, n) {
+      var keys = [fold(n.label)].concat(n.members || []);
+      for (var i = 0; i < keys.length; i++) if (idx.has(keys[i])) return idx.get(keys[i]);
+      return null;
+    }
+    var maxA = (A.nodes || []).reduce(function (m, n) { return Math.max(m, n.weight || 0); }, 0.001);
+    var maxB = (B.nodes || []).reduce(function (m, n) { return Math.max(m, n.weight || 0); }, 0.001);
+    (A.nodes || []).forEach(function (n) {
+      var hit = look(ib, n);
+      if (!hit) { onlyA.push({ id: n.id, label: n.label, count: n.count, ndocs: n.ndocs }); return; }
+      if (seen.has(hit.id)) return;
+      seen.add(hit.id);
+      var wa = (n.weight || 0) / maxA, wb = (hit.weight || 0) / maxB;
+      shared.push({ id: n.id, idB: hit.id, label: n.label, labelB: hit.label, a: n.count, b: hit.count, wa: round(wa, 3), wb: round(wb, 3) });
+      if (Math.abs(wa - wb) >= 0.25) moved.push({ label: n.label, wa: round(wa, 3), wb: round(wb, 3), where: wa > wb ? 'a' : 'b' });
+    });
+    (B.nodes || []).forEach(function (n) {
+      if (seen.has(n.id)) return;
+      if (!look(ia, n)) onlyB.push({ id: n.id, label: n.label, count: n.count, ndocs: n.ndocs });
+    });
+    function by(l) { return l.sort(function (x, y) { return (y.count || 0) - (x.count || 0); }); }
+    moved.sort(function (x, y) { return Math.abs(y.wa - y.wb) - Math.abs(x.wa - x.wb); });
+    return {
+      shared: shared.sort(function (x, y) { return (y.a + y.b) - (x.a + x.b); }),
+      onlyA: by(onlyA), onlyB: by(onlyB), moved: moved,
+      stats: { a: (A.nodes || []).length, b: (B.nodes || []).length, shared: shared.length, onlyA: onlyA.length, onlyB: onlyB.length,
+        overlap: (A.nodes || []).length ? round(shared.length / Math.max(1, Math.min((A.nodes || []).length, (B.nodes || []).length)), 3) : 0 }
+    };
+  }
+
+  g.WCLibrary = { VERSION: VERSION, buildRecord: buildRecord, open: open, ckey: ckey, diff: diff, findAcronyms: findAcronyms, chunkTokens: chunkTokens, emptyEdits: emptyEdits, where: where, layout: layout };
 })(globalThis);
