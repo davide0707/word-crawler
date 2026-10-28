@@ -44,6 +44,7 @@
 | **Exports the marked document** | Word (.docx, with your notes as comments), HTML and PDF, plus Markdown, text, JSON and Anki summaries. |
 | **Remembers pages** | The browser extension restores your marks when you reopen a saved page. |
 | **Builds a knowledge base** | The Library reads many files at once — even whole folders — and lets you search all of them together, see how their concepts connect on an interactive map and open every result at the exact page. |
+| **One brain per subject** | The library is not one: each brain keeps its own documents, concepts, map and study progress, with a name, an icon and a colour. Duplicate one, export it as open JSON, import it back. |
 | **Knows what you know** | Study asks you about the concepts of your own documents, grows the interval between reviews as you get them right, orders them from the general to the specific and colours the map by how well you know each one. |
 | **Maps your disk** | Read-only scanner with a zoomable treemap, duplicates, largest files and folders, scan-to-scan comparison and a safe "move duplicates to Trash". |
 | **Handles long documents** | Analysis runs in a Web Worker and PDF pages are extracted in parallel: about 25,000 words read and analysed in 1.3 s. |
@@ -55,6 +56,8 @@ The user interface is in Italian. Documents can be in Italian, English, French, 
 <img src="docs/images/library-search.webp" alt="Library search across nine documents: the question “Where did I talk about QAM?” finds passages in three files, including notes that only use the long form “Quadrature Amplitude Modulation”" width="100%">
 
 Add your lecture notes, slides, books, scans and saved pages — one by one or a whole folder — and the Library turns them into one local knowledge base. The original files are only read, never modified.
+
+You can keep **several brains**: one per exam, one per project, one for work. Each has its own documents, concepts, map edits and study progress, with a name, an icon and a colour; a picker in the sidebar switches between them. Brains can be duplicated, exported as a plain JSON file and imported back — nothing is locked inside the app. Deleting one keeps its folder recoverable by hand for 30 days, and at least one brain always remains.
 
 - **Passages with their exact source.** Every document is split into passages (paragraphs, headings, slides, list items, table rows) that remember the file, page, slide, section and, for PDFs, the position on the page. **Open at the exact position** jumps to the passage in the Reader and highlights it.
 - **Search everything at once.** Ranking with BM25 on word stems in six languages, passages that contain more of your words first, exact phrases in quotes, filters by document and language. Ask *“Where did I talk about QAM?”* and it also finds the notes that only say *Quadrature Amplitude Modulation*.
@@ -89,6 +92,7 @@ Your progress is saved next to the map edits, in the app's data folder, and surv
 
 | | |
 |:---:|:---:|
+| <img src="docs/images/library-brains.webp" alt="Brain manager: the open brain with its document count, and the actions to rename, recolour, duplicate and export it"><br>**Several brains, one per subject** | <img src="docs/images/library-study.webp" alt="Study tab with the counts and the study path"><br>**Study: path and progress** |
 | <img src="docs/images/library-question.webp" alt="A fill-in-the-blank question made from a sentence in the user's own notes, with the typed answer checked and the source shown"><br>**Study: a question from your notes** | <img src="docs/images/library-mastery.webp" alt="Concept map coloured by mastery: grey for never seen, green for solid"><br>**The map coloured by mastery** |
 | <img src="docs/images/review-quiz.webp" alt="Review tab with a multiple-choice quiz"><br>**Review cards and quiz** | <img src="docs/images/pen.webp" alt="Pen tool with a highlight and a numbered note"><br>**Pen: highlights and notes** |
 | <img src="docs/images/ocr.webp" alt="Scanned PDF recognised with OCR, with the marks placed on the scanned words"><br>**OCR on scanned PDFs** | <img src="docs/images/reader-paper.webp" alt="Paper theme for studying"><br>**Paper theme** |
@@ -212,7 +216,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and [CHANGELOG.md](CHANGE
 
 ## Project status
 
-Version **2.3.0**. Known limitations:
+Version **2.4.0**. Known limitations:
 
 - The OCR engine (tesseract.js) is exercised in tests through recorded Tesseract output; the WebAssembly engine itself runs only in the packaged app and extension.
 - Legacy .ppt/.xls and TIFF images are not supported (save them as .pptx/.xlsx or PNG/PDF).

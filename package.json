@@ -1,7 +1,7 @@
 {
   "name": "word-crawler-studio",
   "productName": "Word Crawler",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Reads documents, scanned PDFs and web pages in six languages, builds a searchable local knowledge base with a concept map, underlines, summarises, makes review cards and maps your disk. Statistical text analysis, no AI.",
   "keywords": [
     "reader",

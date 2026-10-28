@@ -6,8 +6,8 @@ Security fixes are made for the latest release only.
 
 | Version | Supported |
 |---|---|
-| 2.3.x | Yes |
-| < 2.3 | No |
+| 2.4.x | Yes |
+| < 2.4 | No |
 
 ## Reporting a vulnerability
 
@@ -48,6 +48,10 @@ Of particular interest:
 - **Disk scanner**: uses only directory listing, `lstat` and read-only file access; does not follow
   symbolic links or Windows junctions. Moving duplicates to the Trash is a separate, confirmed action
   with the checks described in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#disk-scanner).
+- **Brains**: each brain is a separate folder under the app's data folder. Switching brains clears the set
+  of authorised paths, so one brain can never read the files added to another; importing a brain accepts
+  only records whose id matches the path they carry, and deleting one moves its folder to the app's trash
+  instead of erasing it.
 - **Study**: review progress stays in `library/study.json` in the app's data folder, holds only concept
   stems, dates and counters, and is never sent anywhere. Exports (Anki, CSV) are written only where the user
   chooses.

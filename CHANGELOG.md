@@ -7,8 +7,17 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-28
+
 ### Added
-- **Empty the library** and **Empty the archive**: remove every document (or every saved reading) in one go, behind a confirmation that says how many there are. Files on disk are never touched; library records keep their 30 days in the app's trash, and the map edits and study progress are cleared with them.
+- **Several brains**: the library is no longer one. Each brain is a library of its own — documents, concepts, map edits and study progress kept apart — with a name, an icon and a colour: one per exam, one per project, one for work. A picker in the sidebar switches between them; **Manage brains** opens the list, with document and study counts and the date each was last touched.
+  - Create, rename, recolour, **duplicate**, **export** and **import** a brain. The export is a plain JSON file (`word-crawler-brain`), so nothing is locked inside the app; an import only keeps records whose id matches the path they carry.
+  - Deleting a brain moves its folder to the app's trash, where it stays recoverable by hand for 30 days; at least one brain always remains. Files on your computer are never touched.
+  - The library of earlier versions becomes the first brain, "La mia libreria", at the first start: documents, map edits and study progress are moved, not copied, and nothing is lost.
+- **Empty the library** and **Empty the archive**: remove every document of the open brain (or every saved reading) in one go, behind a confirmation that says how many there are. Files on disk are never touched; library records keep their 30 days in the app's trash, and the map edits and study progress are cleared with them.
+
+### Fixed
+- After adding documents, the results tab kept showing the previous document count until the next search.
 
 ## [2.3.0] - 2026-10-27
 
@@ -79,7 +88,8 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Browser extension (Manifest V3) with side panel, document reader and archive.
 - Automated tests and a multi-platform build workflow.
 
-[Unreleased]: https://github.com/davide0707/word-crawler/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/davide0707/word-crawler/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/davide0707/word-crawler/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/davide0707/word-crawler/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/davide0707/word-crawler/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/davide0707/word-crawler/releases/tag/v2.1.0

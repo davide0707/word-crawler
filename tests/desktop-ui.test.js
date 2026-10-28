@@ -101,10 +101,14 @@ function serve() {
       },
       library: { addFiles: async () => null, addFolder: async () => null, read: async () => { throw new Error('nessun file'); }, list: async () => [], save: async () => true,
         remove: async () => true, restore: async () => null, stat: async () => [], loadEdits: async () => null, saveEdits: async () => true,
-        loadStudy: async () => null, saveStudy: async () => true },
+        loadStudy: async () => null, saveStudy: async () => true,
+        brains: async () => ({ active: 'b-0000000000000001', brains: [{ id: 'b-0000000000000001', name: 'La mia libreria', icon: 'libro', color: '#4a63ff', tags: [], created: '2026-10-28T07:00:00.000Z', updated: '2026-10-28T07:00:00.000Z', docs: 0, studied: 0 }] }),
+        brainCreate: async () => ({ id: 'b-0000000000000002', name: 'Nuovo cervello' }), brainUpdate: async (o) => o, brainUse: async () => true,
+        brainDuplicate: async () => ({ id: 'b-0000000000000003', name: 'copia' }), brainDelete: async () => ({ active: 'b-0000000000000001' }),
+        brainExport: async () => null, brainImport: async () => null },
       showItem: async () => true,
       openExternal: async () => true,
-      info: async () => ({ version: '2.3.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
+      info: async () => ({ version: '2.4.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
       onMenu: () => () => {},
       onFileOpened: () => () => {}
     };

@@ -49,7 +49,15 @@ contextBridge.exposeInMainWorld('wcDesktop', {
     loadEdits: () => ipcRenderer.invoke('library:edits-load'),
     saveEdits: (edits) => ipcRenderer.invoke('library:edits-save', edits),
     loadStudy: () => ipcRenderer.invoke('library:study-load'),
-    saveStudy: (state) => ipcRenderer.invoke('library:study-save', state)
+    saveStudy: (state) => ipcRenderer.invoke('library:study-save', state),
+    brains: () => ipcRenderer.invoke('library:brains'),
+    brainCreate: (o) => ipcRenderer.invoke('library:brain-create', o),
+    brainUpdate: (o) => ipcRenderer.invoke('library:brain-update', o),
+    brainUse: (id) => ipcRenderer.invoke('library:brain-use', id),
+    brainDuplicate: (o) => ipcRenderer.invoke('library:brain-duplicate', o),
+    brainDelete: (id) => ipcRenderer.invoke('library:brain-delete', id),
+    brainExport: (id) => ipcRenderer.invoke('library:brain-export', id),
+    brainImport: () => ipcRenderer.invoke('library:brain-import')
   },
   showItem: (p) => ipcRenderer.invoke('shell:show', p),
   openExternal: (url) => ipcRenderer.invoke('shell:external', url),

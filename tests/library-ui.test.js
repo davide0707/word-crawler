@@ -134,6 +134,22 @@ async function check(name, fn) {
 
   await page.addInitScript(({ files }) => {
     const store = { settings: { reader: { ocr: true } }, docs: new Map(), trash: new Map(), edits: null, study: null };
+    // i cervelli: ognuno ha i suoi documenti, le sue modifiche e i suoi progressi
+    let nBrain = 0;
+    const mkBrain = (name) => {
+      const id = 'b-' + String(++nBrain).padStart(16, '0');
+      const b = { id, name, icon: 'libro', color: '#4a63ff', tags: [], created: '2026-10-28T07:00:00.000Z', updated: '2026-10-28T07:00:00.000Z',
+        docs: new Map(), trash: new Map(), edits: null, study: null };
+      store.brains.push(b);
+      return b;
+    };
+    store.brains = [];
+    const first = mkBrain('La mia libreria');
+    store.active = first.id;
+    const cur = () => store.brains.find((b) => b.id === store.active);
+    // store.docs e compagni puntano sempre al cervello aperto
+    const bind = () => { const b = cur(); store.docs = b.docs; store.trash = b.trash; Object.defineProperty(store, 'edits', { configurable: true, get: () => b.edits, set: (v) => { b.edits = v; } }); Object.defineProperty(store, 'study', { configurable: true, get: () => b.study, set: (v) => { b.study = v; } }); };
+    bind();
     window.__lib = store;
     // una presa sulla vista della Libreria, per leggere lo stato senza aggiungere ganci all'app
     let view = null;
@@ -172,12 +188,20 @@ async function check(name, fn) {
         loadEdits: async () => store.edits,
         saveEdits: async (e) => { store.edits = clone(e); return true; },
         loadStudy: async () => store.study,
-        saveStudy: async (s) => { store.study = clone(s); return true; }
+        saveStudy: async (s) => { store.study = clone(s); return true; },
+        brains: async () => ({ active: store.active, brains: store.brains.map((b) => ({ id: b.id, name: b.name, icon: b.icon, color: b.color, tags: b.tags, created: b.created, updated: b.updated, docs: b.docs.size, studied: b.study && b.study.cards ? Object.keys(b.study.cards).length : 0 })) }),
+        brainCreate: async (o) => { const b = mkBrain(String(o.name || 'Nuovo cervello').trim()); return { id: b.id, name: b.name, icon: b.icon, color: b.color, tags: [] }; },
+        brainUpdate: async (o) => { const b = store.brains.find((x) => x.id === o.id); if (!b) throw new Error('Cervello non trovato'); if (o.name != null) b.name = String(o.name).trim(); if (o.icon) b.icon = o.icon; if (o.color) b.color = o.color; return { id: b.id, name: b.name, icon: b.icon, color: b.color, tags: b.tags }; },
+        brainUse: async (id) => { if (!store.brains.some((b) => b.id === id)) throw new Error('Cervello non trovato'); store.active = id; bind(); return true; },
+        brainDuplicate: async (o) => { const src = store.brains.find((x) => x.id === o.id); const b = mkBrain(src.name + ' (copia)'); src.docs.forEach((v, k) => b.docs.set(k, clone(v))); b.edits = clone(src.edits); b.study = clone(src.study); return { id: b.id, name: b.name }; },
+        brainDelete: async (id) => { if (store.brains.length < 2) throw new Error('Deve restare almeno un cervello'); store.brains = store.brains.filter((b) => b.id !== id); if (store.active === id) { store.active = store.brains[0].id; bind(); } return { active: store.active, deleted: id }; },
+        brainExport: async (id) => { const b = store.brains.find((x) => x.id === id); window.__exported = { id, docs: b.docs.size }; return { path: '/tmp/' + b.name + '.json', docs: b.docs.size }; },
+        brainImport: async () => null
       },
       scan: { roots: async () => [], pickFolder: async () => null, start: async () => 'x', cancel: async () => true, exportCsv: async () => true, history: async () => [], compare: async () => null, trash: async () => ({}), onEvent: () => () => {} },
       showItem: async () => true,
       openExternal: async () => true,
-      info: async () => ({ version: '2.3.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
+      info: async () => ({ version: '2.4.0', platform: 'linux', userData: '/home/utente/.config/Word Crawler', pdfjs: true, ocr: true }),
       onMenu: () => () => {},
       onFileOpened: () => () => {}
     };
@@ -460,6 +484,68 @@ async function check(name, fn) {
     assert.deepStrictEqual(after.study.cards, {}, 'progressi azzerati');
     assert.deepStrictEqual(after.edits.merges, [], 'modifiche della mappa azzerate');
     assert.ok(after.trash >= n, 'i record restano nel cestino dell’app: ' + after.trash);
+  });
+
+  await check('cervelli: ne creo un altro, resta vuoto, e tornando indietro i documenti ci sono ancora', async () => {
+    // (a questo punto il primo cervello è stato svuotato dalla prova precedente: lo riempio di nuovo)
+    await page.click('text=Aggiungi una cartella');
+    await page.waitForSelector('.lb-import[hidden]', { state: 'attached', timeout: 120000 });
+    await waitFor((n) => document.querySelectorAll('.lb-doc').length === n, FILES.length, 30000);
+    const n0 = await page.evaluate(() => window.__lib.docs.size);
+    assert.ok(n0 >= 5, 'documenti nel primo cervello: ' + n0);
+
+    await page.click('.lb-brains-btn');
+    await page.waitForSelector('.lb-brains .lb-brain');
+    assert.strictEqual(await page.$$eval('.lb-brains .lb-brain', (ls) => ls.length), 1);
+    assert.ok(/aperto/.test(await page.textContent('.lb-brain')), 'il primo è segnato come aperto');
+
+    await shot('lib-11-cervelli.png');
+    await page.click('.lb-panel .lb-actions button:text-is("Nuovo cervello")');
+    await page.fill('.lb-form input', 'Analisi 2');
+    await page.click('.lb-form button[type="submit"]');
+    await waitFor(() => window.__lib.active !== window.__lib.brains[0].id, null, 20000);
+    await page.waitForSelector('.lb-empty:not([hidden])');
+    assert.strictEqual(await page.evaluate(() => window.__view.state().docs.length), 0, 'il cervello nuovo è vuoto');
+    assert.ok(/Analisi 2/.test(await page.inputValue('.lb-brainsel')) || /Analisi 2/.test(await page.textContent('.lb-brainhead')), 'il selettore mostra il nuovo');
+
+    // torno al primo dal selettore: i documenti ci sono ancora
+    const firstId = await page.evaluate(() => window.__lib.brains[0].id);
+    await page.selectOption('.lb-brainsel', firstId);
+    await waitFor((k) => window.__view.state().docs.length === k, n0, 20000);
+    assert.strictEqual(await page.evaluate(() => window.__lib.active), firstId);
+  });
+
+  await check('cervelli: rinomina, cambia colore, duplica, esporta ed elimina', async () => {
+    await page.click('.lb-brains-btn');
+    await page.waitForSelector('.lb-brains .lb-brain');
+    const card = '.lb-brain:has(.lb-brain-name:text-is("Analisi 2"))';
+    await page.click(card + ' button:text-is("Rinomina")');
+    await page.fill(card + ' .lb-form input', 'Analisi II');
+    await page.click(card + ' .lb-form button[type="submit"]');
+    await page.waitForSelector('.lb-brain-name:text-is("Analisi II")');
+
+    await page.click('.lb-brain:has(.lb-brain-name:text-is("Analisi II")) button:text-is("Colore e icona")');
+    await page.click('.lb-brain:has(.lb-brain-name:text-is("Analisi II")) .lb-swatch:nth-child(5)');
+    await waitFor(() => window.__lib.brains.some((b) => b.name === 'Analisi II' && b.color !== '#4a63ff'), null, 10000);
+
+    // duplica il cervello aperto: la copia ha gli stessi documenti
+    const n0 = await page.evaluate(() => window.__lib.docs.size);
+    await page.click('.lb-brain.is-open button:text-is("Duplica")');
+    await waitFor(() => window.__lib.brains.some((b) => / \(copia\)$/.test(b.name)), null, 10000);
+    const copiaDocs = await page.evaluate(() => window.__lib.brains.find((b) => / \(copia\)$/.test(b.name)).docs.size);
+    assert.strictEqual(copiaDocs, n0, 'la copia ha gli stessi documenti');
+
+    await page.click('.lb-brain.is-open button:text-is("Esporta")');
+    await waitFor(() => !!window.__exported, null, 10000);
+    assert.strictEqual(await page.evaluate(() => window.__exported.docs), n0);
+
+    // eliminazione con conferma
+    const before = await page.evaluate(() => window.__lib.brains.length);
+    await page.click('.lb-brain:has(.lb-brain-name:text-is("Analisi II")) button:text-is("Elimina")');
+    await page.waitForSelector('.lb-brain .lb-ask');
+    await page.click('.lb-brain .lb-ask .wc-danger');
+    await waitFor((k) => window.__lib.brains.length === k - 1, before, 15000);
+    assert.ok(!(await page.$('.lb-brain-name:text-is("Analisi II")')), 'sparito dall’elenco');
   });
 
   await check('nessun errore nella pagina', () => { assert.deepStrictEqual(errs, []); });

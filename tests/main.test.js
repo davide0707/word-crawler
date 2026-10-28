@@ -33,7 +33,7 @@ const fake = {
   }, { getAllWindows: () => [] }),
   ipcMain: { handle: (name, fn) => { handlers[name] = fn; } },
   dialog: {
-    showSaveDialog: async (_w, o) => ({ canceled: false, filePath: path.join(USER, 'salvato-' + path.basename(o.defaultPath)) }),
+    showSaveDialog: async (_w, o) => fake.saveResult || ({ canceled: false, filePath: path.join(USER, 'salvato-' + path.basename(o.defaultPath)) }),
     showMessageBox: async (_w, o) => { fake.asked = o; return { response: fake.answer }; },
     showOpenDialog: async (_w, o) => { fake.openDialog = o; return fake.openResult || { canceled: true, filePaths: [] }; }
   },
@@ -63,7 +63,9 @@ async function check(name, fn) {
       'scan:roots', 'scan:pick-folder', 'scan:start', 'scan:cancel', 'scan:export-csv', 'shell:show', 'shell:external', 'app:info',
       'export:pdf', 'scan:history', 'scan:compare', 'scan:trash',
       'library:add-files', 'library:add-folder', 'library:read', 'library:list', 'library:save', 'library:remove', 'library:restore',
-      'library:stat', 'library:edits-load', 'library:edits-save', 'library:study-load', 'library:study-save']
+      'library:stat', 'library:edits-load', 'library:edits-save', 'library:study-load', 'library:study-save',
+      'library:brains', 'library:brain-create', 'library:brain-update', 'library:brain-use', 'library:brain-duplicate',
+      'library:brain-delete', 'library:brain-export', 'library:brain-import']
       .forEach((c) => assert.ok(handlers[c], 'manca ' + c));
   });
   await check('impostazioni: salvataggio e lettura', async () => {
@@ -213,6 +215,11 @@ async function check(name, fn) {
 
   // ---------------------------------------------------------------- libreria
   const LIB = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-lib-'));
+  // la cartella del cervello aperto: l'identificativo lo decide l'app
+  function brainPath() {
+    const idx = JSON.parse(fs.readFileSync(path.join(USER, 'library', 'brains.json'), 'utf8'));
+    return path.join(USER, 'library', 'b', idx.active);
+  }
   fs.mkdirSync(path.join(LIB, 'Dispense', 'Reti'), { recursive: true });
   fs.mkdirSync(path.join(LIB, 'node_modules', 'pacchetto'), { recursive: true });
   fs.mkdirSync(path.join(LIB, '.nascosta'), { recursive: true });
@@ -284,12 +291,92 @@ async function check(name, fn) {
     await assert.rejects(() => handlers['library:study-save']({}, null));
     await assert.rejects(() => handlers['library:study-save']({}, 'niente'));
     // i progressi stanno in un file loro, separato dalle modifiche della mappa
-    assert.ok(fs.existsSync(path.join(USER, 'library', 'study.json')), 'study.json nella cartella dati');
-    assert.ok(fs.existsSync(path.join(USER, 'library', 'edits.json')), 'edits.json resta separato');
+    const dir = brainPath();
+    assert.ok(fs.existsSync(path.join(dir, 'study.json')), 'study.json nella cartella del cervello');
+    assert.ok(fs.existsSync(path.join(dir, 'edits.json')), 'edits.json resta separato');
+  });
+  await check('cervelli: la vecchia libreria diventa il primo cervello, senza perdere niente', async () => {
+    const r = await handlers['library:brains']({});
+    assert.strictEqual(r.brains.length, 1, 'un cervello solo all’inizio');
+    const first = r.brains[0];
+    assert.strictEqual(r.active, first.id);
+    assert.ok(/^b-[a-f0-9]{16}$/.test(first.id), 'identificativo: ' + first.id);
+    assert.strictEqual(first.name, 'La mia libreria');
+    assert.ok(first.docs >= 1, 'i documenti di prima sono dentro: ' + first.docs);
+    assert.ok(first.studied >= 1, 'i progressi dello studio sono dentro: ' + first.studied);
+    // i file sono stati spostati, non copiati: la vecchia cartella non c’è più
+    assert.ok(!fs.existsSync(path.join(USER, 'library', 'docs')), 'la vecchia cartella docs è stata spostata');
+    assert.ok(fs.existsSync(path.join(USER, 'library', 'b', first.id, 'docs')), 'ora i documenti stanno nel cervello');
+    assert.deepStrictEqual((await handlers['library:edits-load']({})).labels, { qam: 'QAM' }, 'le modifiche della mappa sono rimaste');
+  });
+  await check('cervelli: crea, cambia, rinomina e tieni i documenti separati', async () => {
+    const before = await handlers['library:list']({});
+    assert.ok(before.length >= 1, 'documenti nel primo cervello');
+    const nuovo = await handlers['library:brain-create']({}, { name: '  Analisi 2  ', icon: 'laurea', color: '#5de07f' });
+    assert.strictEqual(nuovo.name, 'Analisi 2', 'il nome viene ripulito');
+    assert.strictEqual(nuovo.icon, 'laurea');
+    await handlers['library:brain-use']({}, nuovo.id);
+    assert.deepStrictEqual(await handlers['library:list']({}), [], 'il cervello nuovo è vuoto');
+    assert.strictEqual(await handlers['library:edits-load']({}), null, 'modifiche separate');
+    assert.strictEqual(await handlers['library:study-load']({}), null, 'progressi separati');
+    await handlers['library:study-save']({}, { v: 1, cards: { x: { interval: 2, reps: 1 } }, log: [] });
+    const ren = await handlers['library:brain-update']({}, { id: nuovo.id, name: 'Analisi II', tags: ['esame', ' '] });
+    assert.strictEqual(ren.name, 'Analisi II');
+    assert.deepStrictEqual(ren.tags, ['esame']);
+    // si torna al primo: i documenti di prima sono ancora lì
+    const all = await handlers['library:brains']({});
+    const first = all.brains.find((b) => b.name === 'La mia libreria');
+    await handlers['library:brain-use']({}, first.id);
+    assert.strictEqual((await handlers['library:list']({})).length, before.length, 'il primo cervello è intatto');
+    await assert.rejects(() => handlers['library:brain-use']({}, 'b-0000000000000000'), /non trovato/);
+    await assert.rejects(() => handlers['library:brain-update']({}, { id: 'niente' }), /non trovato/);
+  });
+  await check('cervelli: duplica, esporta, importa ed elimina', async () => {
+    const all = await handlers['library:brains']({});
+    const first = all.brains.find((b) => b.name === 'La mia libreria');
+    const copia = await handlers['library:brain-duplicate']({}, { id: first.id });
+    assert.strictEqual(copia.name, 'La mia libreria (copia)');
+    const withCopy = await handlers['library:brains']({});
+    assert.strictEqual(withCopy.brains.find((b) => b.id === copia.id).docs, first.docs, 'la copia ha gli stessi documenti');
+
+    // esportazione: un JSON aperto, con documenti, modifiche e progressi
+    const out = path.join(USER, 'esportato.wcbrain.json');
+    fake.saveResult = { canceled: false, filePath: out };
+    const exp = await handlers['library:brain-export']({}, first.id);
+    assert.strictEqual(exp.path, out);
+    const data = JSON.parse(fs.readFileSync(out, 'utf8'));
+    assert.strictEqual(data.format, 'word-crawler-brain');
+    assert.strictEqual(data.docs.length, first.docs);
+    assert.ok(data.edits && data.edits.labels, 'le modifiche sono nell’esportazione');
+
+    // importazione: torna un cervello nuovo con gli stessi documenti
+    fake.openResult = { canceled: false, filePaths: [out] };
+    const imp = await handlers['library:brain-import']({});
+    assert.strictEqual(imp.docs, first.docs);
+    assert.strictEqual(imp.skipped, 0);
+    await handlers['library:brain-use']({}, imp.id);
+    assert.strictEqual((await handlers['library:list']({})).length, first.docs);
+
+    // un file che non è un cervello viene rifiutato
+    const bad = path.join(USER, 'finto.json');
+    fs.writeFileSync(bad, JSON.stringify({ ciao: 1 }));
+    fake.openResult = { canceled: false, filePaths: [bad] };
+    await assert.rejects(() => handlers['library:brain-import']({}), /non è un cervello/i);
+
+    // eliminazione: la cartella finisce nel cestino dell’app, e un cervello deve restare
+    const n = (await handlers['library:brains']({})).brains.length;
+    const del = await handlers['library:brain-delete']({}, copia.id);
+    assert.strictEqual((await handlers['library:brains']({})).brains.length, n - 1);
+    assert.ok(!fs.existsSync(path.join(USER, 'library', 'b', copia.id)), 'cartella spostata');
+    assert.ok(fs.readdirSync(path.join(USER, 'library', 'b-trash')).some((d) => d.startsWith(copia.id)), 'è nel cestino dell’app');
+    assert.ok(del.active, 'resta un cervello aperto');
+    const rest = (await handlers['library:brains']({})).brains;
+    for (const b of rest.slice(1)) await handlers['library:brain-delete']({}, b.id);
+    await assert.rejects(() => handlers['library:brain-delete']({}, rest[0].id), /almeno un cervello/);
   });
   await check('libreria: nessun file della cartella è stato modificato', () => {
     assert.strictEqual(filesOf(), before);
-    assert.ok(fs.existsSync(path.join(USER, 'library', 'docs')) && !fs.readdirSync(LIB).includes('library'));
+    assert.ok(fs.existsSync(path.join(brainPath(), 'docs')) && !fs.readdirSync(LIB).includes('library'));
   });
   fs.rmSync(LIB, { recursive: true, force: true });
 

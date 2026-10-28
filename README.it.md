@@ -44,6 +44,7 @@
 | **Esporta il documento segnato** | Word (.docx, con le note come commenti), pagina web e PDF, più riepiloghi in Markdown, testo, JSON e Anki. |
 | **Ricorda le pagine** | L'estensione rimette i segni quando riapri una pagina salvata. |
 | **Costruisce una base di conoscenza** | La Libreria legge tanti file insieme, anche cartelle intere: cerchi in tutti i documenti insieme, vedi come si collegano i concetti su una mappa interattiva e apri ogni risultato alla pagina giusta. |
+| **Un cervello per materia** | La libreria non è una sola: ogni cervello ha i suoi documenti, i suoi concetti, la sua mappa e i suoi progressi, con nome, icona e colore. Lo duplichi, lo esporti in JSON aperto, lo reimporti. |
 | **Sa quanto sai** | Lo Studio ti interroga sui concetti dei tuoi documenti, allunga l'intervallo tra un ripasso e l'altro man mano che li sai, li mette in ordine dal generale allo specifico e colora la mappa in base a quanto conosci ognuno. |
 | **Fa la mappa del disco** | Scanner in sola lettura con mappa a riquadri, duplicati, file e cartelle più grandi, confronto tra scansioni e spostamento sicuro dei duplicati nel Cestino. |
 | **Regge i documenti lunghi** | L'analisi gira in un Web Worker e le pagine dei PDF si leggono in parallelo: circa 25.000 parole lette e analizzate in 1,3 s. |
@@ -55,6 +56,8 @@ L'interfaccia è in italiano. I documenti possono essere in italiano, inglese, f
 <img src="docs/images/library-search.webp" alt="Ricerca nella Libreria su nove documenti: la domanda «Dove ho parlato di QAM?» trova passaggi in tre file, anche negli appunti che usano solo la forma estesa «Quadrature Amplitude Modulation»" width="100%">
 
 Aggiungi dispense, slide, libri, scansioni e pagine salvate — uno alla volta o una cartella intera — e la Libreria ne fa un'unica base di conoscenza sul tuo computer. I file originali vengono solo letti, mai modificati.
+
+Puoi tenere **più cervelli**: uno per esame, uno per progetto, uno per il lavoro. Ognuno ha i suoi documenti, i suoi concetti, le sue modifiche alla mappa e i suoi progressi, con nome, icona e colore; dal selettore nella barra laterale passi dall'uno all'altro. Un cervello si può duplicare, esportare in un file JSON aperto e reimportare: niente resta chiuso dentro l'app. Eliminandone uno, la sua cartella resta recuperabile a mano per 30 giorni, e almeno un cervello resta sempre.
 
 - **Passaggi con la fonte esatta.** Ogni documento si divide in passaggi (paragrafi, titoli, slide, voci di elenco, righe di tabella) che ricordano file, pagina, slide, sezione e, nei PDF, la posizione sulla pagina. **Apri alla posizione esatta** porta al passaggio nel Lettore e lo evidenzia.
 - **Cerca in tutto insieme.** Classifica BM25 sulle radici delle parole in sei lingue, prima i passaggi che contengono più parole della domanda, frasi esatte tra virgolette, filtri per documento e lingua. Chiedi *«Dove ho parlato di QAM?»* e trova anche gli appunti che dicono solo *Quadrature Amplitude Modulation*.
@@ -89,6 +92,7 @@ I progressi si salvano accanto alle modifiche della mappa, nella cartella dati d
 
 | | |
 |:---:|:---:|
+| <img src="docs/images/library-brains.webp" alt="Gestione dei cervelli: quello aperto con il numero di documenti e le azioni per rinominarlo, cambiargli colore, duplicarlo ed esportarlo"><br>**Più cervelli, uno per materia** | <img src="docs/images/library-study.webp" alt="Scheda Studio con i riquadri e il percorso di studio"><br>**Studio: percorso e progressi** |
 | <img src="docs/images/library-question.webp" alt="Una frase da completare costruita da una frase degli appunti dell'utente, con la risposta scritta controllata e la fonte"><br>**Studio: una domanda dai tuoi appunti** | <img src="docs/images/library-mastery.webp" alt="Mappa dei concetti colorata per padronanza: grigio per i mai visti, verde per quelli saldi"><br>**La mappa colorata per padronanza** |
 | <img src="docs/images/review-quiz.webp" alt="Scheda Ripasso con un quiz a scelta multipla"><br>**Schede di ripasso e quiz** | <img src="docs/images/pen.webp" alt="Penna con un'evidenziazione e una nota numerata"><br>**Penna: evidenziazioni e note** |
 | <img src="docs/images/ocr.webp" alt="PDF scansionato riconosciuto con l'OCR, con i segni sulle parole della scansione"><br>**OCR sui PDF scansionati** | <img src="docs/images/reader-paper.webp" alt="Tema carta per studiare"><br>**Tema carta** |
@@ -212,7 +216,7 @@ Le regole per contribuire sono in [CONTRIBUTING.md](CONTRIBUTING.md); la storia 
 
 ## Stato del progetto
 
-Versione **2.3.0**. Limiti noti:
+Versione **2.4.0**. Limiti noti:
 
 - Il motore OCR (tesseract.js) è provato nei test con l'uscita registrata di Tesseract; il motore WebAssembly vero gira solo nell'app e nell'estensione.
 - Non si aprono i vecchi .ppt/.xls né le immagini TIFF (salvarli come .pptx/.xlsx o PNG/PDF).

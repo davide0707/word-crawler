@@ -391,8 +391,70 @@ const LIB_SKIP_DIRS = new Set(['node_modules', '$recycle.bin', 'system volume in
 const LIB_FOLDER_EXT = DOC_EXT.filter((e) => !['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'log', 'text'].includes(e));
 const LIB_MAX_FILES = 5000;
 const LIB_TRASH_DAYS = 30;
-const libraryPaths = new Set(); // file che l'utente ha messo nella libreria
-function libDir(...p) { return userDir('library', ...p); }
+const libraryPaths = new Set(); // file che l'utente ha messo nella libreria (del cervello aperto)
+
+/*
+ * Cervelli: tante librerie separate, una per esame, progetto o lavoro. Ognuno ha la sua cartella
+ * (library/b/<id>/) con documenti, cestino, modifiche della mappa e progressi dello studio; l'indice
+ * (library/brains.json) tiene nomi, colori e quale è aperto. La libreria delle versioni precedenti
+ * viene spostata nel primo cervello al primo avvio, senza perdere niente.
+ */
+const BRAIN_ICONS = ['libro', 'appunti', 'laurea', 'codice', 'lavoro', 'scienza', 'mappa', 'stella'];
+const BRAIN_COLORS = ['#4a63ff', '#b48cff', '#3fd8ff', '#5de07f', '#ff8a3d', '#ff6b7d', '#e7b05a', '#7d8597'];
+const BRAIN_MAX = 100;
+let brains = null; // { v, active, list: [...] }
+
+function brainsFile() { return userDir('library', 'brains.json'); }
+function brainDir(id, ...p) {
+  if (typeof id !== 'string' || !/^b-[a-f0-9]{16}$/.test(id)) throw new Error('Cervello non valido');
+  return userDir('library', 'b', id, ...p);
+}
+function newBrainId() { return 'b-' + crypto.randomBytes(8).toString('hex'); }
+function brainOut(b) {
+  return { id: b.id, name: b.name, icon: b.icon, color: b.color, tags: Array.isArray(b.tags) ? b.tags : [], created: b.created, updated: b.updated };
+}
+function cleanBrainName(name, fallback) {
+  const s = String(name == null ? '' : name).replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 60);
+  return s || fallback || 'Senza nome';
+}
+async function saveBrains() {
+  brains.list = brains.list.slice(0, BRAIN_MAX);
+  await writeJsonAtomic(brainsFile(), JSON.stringify(brains));
+}
+async function loadBrains() {
+  if (brains) return brains;
+  try { brains = JSON.parse(await fsp.readFile(brainsFile(), 'utf8')); } catch (e) { brains = null; }
+  if (!brains || !Array.isArray(brains.list) || !brains.list.length) {
+    const id = newBrainId();
+    brains = { v: 1, active: id, list: [{ id: id, name: 'La mia libreria', icon: BRAIN_ICONS[0], color: BRAIN_COLORS[0], tags: [], created: new Date().toISOString(), updated: new Date().toISOString() }] };
+    // la libreria delle versioni precedenti diventa il primo cervello
+    await ensureDir(brainDir(id));
+    for (const n of ['docs', 'trash', 'edits.json', 'study.json']) {
+      try { await fsp.rename(userDir('library', n), brainDir(id, n)); } catch (e) { /* non c'era */ }
+    }
+    await saveBrains();
+  }
+  if (!brains.list.some((b) => b.id === brains.active)) brains.active = brains.list[0].id;
+  return brains;
+}
+function activeBrain() {
+  if (!brains) throw new Error('Cervelli non ancora caricati');
+  return brains.active;
+}
+async function touchBrain(id) {
+  const b = brains.list.find((x) => x.id === (id || brains.active));
+  if (!b) return;
+  b.updated = new Date().toISOString();
+  await saveBrains().catch(() => {});
+}
+async function brainCounts(id) {
+  let docs = 0;
+  try { docs = (await fsp.readdir(brainDir(id, 'docs'))).filter((f) => /^d-[a-f0-9]{16}\.json$/.test(f)).length; } catch (e) { /* vuoto */ }
+  let studied = 0;
+  try { studied = Object.keys(JSON.parse(await fsp.readFile(brainDir(id, 'study.json'), 'utf8')).cards || {}).length; } catch (e) { /* mai studiato */ }
+  return { docs, studied };
+}
+function libDir(...p) { return brainDir(activeBrain(), ...p); }
 function libId(p) { return 'd-' + crypto.createHash('sha256').update(path.resolve(p)).digest('hex').slice(0, 16); }
 function libRecordPath(id, where) {
   if (typeof id !== 'string' || !/^d-[a-f0-9]{16}$/.test(id)) throw new Error('Identificativo non valido');
@@ -474,6 +536,7 @@ ipcMain.handle('library:read', async (_e, p) => {
   return Object.assign(f, info);
 });
 ipcMain.handle('library:list', async () => {
+  await loadBrains();
   const dir = await ensureDir(libDir('docs'));
   const out = [];
   for (const f of await fsp.readdir(dir)) {
@@ -487,20 +550,24 @@ ipcMain.handle('library:list', async () => {
   return out;
 });
 ipcMain.handle('library:save', async (_e, rec) => {
+  await loadBrains();
   if (!rec || typeof rec !== 'object' || typeof rec.path !== 'string' || !libraryPaths.has(rec.path) || rec.id !== libId(rec.path)) throw new Error('Documento non valido');
   const data = JSON.stringify(rec);
   if (data.length > 80 * 1024 * 1024) throw new Error('Documento troppo grande per la libreria');
   await writeJsonAtomic(libRecordPath(rec.id), data);
+  touchBrain();
   return true;
 });
 // togliere un documento dalla libreria non tocca il file originale; il record resta 30 giorni in library/trash
 ipcMain.handle('library:remove', async (_e, id) => {
+  await loadBrains();
   const from = libRecordPath(id), to = libRecordPath(id, 'trash');
   await ensureDir(path.dirname(to));
   try { await fsp.rename(from, to); } catch (e) { if (e.code !== 'ENOENT') throw e; }
   return true;
 });
 ipcMain.handle('library:restore', async (_e, id) => {
+  await loadBrains();
   const from = libRecordPath(id, 'trash'), to = libRecordPath(id);
   await ensureDir(path.dirname(to));
   await fsp.rename(from, to);
@@ -519,9 +586,11 @@ ipcMain.handle('library:stat', async (_e, paths) => {
   return out;
 });
 ipcMain.handle('library:edits-load', async () => {
+  await loadBrains();
   try { return JSON.parse(await fsp.readFile(libDir('edits.json'), 'utf8')); } catch (e) { return null; }
 });
 ipcMain.handle('library:edits-save', async (_e, edits) => {
+  await loadBrains();
   if (!edits || typeof edits !== 'object') throw new Error('Modifiche non valide');
   const data = JSON.stringify(edits);
   if (data.length > 20 * 1024 * 1024) throw new Error('Modifiche troppo grandi');
@@ -530,14 +599,148 @@ ipcMain.handle('library:edits-save', async (_e, edits) => {
 });
 // i progressi del ripasso: come le modifiche, un file a parte che si rilegge all'avvio
 ipcMain.handle('library:study-load', async () => {
+  await loadBrains();
   try { return JSON.parse(await fsp.readFile(libDir('study.json'), 'utf8')); } catch (e) { return null; }
 });
 ipcMain.handle('library:study-save', async (_e, state) => {
+  await loadBrains();
   if (!state || typeof state !== 'object') throw new Error('Progressi non validi');
   const data = JSON.stringify(state);
   if (data.length > 20 * 1024 * 1024) throw new Error('Progressi troppo grandi');
   await writeJsonAtomic(libDir('study.json'), data);
   return true;
+});
+
+// ------------------------------------------------------------------ IPC: cervelli
+ipcMain.handle('library:brains', async () => {
+  await loadBrains();
+  const out = [];
+  for (const b of brains.list) out.push(Object.assign(brainOut(b), await brainCounts(b.id)));
+  return { active: brains.active, brains: out };
+});
+ipcMain.handle('library:brain-create', async (_e, o) => {
+  await loadBrains();
+  if (brains.list.length >= BRAIN_MAX) throw new Error('Hai raggiunto il massimo di ' + BRAIN_MAX + ' cervelli');
+  const d = o || {};
+  const b = {
+    id: newBrainId(), name: cleanBrainName(d.name, 'Nuovo cervello'),
+    icon: BRAIN_ICONS.includes(d.icon) ? d.icon : BRAIN_ICONS[brains.list.length % BRAIN_ICONS.length],
+    color: BRAIN_COLORS.includes(d.color) ? d.color : BRAIN_COLORS[brains.list.length % BRAIN_COLORS.length],
+    tags: [], created: new Date().toISOString(), updated: new Date().toISOString()
+  };
+  await ensureDir(brainDir(b.id, 'docs'));
+  brains.list.push(b);
+  await saveBrains();
+  return brainOut(b);
+});
+ipcMain.handle('library:brain-update', async (_e, o) => {
+  await loadBrains();
+  const d = o || {}, b = brains.list.find((x) => x.id === d.id);
+  if (!b) throw new Error('Cervello non trovato');
+  if (d.name != null) b.name = cleanBrainName(d.name, b.name);
+  if (BRAIN_ICONS.includes(d.icon)) b.icon = d.icon;
+  if (BRAIN_COLORS.includes(d.color)) b.color = d.color;
+  if (Array.isArray(d.tags)) b.tags = d.tags.map((t) => String(t).trim().slice(0, 24)).filter(Boolean).slice(0, 8);
+  b.updated = new Date().toISOString();
+  await saveBrains();
+  return brainOut(b);
+});
+// cambiare cervello: i file autorizzati sono quelli del cervello aperto, quindi si riparte da zero
+ipcMain.handle('library:brain-use', async (_e, id) => {
+  await loadBrains();
+  if (!brains.list.some((b) => b.id === id)) throw new Error('Cervello non trovato');
+  brains.active = id;
+  libraryPaths.clear();
+  await saveBrains();
+  return brainOut(brains.list.find((b) => b.id === id));
+});
+ipcMain.handle('library:brain-duplicate', async (_e, o) => {
+  await loadBrains();
+  const d = o || {}, src = brains.list.find((x) => x.id === d.id);
+  if (!src) throw new Error('Cervello non trovato');
+  if (brains.list.length >= BRAIN_MAX) throw new Error('Hai raggiunto il massimo di ' + BRAIN_MAX + ' cervelli');
+  const b = Object.assign({}, src, { id: newBrainId(), name: cleanBrainName(d.name, src.name + ' (copia)'), created: new Date().toISOString(), updated: new Date().toISOString() });
+  await ensureDir(brainDir(b.id));
+  await fsp.cp(brainDir(src.id), brainDir(b.id), { recursive: true });
+  brains.list.push(b);
+  await saveBrains();
+  return brainOut(b);
+});
+// eliminare un cervello: la cartella va nel cestino dell'app, recuperabile a mano per 30 giorni
+ipcMain.handle('library:brain-delete', async (_e, id) => {
+  await loadBrains();
+  const i = brains.list.findIndex((b) => b.id === id);
+  if (i < 0) throw new Error('Cervello non trovato');
+  if (brains.list.length < 2) throw new Error('Deve restare almeno un cervello: svuotalo invece di eliminarlo');
+  const gone = brains.list.splice(i, 1)[0];
+  const to = userDir('library', 'b-trash', gone.id + '-' + Date.now());
+  await ensureDir(path.dirname(to));
+  try { await fsp.rename(brainDir(gone.id), to); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  if (brains.active === gone.id) { brains.active = brains.list[0].id; libraryPaths.clear(); }
+  await saveBrains();
+  return { active: brains.active, deleted: gone.id };
+});
+// esportazione e importazione in JSON: formato aperto, niente blocco dentro l'app
+ipcMain.handle('library:brain-export', async (_e, id) => {
+  await loadBrains();
+  const b = brains.list.find((x) => x.id === id);
+  if (!b) throw new Error('Cervello non trovato');
+  const r = await dialog.showSaveDialog(win, {
+    title: 'Esporta il cervello',
+    defaultPath: b.name.replace(/[\\/:*?"<>|]/g, '-') + '.wcbrain.json',
+    filters: [{ name: 'Cervello Word Crawler', extensions: ['json'] }]
+  });
+  if (r.canceled || !r.filePath) return null;
+  const out = { format: 'word-crawler-brain', v: 1, exportedAt: new Date().toISOString(), brain: brainOut(b), docs: [], edits: null, study: null };
+  try {
+    for (const f of await fsp.readdir(brainDir(id, 'docs'))) {
+      if (!/^d-[a-f0-9]{16}\.json$/.test(f)) continue;
+      out.docs.push(JSON.parse(await fsp.readFile(brainDir(id, 'docs', f), 'utf8')));
+    }
+  } catch (e) { /* cervello vuoto */ }
+  try { out.edits = JSON.parse(await fsp.readFile(brainDir(id, 'edits.json'), 'utf8')); } catch (e) { /* niente modifiche */ }
+  try { out.study = JSON.parse(await fsp.readFile(brainDir(id, 'study.json'), 'utf8')); } catch (e) { /* mai studiato */ }
+  await fsp.writeFile(r.filePath, JSON.stringify(out), 'utf8');
+  return { path: r.filePath, docs: out.docs.length };
+});
+ipcMain.handle('library:brain-import', async (_e, file) => {
+  await loadBrains();
+  let src = typeof file === 'string' ? file : null;
+  if (!src) {
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Importa un cervello', properties: ['openFile'],
+      filters: [{ name: 'Cervello Word Crawler', extensions: ['json'] }]
+    });
+    if (r.canceled || !r.filePaths.length) return null;
+    src = r.filePaths[0];
+  }
+  const st = await fsp.stat(src);
+  if (st.size > 600 * 1024 * 1024) throw new Error('File troppo grande');
+  let data;
+  try { data = JSON.parse(await fsp.readFile(src, 'utf8')); } catch (e) { throw new Error('Non è un file di cervello leggibile'); }
+  if (!data || data.format !== 'word-crawler-brain' || !Array.isArray(data.docs)) throw new Error('Non è un cervello esportato da Word Crawler');
+  if (brains.list.length >= BRAIN_MAX) throw new Error('Hai raggiunto il massimo di ' + BRAIN_MAX + ' cervelli');
+  const meta = data.brain || {};
+  const b = {
+    id: newBrainId(), name: cleanBrainName(meta.name, path.basename(src).replace(/\.wcbrain\.json$|\.json$/i, '')),
+    icon: BRAIN_ICONS.includes(meta.icon) ? meta.icon : BRAIN_ICONS[0],
+    color: BRAIN_COLORS.includes(meta.color) ? meta.color : BRAIN_COLORS[0],
+    tags: Array.isArray(meta.tags) ? meta.tags.slice(0, 8).map((t) => String(t).slice(0, 24)) : [],
+    created: new Date().toISOString(), updated: new Date().toISOString()
+  };
+  await ensureDir(brainDir(b.id, 'docs'));
+  let kept = 0;
+  for (const rec of data.docs.slice(0, LIB_MAX_FILES)) {
+    // si tiene solo un record coerente: l'identificativo deve venire dal percorso che porta con sé
+    if (!rec || typeof rec.path !== 'string' || rec.id !== libId(rec.path)) continue;
+    await writeJsonAtomic(brainDir(b.id, 'docs', rec.id + '.json'), JSON.stringify(rec));
+    kept++;
+  }
+  if (data.edits && typeof data.edits === 'object') await writeJsonAtomic(brainDir(b.id, 'edits.json'), JSON.stringify(data.edits));
+  if (data.study && typeof data.study === 'object') await writeJsonAtomic(brainDir(b.id, 'study.json'), JSON.stringify(data.study));
+  brains.list.push(b);
+  await saveBrains();
+  return Object.assign(brainOut(b), { docs: kept, skipped: data.docs.length - kept });
 });
 
 // ------------------------------------------------------------------ IPC: varie

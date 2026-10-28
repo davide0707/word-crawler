@@ -8,7 +8,8 @@
  *
  * WCLibraryView.mount(root, host) -> { refresh(), addFiles(), addFolder(), resize(), state() }
  * host: {
- *   lib: { addFiles, addFolder, read, list, save, remove, restore, stat, loadEdits, saveEdits, loadStudy, saveStudy },
+ *   lib: { addFiles, addFolder, read, list, save, remove, restore, stat, loadEdits, saveEdits, loadStudy, saveStudy,
+ *          brains, brainCreate, brainUpdate, brainUse, brainDuplicate, brainDelete, brainExport, brainImport },
  *   importer: WCLibImport.create(...),
  *   workerUrl: indirizzo di core/library-worker.js,
  *   openAt(path, name, focus): apre il documento nel Lettore alla posizione del passaggio,
@@ -89,10 +90,13 @@
     var docFilter = el('input', { type: 'search', placeholder: 'Filtra per nome…', 'aria-label': 'Filtra i documenti per nome' });
     var docCount = el('h2', { text: 'Documenti' });
     var refreshBtn = el('button', { type: 'button', class: 'wc-link', hidden: 'hidden' });
-    var clearBtn = el('button', { type: 'button', class: 'wc-link lb-clear', text: 'Svuota la libreria', hidden: 'hidden' });
+    var clearBtn = el('button', { type: 'button', class: 'wc-link lb-clear', text: 'Svuota questo cervello', hidden: 'hidden' });
     var docList = el('ul', { class: 'lb-docs', 'aria-label': 'Documenti della libreria' });
+    var brainSel = el('select', { class: 'lb-brainsel', 'aria-label': 'Cervello aperto' });
+    var brainsBtn = el('button', { type: 'button', class: 'wc-link lb-brains-btn', text: 'Gestisci i cervelli' });
+    var brainHead = el('div', { class: 'lb-brainhead' }, [el('span', { class: 'lb-braindot' }), brainSel]);
     var left = el('aside', { class: 'wc-side wc-left', 'aria-label': 'Documenti della libreria' }, [
-      el('section', {}, [el('h2', { text: 'Libreria' }), addFilesBtn, addFolderBtn,
+      el('section', {}, [el('h2', { text: 'Cervello' }), brainHead, brainsBtn, addFilesBtn, addFolderBtn,
         el('p', { class: 'wc-note', text: 'I file vengono solo letti: non sono modificati né spostati. Testo, concetti e fonti restano nella cartella dati dell’app, sul tuo computer.' }),
         impBox, impLogBox]),
       el('section', { class: 'lb-docsec' }, [docCount, docFilter, refreshBtn, clearBtn, docList])
@@ -369,6 +373,7 @@
       renderOverview();
       if (view === 'map') loadGraph();
       if (lastSearch && lastSearch.q) search();
+      else if (view === 'results') renderOverviewResults(); // il conteggio dei documenti era vecchio
       // documenti nuovi: altri concetti da studiare, e la mappa li colora già
       kb.call('study-stats', { doc: studyScope() }).then(function (s) {
         studyStats = s;
@@ -376,6 +381,7 @@
         if (view === 'study' && !session) renderStudy();
       }).catch(function () {});
       refreshMastery();
+      refreshBrains();
     }
 
     addFilesBtn.addEventListener('click', function () { addFiles(); });
@@ -404,7 +410,7 @@
       var yes = el('button', { type: 'button', class: 'wc-btn wc-danger', text: 'Sì, togli ' + plural(n, 'documento', 'documenti') });
       var no = el('button', { type: 'button', class: 'wc-btn', text: 'Annulla' });
       var ask = el('div', { class: 'lb-ask' }, [
-        el('p', { text: 'Togli tutti i documenti dalla libreria? I file sul tuo computer non vengono toccati: si perdono il testo già letto, i concetti, le tue modifiche alla mappa e i progressi dello studio.' }),
+        el('p', { text: 'Togli tutti i documenti da questo cervello? I file sul tuo computer non vengono toccati: si perdono il testo già letto, i concetti, le tue modifiche alla mappa e i progressi dello studio.' }),
         el('div', { class: 'wc-inline' }, [yes, no])]);
       docCount.insertAdjacentElement('afterend', ask);
       no.addEventListener('click', function () { ask.remove(); clearBtn.hidden = false; });
@@ -427,7 +433,8 @@
             qInput.value = ''; lastSearch = null; selected = null;
             resultsBox.textContent = '';
             renderDocs(); showView('results'); renderOverview(); updateDueBadge(); updateSuggBtn();
-            toast(plural(ids.length, 'documento tolto', 'documenti tolti') + ' dalla libreria. I file sul disco non sono stati toccati.');
+            refreshBrains();
+            toast(plural(ids.length, 'documento tolto', 'documenti tolti') + '. I file sul disco non sono stati toccati.');
           })
           .catch(function (e) {
             ask.remove(); clearBtn.hidden = false;
@@ -1518,6 +1525,171 @@
       }
     });
 
+    // ------------------------------------------------------------ cervelli
+    /*
+     * Tanti cervelli: uno per esame, uno per progetto, uno per il lavoro. Ognuno ha i suoi documenti,
+     * i suoi concetti, le sue modifiche e i suoi progressi, in una cartella a parte. Qui si cambia, si
+     * crea, si rinomina, si duplica, si esporta in JSON e si elimina.
+     */
+    var brainList = [], brainActive = null;
+    var ICON = { libro: '📘', appunti: '📝', laurea: '🎓', codice: '💻', lavoro: '💼', scienza: '🔬', mappa: '🗺️', stella: '★' };
+
+    function brainsReady() { return !!lib.brains; }
+    function refreshBrains() {
+      if (!brainsReady()) return Promise.resolve(null);
+      return lib.brains().then(function (r) {
+        brainList = r.brains || [];
+        brainActive = r.active;
+        paintBrainHead();
+        return r;
+      }).catch(function () { return null; });
+    }
+    function currentBrain() { return brainList.find(function (b) { return b.id === brainActive; }) || null; }
+    function paintBrainHead() {
+      var cur = currentBrain();
+      brainHead.hidden = !brainList.length;
+      brainsBtn.hidden = !brainList.length;
+      brainSel.textContent = '';
+      brainList.forEach(function (b) {
+        brainSel.appendChild(el('option', { value: b.id, text: (ICON[b.icon] || '📘') + ' ' + b.name + ' · ' + plural(b.docs, 'documento', 'documenti') }));
+      });
+      if (cur) {
+        brainSel.value = cur.id;
+        brainHead.firstChild.style.background = cur.color || '#4a63ff';
+        brainHead.firstChild.title = cur.name;
+      }
+    }
+    // cambiare cervello: si ricarica tutto da zero, come all'avvio
+    function useBrain(id) {
+      if (!brainsReady() || id === brainActive) return Promise.resolve();
+      if (importing) { toast('Aspetta che finisca l’importazione prima di cambiare cervello.'); paintBrainHead(); return Promise.resolve(); }
+      return lib.brainUse(id).then(function () {
+        brainActive = id;
+        session = null; mastery = null; studyStats = null;
+        graph = null; mapNodes = []; mapEdges = []; nodeIdx = new Map(); fitted = false;
+        selected = null; lastSearch = null; qInput.value = '';
+        resultsBox.textContent = '';
+        showView('results', true);
+        return load();
+      }).then(function () {
+        return refreshBrains();
+      }).then(function () {
+        var b = currentBrain();
+        toast('Aperto «' + (b ? b.name : 'cervello') + '».');
+      }).catch(function (e) { toast('Non riesco ad aprire il cervello: ' + e.message); paintBrainHead(); });
+    }
+    brainSel.addEventListener('change', function () { useBrain(brainSel.value); });
+    brainsBtn.addEventListener('click', function () { showBrains(); });
+
+    function showBrains() {
+      if (!brainsReady()) return;
+      selected = { brains: true };
+      refreshBrains().then(function () {
+        panel.textContent = '';
+        panel.appendChild(backLink());
+        panel.appendChild(el('h2', { text: 'I tuoi cervelli' }));
+        panel.appendChild(el('p', { class: 'wc-note', text: 'Ogni cervello è una libreria a sé: documenti, concetti, mappa e progressi dello studio separati. Uno per esame, uno per progetto, uno per lavoro.' }));
+        var ul = el('ul', { class: 'lb-brains' });
+        brainList.forEach(function (b) { ul.appendChild(brainCard(b)); });
+        panel.appendChild(ul);
+        var add = el('button', { type: 'button', class: 'wc-btn wc-primary', text: 'Nuovo cervello' });
+        add.addEventListener('click', function () {
+          panel.appendChild(inlineForm('Nome del nuovo cervello', 'Per esempio: Analisi 2', 'Crea', function (name, form) {
+            form.remove();
+            lib.brainCreate({ name: name }).then(function (b) { return useBrain(b.id); }).then(showBrains)
+              .catch(function (e) { toast('Non riesco a creare il cervello: ' + e.message); });
+          }));
+        });
+        var imp = el('button', { type: 'button', class: 'wc-btn', text: 'Importa da file…' });
+        imp.addEventListener('click', function () {
+          lib.brainImport().then(function (b) {
+            if (!b) return;
+            toast('Importato «' + b.name + '» con ' + plural(b.docs, 'documento', 'documenti') + (b.skipped ? ' (' + b.skipped + ' scartati)' : '') + '.');
+            return useBrain(b.id).then(showBrains);
+          }).catch(function (e) { toast('Importazione non riuscita: ' + e.message); });
+        });
+        panel.appendChild(el('div', { class: 'lb-actions' }, [add, imp]));
+      });
+    }
+
+    function brainCard(b) {
+      var open = el('button', { type: 'button', class: 'wc-link lb-brain-name', text: b.name });
+      open.addEventListener('click', function () { useBrain(b.id).then(showBrains); });
+      var head = el('div', { class: 'lb-brain-top' }, [
+        el('span', { class: 'lb-braindot', style: 'background:' + (b.color || '#4a63ff') }),
+        el('span', { class: 'lb-brain-icon', text: ICON[b.icon] || '📘', 'aria-hidden': 'true' }), open
+      ]);
+      if (b.id === brainActive) head.appendChild(el('span', { class: 'lb-chip lb-c-mature', text: 'aperto' }));
+      var meta = [plural(b.docs, 'documento', 'documenti')];
+      if (b.studied) meta.push(plural(b.studied, 'concetto studiato', 'concetti studiati'));
+      meta.push('aggiornato ' + fmtDate(b.updated));
+      var li = el('li', { class: 'lb-brain' + (b.id === brainActive ? ' is-open' : '') }, [head, el('p', { class: 'wc-note', text: meta.join(' · ') })]);
+      var acts = el('div', { class: 'lb-actions' });
+      function act(label, fn) {
+        var x = el('button', { type: 'button', class: 'wc-btn', text: label });
+        x.addEventListener('click', fn);
+        acts.appendChild(x);
+        return x;
+      }
+      act('Rinomina', function () {
+        li.appendChild(inlineForm('Nuovo nome', b.name, 'Salva', function (v, form) {
+          form.remove();
+          lib.brainUpdate({ id: b.id, name: v }).then(showBrains).catch(function (e) { toast(e.message); });
+        }));
+      });
+      act('Colore e icona', function () { li.appendChild(brainLook(b)); });
+      act('Duplica', function () {
+        lib.brainDuplicate({ id: b.id }).then(function (n) { toast('Creata una copia: «' + n.name + '».'); return showBrains(); })
+          .catch(function (e) { toast('Non riesco a duplicare: ' + e.message); });
+      });
+      act('Esporta', function () {
+        lib.brainExport(b.id).then(function (r) { if (r) toast('Esportato con ' + plural(r.docs, 'documento', 'documenti') + '.'); })
+          .catch(function (e) { toast('Esportazione non riuscita: ' + e.message); });
+      });
+      if (brainList.length > 1) {
+        var del = act('Elimina', function () {
+          del.disabled = true;
+          var yes = el('button', { type: 'button', class: 'wc-btn wc-danger', text: 'Sì, elimina' });
+          var no = el('button', { type: 'button', class: 'wc-btn', text: 'Annulla' });
+          var ask = el('div', { class: 'lb-ask' }, [
+            el('p', { text: 'Elimini «' + b.name + '» con ' + plural(b.docs, 'documento', 'documenti') + '? I file sul tuo computer non vengono toccati. La cartella del cervello resta recuperabile a mano per 30 giorni nella cartella dati dell’app.' }),
+            el('div', { class: 'wc-inline' }, [yes, no])]);
+          li.appendChild(ask);
+          no.addEventListener('click', function () { ask.remove(); del.disabled = false; });
+          yes.addEventListener('click', function () {
+            yes.disabled = true;
+            lib.brainDelete(b.id).then(function (r) {
+              toast('«' + b.name + '» eliminato.');
+              if (b.id === brainActive) { brainActive = null; return useBrain(r.active); }
+              return null;
+            }).then(showBrains).catch(function (e) { ask.remove(); del.disabled = false; toast('Non riesco a eliminare: ' + e.message); });
+          });
+        });
+        del.classList.add('lb-del');
+      }
+      li.appendChild(acts);
+      return li;
+    }
+    var LOOK_COLORS = ['#4a63ff', '#b48cff', '#3fd8ff', '#5de07f', '#ff8a3d', '#ff6b7d', '#e7b05a', '#7d8597'];
+    function brainLook(b) {
+      var box = el('div', { class: 'lb-look' });
+      var cols = el('div', { class: 'lb-swatches', role: 'group', 'aria-label': 'Colore' });
+      LOOK_COLORS.forEach(function (c) {
+        var s = el('button', { type: 'button', class: 'lb-swatch' + (c === b.color ? ' on' : ''), style: 'background:' + c, title: c, 'aria-label': 'Colore ' + c });
+        s.addEventListener('click', function () { lib.brainUpdate({ id: b.id, color: c }).then(showBrains).catch(function (e) { toast(e.message); }); });
+        cols.appendChild(s);
+      });
+      var ics = el('div', { class: 'lb-swatches', role: 'group', 'aria-label': 'Icona' });
+      Object.keys(ICON).forEach(function (k) {
+        var s = el('button', { type: 'button', class: 'lb-swatch lb-ic' + (k === b.icon ? ' on' : ''), text: ICON[k], title: k, 'aria-label': 'Icona ' + k });
+        s.addEventListener('click', function () { lib.brainUpdate({ id: b.id, icon: k }).then(showBrains).catch(function (e) { toast(e.message); }); });
+        ics.appendChild(s);
+      });
+      box.appendChild(cols);
+      box.appendChild(ics);
+      return box;
+    }
+
     // ------------------------------------------------------------ avvisi
     var toastEl = el('div', { class: 'lb-toast', role: 'status', hidden: 'hidden' });
     document.body.appendChild(toastEl);
@@ -1535,6 +1707,7 @@
       toastTimer = setTimeout(function () { toastEl.hidden = true; }, actionText ? 9000 : 4500);
     }
 
+    refreshBrains();
     load();
     return {
       refresh: function () { if (!importing) checkChanged(); if (view === 'map') { resize(); kick(0.05); } },

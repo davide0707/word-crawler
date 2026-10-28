@@ -188,6 +188,15 @@ flowchart LR
   UI -- open at position --> R[Reader]
 ```
 
+**Brains.** A brain is a library of its own: `library/b/<id>/` holds its `docs/`, `trash/`, `edits.json` and
+`study.json`, and `library/brains.json` holds the index (name, icon, colour, tags, dates) and which one is
+open. The main process resolves every library path through the open brain, so the rest of the engine needs
+no notion of brains at all; switching one clears the set of authorised paths, so a brain can only reach the
+files that were added to it. A library written by an earlier version is moved into the first brain at the
+first start. Export writes a `word-crawler-brain` JSON with the records, the map edits and the study state;
+import keeps only records whose id still matches the SHA-256 of the path they carry. Deleting a brain moves
+its folder to `library/b-trash/`, and the last brain cannot be deleted.
+
 **Import.** The main process lists folders recursively without following links, skipping hidden entries,
 Office temporary files, programs and images (images can be added one by one), and reads only files the user
 chose. Each file gets an id derived from its path and a SHA-256 fingerprint: unchanged files are skipped,
