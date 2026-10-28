@@ -48,7 +48,7 @@
 | **Trova quello che intendevi** | Ricerca per significato, non solo per parola: chiedi «quanto veloce va la rete» e saltano fuori anche i passaggi che dicono *throughput*. Il senso delle parole lo impara dai tuoi documenti: niente da scaricare, niente esce dal computer. Anche lo scanner del disco cerca i nomi dei file così. |
 | **Un cervello per materia** | La libreria non è una sola: ogni cervello ha i suoi documenti, i suoi concetti, la sua mappa e i suoi progressi, con nome, icona e colore. Lo duplichi, lo esporti in JSON aperto, lo reimporti. |
 | **Sa quanto sai** | Lo Studio ti interroga sui concetti dei tuoi documenti, allunga l'intervallo tra un ripasso e l'altro man mano che li sai, li mette in ordine dal generale allo specifico e colora la mappa in base a quanto conosci ognuno. |
-| **Fa la mappa del disco** | Scanner in sola lettura con mappa a riquadri, duplicati, file e cartelle più grandi, confronto tra scansioni e spostamento sicuro dei duplicati nel Cestino. |
+| **Fa la mappa del disco** | Scanner in sola lettura con mappa a riquadri e sunburst, duplicati, confronto fra scansioni, «Trova un file» per nome o significato e «sposta i duplicati nel Cestino» sicuro. |
 | **Regge i documenti lunghi** | L'analisi gira in un Web Worker e le pagine dei PDF si leggono in parallelo: circa 25.000 parole lette e analizzate in 1,3 s. |
 
 L'interfaccia è in italiano. I documenti possono essere in italiano, inglese, francese, spagnolo, tedesco o portoghese.
@@ -63,13 +63,16 @@ Puoi tenere **più cervelli**: uno per esame, uno per progetto, uno per il lavor
 
 - **Passaggi con la fonte esatta.** Ogni documento si divide in passaggi (paragrafi, titoli, slide, voci di elenco, righe di tabella) che ricordano file, pagina, slide, sezione e, nei PDF, la posizione sulla pagina. **Apri alla posizione esatta** porta al passaggio nel Lettore e lo evidenzia.
 - **Cerca in tutto insieme.** Classifica BM25 sulle radici delle parole in sei lingue, prima i passaggi che contengono più parole della domanda, frasi esatte tra virgolette, filtri per documento e lingua. Chiedi *«Dove ho parlato di QAM?»* e trova anche gli appunti che dicono solo *Quadrature Amplitude Modulation*.
+- **Cerca per significato.** Con «anche per significato» escono anche i passaggi che dicono la stessa cosa con altre parole (*throughput* se chiedi *banda*). Il modello si impara dai tuoi documenti: non si scarica niente. Sulla scheda di ogni concetto trovi i simili, con unione in un clic.
 - **Concetti uniti tra i file.** Parole chiave, nomi, termini definiti e sigle diventano concetti. Singolare e plurale, lo stesso termine in file diversi e una sigla scritta con la sua forma estesa sono un concetto solo. I casi incerti — una sigla in un file e la forma estesa in un altro, due nomi quasi uguali — sono solo suggeriti: decidi tu.
 - **Una mappa dei concetti interattiva.** I concetti sono collegati quando compaiono negli stessi passaggi, e le definizioni aggiungono relazioni con un nome (*QAM — è un tipo di → modulazione digitale*). I concetti centrali sono blu, quelli presenti in più documenti viola. Ingrandisci, spostati, trascina i nodi, filtra ed esporta in PNG, in Markdown con i `[[collegamenti]]` per Obsidian o in JSON.
 - **L'ultima parola è tua.** Rinomina i concetti, aggiungi alias, unisci o separa, aggiungi o togli collegamenti: ogni modifica resta, finisce nella cronologia del concetto e si riapplica quando aggiungi altri documenti. Un documento tolto si può rimettere.
 - **Quello che nota da solo.** Lacune (concetti che usi spesso e che nessun documento spiega), contraddizioni fra due fonti, concetti isolati, funzioni citate negli appunti che nel codice non esistono. Ogni segnalazione dice il perché e porta alle frasi da cui viene.
 - **Spiega.** Una spiegazione di un concetto costruita soltanto con le frasi dei tuoi documenti, ognuna con la sua fonte, da salvare come riassunto del ramo.
+- **Anche il codice è un documento.** 42 estensioni lette per funzioni, classi, import e chiamate, con la riga come fonte. La scheda Codice dice chi chiama cosa, cosa non usa nessuno, cosa resta da fare; esporta la documentazione in Markdown.
 - **Confronti.** Due versioni dello stesso documento messe a fianco passaggio per passaggio, e due cervelli confrontati per vedere che cosa hanno in comune.
 - **Una mappa viva.** I concetti continuano ad assestarsi invece di bloccarsi dopo la prima disposizione: ne trascini uno e i vicini reagiscono, la telecamera scorre invece di saltare, i concetti nuovi crescono al loro posto. Si simula solo quello che è inquadrato, così anche migliaia di concetti restano fluidi — e con `prefers-reduced-motion` il movimento si spegne.
+- **Disposizioni della mappa e azzeramento.** Albero, anelli di padronanza e costellazione per documento; quattro temi, mini-mappa, percorso e lazo. Un tasto svuota la Libreria o l'Archivio in un colpo solo (i file sul disco non si toccano).
 
 | | |
 |:---:|:---:|

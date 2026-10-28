@@ -48,7 +48,7 @@
 | **Finds what you meant** | Search by meaning, not only by word: ask "quanto veloce va la rete" and the passages that say *throughput* come up too. The sense of the words is learned from your own documents — nothing is downloaded, nothing leaves the computer. The disk scanner can search file names the same way. |
 | **One brain per subject** | The library is not one: each brain keeps its own documents, concepts, map and study progress, with a name, an icon and a colour. Duplicate one, export it as open JSON, import it back. |
 | **Knows what you know** | Study asks you about the concepts of your own documents, grows the interval between reviews as you get them right, orders them from the general to the specific and colours the map by how well you know each one. |
-| **Maps your disk** | Read-only scanner with a zoomable treemap, duplicates, largest files and folders, scan-to-scan comparison and a safe "move duplicates to Trash". |
+| **Maps your disk** | Read-only scanner with treemap and sunburst, duplicates, scan comparison, a "Find a file" search by name or meaning, and a safe "move duplicates to Trash". |
 | **Handles long documents** | Analysis runs in a Web Worker and PDF pages are extracted in parallel: about 25,000 words read and analysed in 1.3 s. |
 
 The user interface is in Italian. Documents can be in Italian, English, French, Spanish, German or Portuguese.
@@ -63,13 +63,16 @@ You can keep **several brains**: one per exam, one per project, one for work. Ea
 
 - **Passages with their exact source.** Every document is split into passages (paragraphs, headings, slides, list items, table rows) that remember the file, page, slide, section and, for PDFs, the position on the page. **Open at the exact position** jumps to the passage in the Reader and highlights it.
 - **Search everything at once.** Ranking with BM25 on word stems in six languages, passages that contain more of your words first, exact phrases in quotes, filters by document and language. Ask *“Where did I talk about QAM?”* and it also finds the notes that only say *Quadrature Amplitude Modulation*.
+- **Search by meaning.** Tick "anche per significato" and passages that say the same thing in other words come up too (*throughput* when you ask about *banda*). The model is learned from your own documents: nothing is downloaded. Similar concepts appear on each concept card, with one-click merge.
 - **Concepts merged across files.** Keywords, names, defined terms and acronyms become concepts. Singular and plural, the same term in different files and an acronym written with its long form are one concept. Uncertain cases — an acronym in one file and its long form in another, two nearly identical names — are only suggested: you confirm or reject.
 - **An interactive concept map.** Concepts are linked when they appear in the same passages, and definitions add typed relations (*QAM — is a type of → digital modulation*). Central concepts are blue, concepts found in several documents purple. Zoom, pan, drag nodes into place, filter, and export to PNG, Markdown with `[[links]]` for Obsidian, or JSON.
 - **You stay in control.** Rename concepts, add aliases, merge or split them, add or remove links: every change is kept, logged in the concept's history and re-applied when you add more documents. Removing a document can be undone.
 - **What it notices by itself.** Concepts you name often and never define, two sources that contradict each other, concepts isolated from everything else, functions cited in your notes that no longer exist in the code. Each finding says why and links to the sentences it came from.
 - **Explain.** An explanation of a concept built only from the sentences in your documents, each with its source, saveable as a summary of the branch.
+- **Code is a document too.** 42 extensions are read for functions, classes, imports and calls, with the line as the source. A Code tab answers who calls what, what nobody uses, what is left to do; it exports Markdown documentation.
 - **Comparisons.** Two versions of the same document side by side, passage by passage, and two brains compared to see what they share.
 - **A map that is alive.** The concepts keep settling instead of freezing after the first layout: drag one and its neighbours react, the camera glides instead of jumping, new concepts grow in. Only what is on screen is simulated, so thousands of concepts stay smooth — and `prefers-reduced-motion` turns the movement off.
+- **Map layouts and reset.** Tree, mastery rings and per-document constellation; four themes, minimap, trail and lasso. One button empties the Library or the Archive in one go (files on disk are never touched).
 
 | | |
 |:---:|:---:|
