@@ -352,7 +352,8 @@
 
   // ---------------------------------------------------------------- base di conoscenza
   function emptyEdits() {
-    return { v: 1, merges: [], unmerges: [], rejected: [], labels: {}, aliases: [], links: [], unlinks: [], pos: {}, log: [] };
+    return { v: 1, merges: [], unmerges: [], rejected: [], labels: {}, aliases: [], links: [], unlinks: [], pos: {}, log: [],
+      tags: {}, state: {}, notes: {}, edgeState: {} };
   }
   function cleanEdits(e) {
     var d = emptyEdits();
@@ -517,7 +518,22 @@
         nodes.set(id, {
           id: id, members: members, memberLabels: members.map(function (k) { return occ.get(k)[0].c.label; }), label: label || fl[0][0], forms: fl.map(function (e) { return e[0]; }).concat(extra.filter(function (x) { return !forms.has(x); })),
           userAliases: extra, docs: Array.from(docCount.entries()).map(function (e) { return { id: e[0], count: e[1] }; }).sort(function (a, b) { return b.count - a.count; }),
-          chunks: chunks, defs: defs, score: score, count: count, name: name, kinds: Array.from(kinds), code: code, lang: keyLang.get(id) || 'it'
+          chunks: chunks, defs: defs, score: score, count: count, name: name, kinds: Array.from(kinds), code: code, lang: keyLang.get(id) || 'it',
+          tags: members.reduce(function (a, k) { return a.concat(edits.tags[k] || []); }, []).filter(function (t, i, l) { return l.indexOf(t) === i; }),
+          state: (function () { var v = null; members.forEach(function (k) { if (edits.state[k]) v = edits.state[k]; }); return v; })(),
+          note: (function () { var v = null; members.forEach(function (k) { if (edits.notes[k]) v = edits.notes[k]; }); return v; })(),
+          seen: (function () {
+            // quando questo concetto è entrato nel cervello e quando l'hai toccato l'ultima volta
+            var first = null, last = null;
+            Array.from(docCount.keys()).forEach(function (rid) {
+              var r = docs[byId.get(rid)];
+              if (!r) return;
+              var a2 = r.imported || r.mtime, b2 = r.mtime || r.imported;
+              if (a2 && (!first || a2 < first)) first = a2;
+              if (b2 && (!last || b2 > last)) last = b2;
+            });
+            return { first: first, last: last };
+          })()
         });
       });
 
@@ -657,6 +673,16 @@
       edits.links.forEach(function (l) {
         var a = nodeOfKey.get(l.a), b = nodeOfKey.get(l.b);
         if (a && b && a !== b) edges.set(pairKey(a, b), { a: a, b: b, c: 0, w: 0.6, type: 'user', label: String(l.label || 'collegato a').slice(0, 60) });
+      });
+
+      // il giudizio dell'utente sui collegamenti: confermato o sbagliato
+      Object.keys(edits.edgeState).forEach(function (k) {
+        var ab = k.split('|'), a = nodeOfKey.get(ab[0]) || ab[0], b = nodeOfKey.get(ab[1]) || ab[1];
+        var e = edges.get(pairKey(a, b));
+        if (!e) return;
+        e.state = edits.edgeState[k].s;
+        e.stateAt = edits.edgeState[k].t;
+        if (e.state === 'ok') e.w = Math.min(1, e.w + 0.3);
       });
 
       // importanza: PageRank sui collegamenti
@@ -881,6 +907,7 @@
       var p = pos.get(nd.id) || [0, 0];
       return { id: nd.id, label: nd.label, ndocs: nd.docs.length, count: nd.count, weight: round(nd.weight, 3), rank: round(nd.rank, 3), deg: nd.deg,
         central: nd.central, multi: nd.multi, name: nd.name, defs: nd.defs.length, lang: nd.lang, members: nd.members, code: nd.code ? nd.code.kind : null,
+        tags: nd.tags, state: nd.state ? nd.state.s : null,
         x: round(p[0], 1), y: round(p[1], 1), pinned: !!p.pinned, docs: nd.docs.map(function (d) { return d.id; }) };
     }
     function graphOut() {
@@ -890,11 +917,12 @@
       nodes.sort(function (a, b) { return b.weight - a.weight; });
       return {
         nodes: nodes,
-        edges: G.edges.map(function (e) { return { a: e.a, b: e.b, w: round(e.w, 3), c: e.c, type: e.type, label: e.label || REL[e.type] }; }),
+        edges: G.edges.map(function (e) { return { a: e.a, b: e.b, w: round(e.w, 3), c: e.c, type: e.type, label: e.label || REL[e.type], state: e.state || null }; }),
         suggestions: G.suggestions,
         stats: stats()
       };
     }
+    var STATE_IT = { draft: 'bozza', reviewed: 'rivisto', approved: 'approvato', stale: 'obsoleto' };
     var REL = { co: 'compare con', def: 'nella definizione', isa: 'è un tipo di', user: 'collegato a', use: 'usa', dep: 'dipende da', ext: 'eredita da' };
 
     /*
@@ -921,7 +949,8 @@
         if (e.type === 'use') label = e.a === nd.id ? 'usa' : 'usato da';
         if (e.type === 'ext') label = e.a === nd.id ? 'eredita da' : 'ereditato da';
         if (e.type === 'dep') label = e.a === nd.id ? 'dipende da' : 'usato da';
-        return { id: other, label: o.label, rel: label, type: e.type, w: round(e.w, 3), c: e.c };
+        return { id: other, label: o.label, rel: label, type: e.type, w: round(e.w, 3), c: e.c,
+          state: e.state || null, auto: e.type !== 'user', stateAt: e.stateAt || null };
       }).sort(function (a, b) { return (b.type !== 'co') - (a.type !== 'co') || b.w - a.w; });
       var sources = nd.chunks.slice(0, 120).map(function (dc) {
         var r = docs[dc[0]], ch = r.chunks[dc[1]];
@@ -938,6 +967,7 @@
         id: nd.id, label: nd.label, members: nd.members, memberLabels: nd.memberLabels, forms: nd.forms, userAliases: nd.userAliases, defs: defs, sources: sources, total: nd.chunks.length,
         docs: nd.docs.map(function (d) { var r = docs[byId.get(d.id)]; return { id: d.id, name: r.name, count: d.count }; }),
         related: related, central: nd.central, multi: nd.multi, count: nd.count, rank: round(nd.rank, 3), code: nd.code || null,
+        tags: nd.tags, state: nd.state, note: nd.note, seen: nd.seen, kind: nd.code ? nd.code.kind : (nd.defs.length ? 'term' : (nd.name ? 'name' : 'concept')),
         suggestions: G.suggestions.filter(function (s) { return s.a === nd.id || s.b === nd.id; }), log: log
       };
     }
@@ -1002,6 +1032,43 @@
           edits.links = edits.links.filter(function (l) { return pairKey(l.a, l.b) !== pairKey(A.id, B.id); });
           edits.unlinks.push([A.id, B.id]);
           logEdit('unlink', 'Tolto il collegamento tra «' + A.label + '» e «' + B.label + '»', [A.id, B.id]);
+          break;
+        case 'tag':
+          A = nodeOf(o.id);
+          var tg = String(o.text || '').trim().replace(/[,#]/g, ' ').replace(/\s+/g, ' ').slice(0, 24);
+          if (!tg) throw new Error('etichetta vuota');
+          if (!edits.tags[A.id]) edits.tags[A.id] = [];
+          if (edits.tags[A.id].length >= 12) throw new Error('troppe etichette su questo concetto');
+          if (edits.tags[A.id].indexOf(tg) < 0) edits.tags[A.id].push(tg);
+          logEdit('tag', 'Etichetta «' + tg + '» su «' + A.label + '»', A.members);
+          break;
+        case 'untag':
+          A = nodeOf(o.id);
+          if (edits.tags[A.id]) edits.tags[A.id] = edits.tags[A.id].filter(function (t) { return t !== o.text; });
+          logEdit('untag', 'Tolta l’etichetta «' + o.text + '» da «' + A.label + '»', A.members);
+          break;
+        case 'state':
+          A = nodeOf(o.id);
+          // bozza -> rivisto -> approvato, oppure obsoleto; vuoto toglie lo stato
+          var stv = ['draft', 'reviewed', 'approved', 'stale'].indexOf(o.state) >= 0 ? o.state : '';
+          if (stv) edits.state[A.id] = { s: stv, t: new Date().toISOString() };
+          else delete edits.state[A.id];
+          logEdit('state', 'Stato di «' + A.label + '»: ' + (STATE_IT[stv] || 'nessuno'), A.members);
+          break;
+        case 'note':
+          A = nodeOf(o.id);
+          var nt = String(o.text || '').slice(0, 2000);
+          if (nt) edits.notes[A.id] = { text: nt, t: new Date().toISOString() };
+          else delete edits.notes[A.id];
+          logEdit('note', nt ? 'Nota su «' + A.label + '»' : 'Nota tolta da «' + A.label + '»', A.members);
+          break;
+        case 'edge-state':
+          A = nodeOf(o.a); B = nodeOf(o.b);
+          var es = ['ok', 'no'].indexOf(o.state) >= 0 ? o.state : '';
+          var ek = pairKey(A.id, B.id);
+          if (es) edits.edgeState[ek] = { s: es, t: new Date().toISOString() };
+          else delete edits.edgeState[ek];
+          logEdit('edge-state', (es === 'ok' ? 'Confermato' : es === 'no' ? 'Segnato come sbagliato' : 'Tolto il giudizio su') + ' il collegamento «' + A.label + '» – «' + B.label + '»', [A.id, B.id]);
           break;
         case 'pos':
           (o.list || []).slice(0, 5000).forEach(function (p) {

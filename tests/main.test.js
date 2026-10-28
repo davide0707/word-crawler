@@ -65,7 +65,8 @@ async function check(name, fn) {
       'library:add-files', 'library:add-folder', 'library:read', 'library:list', 'library:save', 'library:remove', 'library:restore',
       'library:stat', 'library:edits-load', 'library:edits-save', 'library:study-load', 'library:study-save',
       'library:brains', 'library:brain-create', 'library:brain-update', 'library:brain-use', 'library:brain-duplicate',
-      'library:brain-delete', 'library:brain-export', 'library:brain-import']
+      'library:brain-delete', 'library:brain-export', 'library:brain-import',
+      'library:backup-all', 'library:count-all', 'library:erase-all']
       .forEach((c) => assert.ok(handlers[c], 'manca ' + c));
   });
   await check('impostazioni: salvataggio e lettura', async () => {
@@ -377,6 +378,43 @@ async function check(name, fn) {
   await check('libreria: nessun file della cartella è stato modificato', () => {
     assert.strictEqual(filesOf(), before);
     assert.ok(fs.existsSync(path.join(brainPath(), 'docs')) && !fs.readdirSync(LIB).includes('library'));
+  });
+  await check('elimina tutte le info: backup, doppia conferma, e niente sparisce davvero', async () => {
+    // si riparte da un paio di cervelli con dentro qualcosa
+    await handlers['library:brain-create']({}, { name: 'Prova' });
+    const prima = await handlers['library:count-all']({});
+    assert.ok(prima.brains >= 2 && prima.docs >= 1, JSON.stringify(prima));
+
+    // il backup: un file solo con tutti i cervelli
+    const bk = path.join(USER, 'backup.json');
+    fake.saveResult = { canceled: false, filePath: bk };
+    const r = await handlers['library:backup-all']({});
+    assert.strictEqual(r.brains, prima.brains);
+    assert.strictEqual(r.docs, prima.docs);
+    const data = JSON.parse(fs.readFileSync(bk, 'utf8'));
+    assert.strictEqual(data.format, 'word-crawler-backup');
+    assert.strictEqual(data.brains.length, prima.brains);
+    assert.ok(data.brains.some((b) => b.docs.length), 'i documenti sono dentro');
+
+    // senza la frase esatta non si cancella niente
+    await assert.rejects(() => handlers['library:erase-all']({}, 'si'), /Conferma/);
+    assert.strictEqual((await handlers['library:count-all']({})).brains, prima.brains);
+
+    const out = await handlers['library:erase-all']({}, 'ELIMINA TUTTO');
+    const dopo = await handlers['library:count-all']({});
+    assert.strictEqual(dopo.brains, 1, 'resta un cervello vuoto');
+    assert.strictEqual(dopo.docs, 0);
+    assert.ok(out.active, 'e si riparte da quello');
+    // la roba vecchia è nel cestino dell’app, non nel nulla
+    assert.ok(fs.existsSync(out.movedTo), 'la cartella è stata spostata, non cancellata: ' + out.movedTo);
+    // e il backup si può reimportare
+    fake.openResult = { canceled: false, filePaths: [bk] };
+    const uno = JSON.parse(fs.readFileSync(bk, 'utf8')).brains.find((b) => b.docs.length);
+    const single = path.join(USER, 'uno.json');
+    fs.writeFileSync(single, JSON.stringify({ format: 'word-crawler-brain', v: 1, brain: uno.brain, docs: uno.docs, edits: uno.edits, study: uno.study }));
+    fake.openResult = { canceled: false, filePaths: [single] };
+    const imp = await handlers['library:brain-import']({});
+    assert.strictEqual(imp.docs, uno.docs.length, 'i documenti tornano');
   });
   fs.rmSync(LIB, { recursive: true, force: true });
 

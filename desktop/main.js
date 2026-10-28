@@ -749,6 +749,55 @@ ipcMain.handle('library:brain-import', async (_e, file) => {
   return Object.assign(brainOut(b), { docs: kept, skipped: data.docs.length - kept });
 });
 
+/*
+ * "Elimina tutte le info": si cancella tutto, ma prima si propone un backup e si chiede due volte.
+ * Il backup è un unico file JSON con dentro tutti i cervelli, che si può reimportare uno alla volta.
+ */
+ipcMain.handle('library:backup-all', async () => {
+  await loadBrains();
+  const r = await dialog.showSaveDialog(win, {
+    title: 'Backup di tutti i cervelli',
+    defaultPath: 'word-crawler-backup-' + new Date().toISOString().slice(0, 10) + '.json',
+    filters: [{ name: 'Backup Word Crawler', extensions: ['json'] }]
+  });
+  if (r.canceled || !r.filePath) return null;
+  const out = { format: 'word-crawler-backup', v: 1, exportedAt: new Date().toISOString(), brains: [] };
+  for (const b of brains.list) {
+    const one = { brain: brainOut(b), docs: [], edits: null, study: null };
+    try {
+      for (const f of await fsp.readdir(brainDir(b.id, 'docs'))) {
+        if (!/^d-[a-f0-9]{16}\.json$/.test(f)) continue;
+        one.docs.push(JSON.parse(await fsp.readFile(brainDir(b.id, 'docs', f), 'utf8')));
+      }
+    } catch (e) { /* cervello vuoto */ }
+    try { one.edits = JSON.parse(await fsp.readFile(brainDir(b.id, 'edits.json'), 'utf8')); } catch (e) { /* niente */ }
+    try { one.study = JSON.parse(await fsp.readFile(brainDir(b.id, 'study.json'), 'utf8')); } catch (e) { /* niente */ }
+    out.brains.push(one);
+  }
+  await fsp.writeFile(r.filePath, JSON.stringify(out), 'utf8');
+  return { path: r.filePath, brains: out.brains.length, docs: out.brains.reduce((a, x) => a + x.docs.length, 0) };
+});
+// quante cose sparirebbero: si dice all'utente prima di chiedere conferma
+ipcMain.handle('library:count-all', async () => {
+  await loadBrains();
+  let docs = 0, studied = 0;
+  for (const b of brains.list) { const c = await brainCounts(b.id); docs += c.docs; studied += c.studied; }
+  return { brains: brains.list.length, docs, studied };
+});
+ipcMain.handle('library:erase-all', async (_e, confirm) => {
+  if (confirm !== 'ELIMINA TUTTO') throw new Error('Conferma mancante');
+  await loadBrains();
+  // tutto nel cestino dell'app, non cancellato davvero: resta recuperabile a mano
+  const to = userDir('library', 'b-trash', 'tutto-' + Date.now());
+  await ensureDir(path.dirname(to));
+  try { await fsp.rename(userDir('library', 'b'), to); } catch (err) { if (err.code !== 'ENOENT') throw err; }
+  try { await fsp.rm(brainsFile(), { force: true }); } catch (err) { /* già via */ }
+  brains = null;
+  libraryPaths.clear();
+  await loadBrains();
+  return { active: brains.active, brains: brains.list.length, movedTo: to };
+});
+
 // ------------------------------------------------------------------ IPC: varie
 ipcMain.handle('shell:show', (_e, p) => { if (typeof p === 'string' && path.isAbsolute(p)) shell.showItemInFolder(p); return true; });
 ipcMain.handle('shell:external', (_e, url) => { if (typeof url === 'string' && /^https?:\/\//i.test(url)) shell.openExternal(url); return true; });

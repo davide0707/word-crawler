@@ -224,7 +224,17 @@ async function check(name, fn) {
         brainDuplicate: async (o) => { const src = store.brains.find((x) => x.id === o.id); const b = mkBrain(src.name + ' (copia)'); src.docs.forEach((v, k) => b.docs.set(k, clone(v))); b.edits = clone(src.edits); b.study = clone(src.study); return { id: b.id, name: b.name }; },
         brainDelete: async (id) => { if (store.brains.length < 2) throw new Error('Deve restare almeno un cervello'); store.brains = store.brains.filter((b) => b.id !== id); if (store.active === id) { store.active = store.brains[0].id; bind(); } return { active: store.active, deleted: id }; },
         brainExport: async (id) => { const b = store.brains.find((x) => x.id === id); window.__exported = { id, docs: b.docs.size }; return { path: '/tmp/' + b.name + '.json', docs: b.docs.size }; },
-        brainImport: async () => null
+        brainImport: async () => null,
+        countAll: async () => ({ brains: store.brains.length, docs: store.brains.reduce((a, b) => a + b.docs.size, 0), studied: 0 }),
+        backupAll: async () => { window.__backup = { brains: store.brains.length }; return { path: '/tmp/b.json', brains: store.brains.length, docs: 0 }; },
+        eraseAll: async (c) => {
+          if (c !== 'ELIMINA TUTTO') throw new Error('Conferma mancante');
+          store.brains = [];
+          const b = mkBrain('La mia libreria');
+          store.active = b.id;
+          bind();
+          return { active: b.id, brains: 1 };
+        }
       },
       scan: { roots: async () => [], pickFolder: async () => null, start: async () => 'x', cancel: async () => true, exportCsv: async () => true, history: async () => [], compare: async () => null, trash: async () => ({}), onEvent: () => () => {} },
       showItem: async () => true,
@@ -814,6 +824,74 @@ async function check(name, fn) {
     assert.strictEqual(aperto, await page.evaluate(() => window.__view.state().docs.length ? window.__lib.active : null), 'il cervello aperto resta quello');
     assert.ok((await page.evaluate(() => window.__view.state().docs.length)) > 0, 'e i suoi documenti sono ancora lì');
     await shot('lib-21-confronto.png');
+  });
+
+  await check('stato, etichette e nota su un concetto; giudizio sui collegamenti', async () => {
+    await page.click('.lb-tabs [role="tab"]:text-is("Mappa dei concetti")');
+    await page.fill('.lb-maptools input[type="search"]', 'QAM');
+    await page.press('.lb-maptools input[type="search"]', 'Enter');
+    await waitFor(() => /QAM/.test((document.querySelector('.lb-panel .lb-title') || {}).textContent || ''), null, 15000);
+
+    await page.selectOption('.lb-meta select', 'reviewed');
+    await waitFor(() => (document.querySelector('.lb-meta select') || {}).value === 'reviewed', null, 15000);
+    await page.click('.lb-tags button:text-is("+ etichetta")');
+    await page.fill('.lb-tags .lb-form input', 'esame');
+    await page.click('.lb-tags .lb-form button[type="submit"]');
+    await waitFor(() => /esame/.test(document.querySelector('.lb-tags').textContent), null, 15000);
+
+    await page.click('.lb-actions button:text-is("Aggiungi una nota")');
+    await page.fill('.lb-form input', 'Da rivedere prima dell’orale');
+    await page.click('.lb-form button[type="submit"]');
+    await waitFor(() => /La tua nota/.test(document.querySelector('.lb-panel').textContent), null, 15000);
+    assert.ok(/orale/.test(await page.textContent('.lb-note')), 'la nota resta');
+
+    // confermare un collegamento trovato dal ragno
+    const mark = await page.$('.lb-rel .lb-mark');
+    if (mark) {
+      await mark.click();
+      await waitFor(() => !!document.querySelector('.lb-mark.is-ok'), null, 15000);
+    }
+    await shot('lib-22-concetto.png');
+
+    // tutto resta dopo aver riaperto il concetto
+    await page.click('.lb-panel .lb-back');
+    await page.fill('.lb-maptools input[type="search"]', 'QAM');
+    await page.press('.lb-maptools input[type="search"]', 'Enter');
+    await waitFor(() => /La tua nota/.test(document.querySelector('.lb-panel').textContent), null, 15000);
+    assert.ok(/esame/.test(await page.textContent('.lb-tags')), 'l’etichetta è salvata');
+    assert.strictEqual(await page.inputValue('.lb-meta select'), 'reviewed', 'e lo stato pure');
+  });
+
+  await check('elimina tutte le info: backup proposto e doppia conferma', async () => {
+    await page.click('.lb-brains-btn');
+    await page.waitForSelector('.lb-brains .lb-brain');
+    assert.ok(await page.$('.lb-thumb'), 'il cervello aperto mostra l’anteprima del grafo');
+    await page.click('.lb-panel button:text-is("Elimina tutte le info…")');
+    await page.waitForSelector('.lb-danger');
+    const avviso = await page.textContent('.lb-danger');
+    assert.ok(/cervell/.test(avviso) && /document/.test(avviso), 'dice quanto sparisce: ' + avviso.slice(0, 160));
+    assert.ok(/non vengono toccati/.test(avviso), 'e che i file sul computer restano');
+
+    // prima si annulla
+    await page.click('.lb-danger button:text-is("Annulla")');
+    assert.ok((await page.evaluate(() => window.__view.state().docs.length)) > 0, 'annullare non cancella niente');
+
+    // poi backup e conferma scritta
+    await page.click('.lb-panel button:text-is("Elimina tutte le info…")');
+    await page.waitForSelector('.lb-danger');
+    await page.click('.lb-danger button:text-is("Prima fai un backup")');
+    await waitFor(() => !!window.__backup, null, 15000);
+    await page.waitForSelector('.lb-danger input');
+    await page.fill('.lb-danger input', 'no');
+    await page.click('.lb-danger button[type="submit"]');
+    await page.waitForSelector('.lb-toast:has-text("esattamente")');
+    assert.ok((await page.evaluate(() => window.__view.state().docs.length)) > 0, 'la frase sbagliata non cancella');
+
+    await page.fill('.lb-danger input', 'ELIMINA TUTTO');
+    await page.click('.lb-danger button[type="submit"]');
+    await waitFor(() => window.__view.state().docs.length === 0, null, 20000);
+    await page.waitForSelector('.lb-empty:not([hidden])');
+    assert.strictEqual(await page.evaluate(() => window.__lib.brains.length), 1, 'resta un cervello vuoto');
   });
 
   await check('nessun errore nella pagina', () => { assert.deepStrictEqual(errs, []); });

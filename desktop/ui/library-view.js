@@ -736,6 +736,41 @@
       }
       panel.appendChild(badges);
       panel.appendChild(el('p', { class: 'wc-note', text: plural(c.count, 'volta', 'volte') + ' in ' + plural(c.total, 'passaggio', 'passaggi') + ': ' + c.docs.map(function (d) { return d.name; }).join(', ') }));
+      // stato, etichette e nota personale
+      var SIT = { draft: 'bozza', reviewed: 'rivisto', approved: 'approvato', stale: 'obsoleto' };
+      var meta2 = el('div', { class: 'lb-meta' });
+      var stSel = el('select', { 'aria-label': 'Stato di revisione' }, [el('option', { value: '', text: 'senza stato' })].concat(
+        Object.keys(SIT).map(function (k) { return el('option', { value: k, text: SIT[k], selected: c.state && c.state.s === k ? 'selected' : null }); })));
+      stSel.addEventListener('change', function () { edit({ type: 'state', id: c.id, state: stSel.value }).then(function () { openConcept(c.id); }); });
+      meta2.appendChild(el('label', { class: 'wc-check' }, [el('span', { class: 'wc-note', text: 'Stato' }), stSel]));
+      if (c.seen && (c.seen.first || c.seen.last)) {
+        meta2.appendChild(el('span', { class: 'wc-note', text: 'visto dal ' + fmtDate(c.seen.first) + (c.seen.last && c.seen.last !== c.seen.first ? ' · ultimo aggiornamento ' + fmtDate(c.seen.last) : '') }));
+      }
+      panel.appendChild(meta2);
+      var tagRow = el('div', { class: 'lb-tags' });
+      (c.tags || []).forEach(function (t) {
+        var x = el('button', { type: 'button', class: 'lb-tagchip', title: 'Togli l’etichetta', text: t + ' ×' });
+        x.addEventListener('click', function () { edit({ type: 'untag', id: c.id, text: t }).then(function () { openConcept(c.id); }); });
+        tagRow.appendChild(x);
+      });
+      var addTag = el('button', { type: 'button', class: 'wc-link', text: '+ etichetta' });
+      addTag.addEventListener('click', function () {
+        tagRow.appendChild(inlineForm('Etichetta', 'es. da ripassare, esame, importante', 'Aggiungi', function (v, form) {
+          form.remove();
+          edit({ type: 'tag', id: c.id, text: v }).then(function () { openConcept(c.id); });
+        }));
+      });
+      tagRow.appendChild(addTag);
+      panel.appendChild(tagRow);
+      if (c.note) {
+        var nb = el('div', { class: 'lb-note' });
+        nb.appendChild(el('h3', { text: 'La tua nota' }));
+        nb.appendChild(rich(c.note.text, { block: true }));
+        var del = el('button', { type: 'button', class: 'wc-link', text: 'Togli la nota' });
+        del.addEventListener('click', function () { edit({ type: 'note', id: c.id, text: '' }).then(function () { openConcept(c.id); }); });
+        nb.appendChild(del);
+        panel.appendChild(nb);
+      }
       var actions = el('div', { class: 'lb-actions' });
       var formBox = el('div');
       [['Spiega', function () { explainConcept(c.id); }],
@@ -750,6 +785,12 @@
             if (!o) { toast('Non trovo il concetto «' + v + '».'); return; }
             edit({ type: 'merge', a: c.id, b: o.id }, 'Uniti «' + c.label + '» e «' + o.label + '».').then(function () { openConcept(c.id); });
           }, true));
+        }],
+        [c.note ? 'Cambia la nota' : 'Aggiungi una nota', function () {
+          formBox.textContent = '';
+          formBox.appendChild(inlineForm('La tua nota su questo concetto', c.note ? c.note.text : 'quello che vuoi ricordarti', 'Salva', function (v) {
+            edit({ type: 'note', id: c.id, text: v }, 'Nota salvata.').then(function () { openConcept(c.id); });
+          }));
         }],
         ['Collega a…', function () {
           formBox.textContent = '';
@@ -811,7 +852,19 @@
           b.addEventListener('click', function () { openConcept(r.id); });
           var x = el('button', { type: 'button', class: 'lb-x', text: '×', title: 'Togli questo collegamento', 'aria-label': 'Togli il collegamento con ' + r.label });
           x.addEventListener('click', function () { edit({ type: 'unlink', a: c.id, b: r.id }, 'Collegamento tolto.').then(function () { openConcept(c.id); }); });
-          rl.appendChild(el('li', { class: 'rel-' + r.type }, [el('span', { class: 'lb-rel-type', text: r.rel }), b, r.c ? el('span', { class: 'wc-note', text: ' ' + r.c + '×' }) : null, x]));
+          // un collegamento trovato dal ragno si può confermare o segnare come sbagliato
+          var mark = null;
+          if (r.auto) {
+            mark = el('button', { type: 'button', class: 'lb-mark' + (r.state ? ' is-' + r.state : ''),
+              title: r.state === 'ok' ? 'Confermato da te' : (r.state === 'no' ? 'Segnato come sbagliato' : 'Confermi questo collegamento?'),
+              text: r.state === 'ok' ? '✓' : (r.state === 'no' ? '✗' : '?') });
+            mark.addEventListener('click', function () {
+              var next = r.state === 'ok' ? 'no' : (r.state === 'no' ? '' : 'ok');
+              edit({ type: 'edge-state', a: c.id, b: r.id, state: next }).then(function () { openConcept(c.id); });
+            });
+          }
+          rl.appendChild(el('li', { class: 'rel-' + r.type + (r.state ? ' st-' + r.state : '') },
+            [el('span', { class: 'lb-rel-type', text: r.rel }), b, r.c ? el('span', { class: 'wc-note', text: ' ' + r.c + '×' }) : null, mark, x]));
         });
         panel.appendChild(rl);
       }
@@ -2495,7 +2548,68 @@
           }).catch(function (e) { toast('Importazione non riuscita: ' + e.message); });
         });
         panel.appendChild(el('div', { class: 'lb-actions' }, [add, imp]));
+        if (lib.eraseAll) {
+          var wipe = el('button', { type: 'button', class: 'wc-link lb-clear', text: 'Elimina tutte le info…' });
+          wipe.addEventListener('click', eraseAll);
+          panel.appendChild(wipe);
+        }
       });
+    }
+
+    /*
+     * Cancellare tutto: si dice prima quanto sparisce, si propone il backup, e si chiede due volte,
+     * la seconda facendo scrivere la frase. Anche così la cartella finisce nel cestino dell'app, non
+     * nel nulla: i file sul computer non vengono comunque mai toccati.
+     */
+    function eraseAll() {
+      lib.countAll().then(function (c) {
+        var box = el('div', { class: 'lb-ask lb-danger' });
+        box.appendChild(el('p', { text: 'Questo cancella ' + plural(c.brains, 'cervello', 'cervelli') + ', ' +
+          plural(c.docs, 'documento letto', 'documenti letti') + ' e ' + plural(c.studied, 'concetto studiato', 'concetti studiati') +
+          '. I file sul tuo computer non vengono toccati, ma tutto il lavoro fatto qui dentro sparisce.' }));
+        var bk = el('button', { type: 'button', class: 'wc-btn wc-primary', text: 'Prima fai un backup' });
+        var go = el('button', { type: 'button', class: 'wc-btn', text: 'Vai avanti senza backup' });
+        var no = el('button', { type: 'button', class: 'wc-btn', text: 'Annulla' });
+        box.appendChild(el('div', { class: 'wc-inline' }, [bk, go, no]));
+        panel.appendChild(box);
+        no.addEventListener('click', function () { box.remove(); });
+        bk.addEventListener('click', function () {
+          lib.backupAll().then(function (r) {
+            if (!r) return;
+            toast('Backup salvato: ' + plural(r.brains, 'cervello', 'cervelli') + ', ' + plural(r.docs, 'documento', 'documenti') + '.');
+            step2(box);
+          }).catch(function (e) { toast('Backup non riuscito: ' + e.message); });
+        });
+        go.addEventListener('click', function () { step2(box); });
+      }).catch(function (e) { toast(e.message); });
+    }
+    function step2(box) {
+      box.textContent = '';
+      box.appendChild(el('p', { text: 'Ultima conferma. Scrivi ELIMINA TUTTO per procedere: non si torna indietro dall’app.' }));
+      var input = el('input', { type: 'text', 'aria-label': 'Scrivi ELIMINA TUTTO', placeholder: 'ELIMINA TUTTO', autocomplete: 'off' });
+      var ok = el('button', { type: 'submit', class: 'wc-btn wc-danger', text: 'Elimina tutto' });
+      var no = el('button', { type: 'button', class: 'wc-btn', text: 'Annulla' });
+      var form = el('form', { class: 'wc-inline' }, [input, ok, no]);
+      box.appendChild(form);
+      no.addEventListener('click', function () { box.remove(); });
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (input.value.trim() !== 'ELIMINA TUTTO') { toast('Scrivi esattamente ELIMINA TUTTO.'); return; }
+        ok.disabled = true;
+        lib.eraseAll('ELIMINA TUTTO').then(function () {
+          box.remove();
+          brainActive = null;
+          session = null; mastery = null; studyStats = null;
+          graph = null; mapNodes = []; mapEdges = []; nodeIdx = new Map(); fitted = false;
+          selected = null; lastSearch = null; qInput.value = ''; resultsBox.textContent = '';
+          trail = []; paintCrumbs();
+          return refreshBrains().then(function () { return load(); });
+        }).then(function () {
+          showView('results');
+          toast('Fatto: tutto azzerato. La vecchia cartella resta recuperabile a mano per 30 giorni.');
+        }).catch(function (e2) { ok.disabled = false; toast('Non riesco a eliminare: ' + e2.message); });
+      });
+      setTimeout(function () { input.focus(); }, 0);
     }
 
     function brainCard(b) {
@@ -2510,6 +2624,8 @@
       if (b.studied) meta.push(plural(b.studied, 'concetto studiato', 'concetti studiati'));
       meta.push('aggiornato ' + fmtDate(b.updated));
       var li = el('li', { class: 'lb-brain' + (b.id === brainActive ? ' is-open' : '') }, [head, el('p', { class: 'wc-note', text: meta.join(' · ') })]);
+      // anteprima: il grafo in miniatura, disegnato solo per il cervello aperto (gli altri non sono in memoria)
+      if (b.id === brainActive && graph && graph.nodes.length) li.appendChild(thumb(graph, b.color));
       var acts = el('div', { class: 'lb-actions' });
       function act(label, fn) {
         var x = el('button', { type: 'button', class: 'wc-btn', text: label });
@@ -2556,6 +2672,36 @@
       li.appendChild(acts);
       return li;
     }
+    /* Un'anteprima del grafo: i concetti più importanti e i loro collegamenti, in 220×90. */
+    function thumb(G, color) {
+      var c = el('canvas', { class: 'lb-thumb', width: '220', height: '90', 'aria-hidden': 'true' });
+      var g2 = c.getContext('2d');
+      var ns = G.nodes.slice(0, 160);
+      if (!ns.length) return c;
+      var xs = ns.map(function (n) { return n.x; }), ys = ns.map(function (n) { return n.y; });
+      var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+      var k = Math.min(206 / Math.max(40, x1 - x0), 76 / Math.max(40, y1 - y0));
+      var ox = 110 - (x0 + x1) / 2 * k, oy = 45 - (y0 + y1) / 2 * k;
+      var idx = new Map(ns.map(function (n, i) { return [n.id, i]; }));
+      g2.strokeStyle = 'rgba(150,160,200,0.25)';
+      g2.lineWidth = 0.6;
+      g2.beginPath();
+      G.edges.slice(0, 400).forEach(function (e) {
+        var a = idx.get(e.a), b2 = idx.get(e.b);
+        if (a === undefined || b2 === undefined) return;
+        g2.moveTo(ns[a].x * k + ox, ns[a].y * k + oy);
+        g2.lineTo(ns[b2].x * k + ox, ns[b2].y * k + oy);
+      });
+      g2.stroke();
+      ns.forEach(function (n) {
+        g2.fillStyle = n.central ? (color || '#4a63ff') : (n.multi ? '#b48cff' : '#7d8597');
+        g2.beginPath();
+        g2.arc(n.x * k + ox, n.y * k + oy, n.central ? 2.2 : 1.4, 0, Math.PI * 2);
+        g2.fill();
+      });
+      return c;
+    }
+
     var LOOK_COLORS = ['#4a63ff', '#b48cff', '#3fd8ff', '#5de07f', '#ff8a3d', '#ff6b7d', '#e7b05a', '#7d8597'];
     function brainLook(b) {
       var box = el('div', { class: 'lb-look' });

@@ -57,7 +57,10 @@ contextBridge.exposeInMainWorld('wcDesktop', {
     brainDuplicate: (o) => ipcRenderer.invoke('library:brain-duplicate', o),
     brainDelete: (id) => ipcRenderer.invoke('library:brain-delete', id),
     brainExport: (id) => ipcRenderer.invoke('library:brain-export', id),
-    brainImport: () => ipcRenderer.invoke('library:brain-import')
+    brainImport: () => ipcRenderer.invoke('library:brain-import'),
+    backupAll: () => ipcRenderer.invoke('library:backup-all'),
+    countAll: () => ipcRenderer.invoke('library:count-all'),
+    eraseAll: (confirm) => ipcRenderer.invoke('library:erase-all', confirm)
   },
   showItem: (p) => ipcRenderer.invoke('shell:show', p),
   openExternal: (url) => ipcRenderer.invoke('shell:external', url),
