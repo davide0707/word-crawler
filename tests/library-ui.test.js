@@ -377,7 +377,7 @@ async function check(name, fn) {
     assert.ok(levels.length >= 5 && levels.every((v, i) => i === 0 || v >= levels[i - 1]), 'livelli: ' + levels.join(','));
     await shot('lib-07-ripasso.png');
 
-    await page.selectOption('.lb-sttools select:nth-of-type(2)', '10');
+    await page.selectOption('.lb-sttools select:nth-of-type(3)', '10');
     await page.click('.lb-sttools button');
     await page.waitForSelector('.lb-card:not([hidden]) .lb-front');
     const card = await page.evaluate(() => ({
@@ -399,9 +399,9 @@ async function check(name, fn) {
     } else {
       await page.click('.lb-answer button');
     }
-    await page.waitForSelector('.lb-back p');
+    await page.waitForSelector('.lb-backtext');
     const back = await page.evaluate(() => ({
-      text: document.querySelector('.lb-back p').textContent,
+      text: document.querySelector('.lb-backtext').textContent,
       src: (document.querySelector('.lb-src') || {}).textContent || '',
       grades: Array.from(document.querySelectorAll('.lb-grades button')).map((b) => b.textContent)
     }));
@@ -435,7 +435,7 @@ async function check(name, fn) {
     const before = await page.evaluate(() => window.__view.state().study.studied);
     await page.click('.lb-card');
     await page.keyboard.press('Space');
-    await page.waitForSelector('.lb-back p');
+    await page.waitForSelector('.lb-backtext');
     await page.keyboard.press('3');
     await waitFor((k) => window.__view.state().study.studied > k, before, 15000);
     assert.ok(await page.evaluate(() => window.__view.state().study.studied) > before, 'il voto da tastiera conta');
@@ -626,6 +626,81 @@ async function check(name, fn) {
     assert.ok(/riga 20/.test(panel), 'con la riga: ' + panel.slice(0, 300));
     assert.ok(/invia al ricevitore/.test(panel), 'il commento fa da definizione');
     assert.ok(/usato da/.test(panel) || /loop/.test(panel), 'e il collegamento con loop');
+  });
+
+  // risponde a una domanda qualunque, comunque sia fatta la carta
+  async function rispondi(giusto) {
+    const opt = await page.$('.lb-opt');
+    if (opt) { await (giusto ? page.click('.lb-opt.is-right, .lb-opt[data-opt="1"]') : opt.click()); return 'quiz'; }
+    const typed = await page.$('.lb-typed');
+    if (typed) { await page.fill('.lb-typed', 'qualcosa'); await page.press('.lb-typed', 'Enter'); return 'scritta'; }
+    const rivela = await page.$('.lb-answer button');
+    if (rivela) { await rivela.click(); const g = await page.$('.lb-g2'); if (g) await g.click(); return 'rivelata'; }
+    return null;
+  }
+  async function avanti() {
+    const b = await page.$('.lb-grades .wc-primary');
+    if (b) await b.click();
+  }
+
+  await check('quiz a scelta multipla, punti e traguardi', async () => {
+    await page.click('.lb-tabs [role="tab"]:text-is("Studio")');
+    await page.waitForSelector('.lb-study:not([hidden])');
+    await page.selectOption('.lb-sttools select:nth-of-type(2)', 'review');
+    await page.selectOption('.lb-sttools select:nth-of-type(3)', '20');
+
+    // si risponde finché non esce una domanda a scelta multipla (o finiscono le carte)
+    await page.click('.lb-sttools button');
+    await page.waitForSelector('.lb-card:not([hidden]) .lb-front');
+    let quiz = false;
+    for (let i = 0; i < 20; i++) {
+      if (await page.$('.lb-opt')) { quiz = true; break; }
+      if (!(await rispondi(true))) break;
+      await page.waitForTimeout(60);
+      await avanti();
+      if (!(await page.$('.lb-card .lb-front'))) break;
+    }
+    if (quiz) {
+      assert.strictEqual(await page.$$eval('.lb-opt', (bs) => bs.length), 4, 'quattro alternative');
+      await shot('lib-14-quiz.png');
+      await page.click('.lb-opt[data-opt="1"]');
+      await waitFor(() => !!document.querySelector('.lb-opt.is-right'), null, 10000);
+      assert.ok(await page.$$eval('.lb-opt', (bs) => bs.every((b) => b.disabled)), 'dopo la scelta non si cambia idea');
+      await avanti();
+    }
+    const c = await page.$('.lb-card .wc-link:text-is("Chiudi")');
+    if (c) await c.click();
+
+    // adesso che si è risposto, i punti ci sono
+    await waitFor(() => !document.querySelector('.lb-xp').hidden, null, 20000);
+    const xp = await page.textContent('.lb-xp');
+    assert.ok(/Livello \d+/.test(xp), 'il livello: ' + xp.slice(0, 120));
+    assert.ok(/punti/.test(xp) && /oggi \d+ di \d+/.test(xp), 'punti e obiettivo del giorno: ' + xp.slice(0, 200));
+    assert.ok(await page.$('.lb-trophy'), 'almeno un traguardo preso');
+    // il salvataggio aspetta un attimo prima di scrivere
+    await waitFor(() => !!(window.__lib.study && (window.__lib.study.log || []).length), null, 10000);
+    await shot('lib-13-punti.png');
+  });
+
+  await check('esame simulato: punteggio alla consegna', async () => {
+    const chiudi = await page.$('.lb-card .wc-link:text-is("Chiudi")');
+    if (chiudi) await chiudi.click();
+    await page.selectOption('.lb-sttools select:nth-of-type(2)', 'exam');
+    await page.selectOption('.lb-sttools select:nth-of-type(3)', '10');
+    await page.click('.lb-sttools button');
+    await page.waitForSelector('.lb-card:not([hidden]) .lb-front');
+    for (let i = 0; i < 14; i++) {
+      if (await page.$('.lb-score')) break;
+      if (!(await rispondi(true))) break;
+      await page.waitForTimeout(60);
+      await avanti();
+    }
+    await page.waitForSelector('.lb-score', { timeout: 20000 });
+    const score = await page.textContent('.lb-score');
+    assert.ok(/\d+ su 100/.test(score), 'il punteggio: ' + score);
+    assert.ok(/risposte giuste su/.test(await page.textContent('.lb-card')), 'e il dettaglio');
+    await shot('lib-15-esame.png');
+    await page.click('.lb-grades .wc-btn:text-is("Chiudi")');
   });
 
   await check('nessun errore nella pagina', () => { assert.deepStrictEqual(errs, []); });

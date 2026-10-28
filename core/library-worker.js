@@ -27,9 +27,9 @@
  *   anki        { doc?, ... }        esportazione per Anki
  *   study-reset { id? }              azzera un concetto o tutto
  */
-/* global importScripts, WCLibrary, WCStudy */
+/* global importScripts, WCLibrary, WCStudy, WCGamify */
 'use strict';
-importScripts('settings.js', 'lang.js', 'text.js', 'analysis.js', 'code.js', 'library.js', 'study.js');
+importScripts('settings.js', 'lang.js', 'text.js', 'analysis.js', 'code.js', 'library.js', 'study.js', 'gamify.js');
 
 var records = [], edits = null, kb = null, study = null, studyState = null;
 function base() {
@@ -89,6 +89,15 @@ var handlers = {
   },
   mastery: function () { return learn().mastery(); },
   anki: function (d) { return learn().anki({ doc: d.doc, limit: d.limit, onlyStudied: d.onlyStudied }); },
+  exam: function (d) { return learn().exam({ limit: d.limit, doc: d.doc, seed: d.seed }); },
+  submit: function (d) {
+    var s = learn(), out = s.submit(d.answers);
+    return { result: out, state: s.state() };
+  },
+  gamify: function (d) {
+    var s = learn();
+    return WCGamify.of(s.state(), { goal: d.goal, total: s.stats({ doc: d.doc }).total });
+  },
   'study-reset': function (d) {
     var s = learn();
     s.reset({ id: d.id });

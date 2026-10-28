@@ -140,7 +140,47 @@
    * Le carte di un concetto, in ordine di preferenza. Ogni carta porta la sua fonte: documento,
    * pagina o slide, e il pezzo da aprire nel lettore.
    */
-  function cardsFor(node, info, isaParent) {
+  /*
+   * Le alternative sbagliate di un quiz: concetti veri della stessa libreria, scelti vicini a quello
+   * giusto (stesso tipo, peso simile) perché una risposta ovviamente assurda non insegna niente.
+   * Sono sempre concetti dell'utente, mai testo inventato.
+   */
+  function distractors(node, pool, n, pick) {
+    var out = [], seen = new Set([fold(node.label)]);
+    var same = pool.filter(function (p) {
+      if (p.id === node.id) return false;
+      var v = pick(p);
+      if (!v || seen.has(fold(v))) return false;
+      return true;
+    });
+    // prima quelli simili per tipo e importanza, poi gli altri
+    var kind = node.code ? 'code' : (node.defs ? 'def' : 'plain');
+    same.sort(function (a, b) {
+      var ka = (a.code ? 'code' : (a.defs ? 'def' : 'plain')) === kind ? 0 : 1;
+      var kb2 = (b.code ? 'code' : (b.defs ? 'def' : 'plain')) === kind ? 0 : 1;
+      if (ka !== kb2) return ka - kb2;
+      return Math.abs((a.rank || 0) - (node.rank || 0)) - Math.abs((b.rank || 0) - (node.rank || 0));
+    });
+    for (var i = 0; i < same.length && out.length < n; i++) {
+      var v = pick(same[i]);
+      if (seen.has(fold(v))) continue;
+      seen.add(fold(v));
+      out.push(v);
+    }
+    return out;
+  }
+  // mescola in modo ripetibile: la stessa carta propone sempre lo stesso ordine
+  function shuffle(list, seed) {
+    var a = list.slice(), r = seed >>> 0;
+    for (var i = a.length - 1; i > 0; i--) {
+      r = (r * 1664525 + 1013904223) >>> 0;
+      var j = r % (i + 1), t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function hashStr(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+
+  function cardsFor(node, info, isaParent, pool) {
     var out = [], forms = (info.forms || [node.label]).slice(0, 8);
     var lang = node.lang || info.lang || 'it';
     (info.defs || []).slice(0, 3).forEach(function (df) {
@@ -151,6 +191,40 @@
     });
     if (isaParent) {
       out.push({ kind: 'isa', ask: ASK.isa, front: node.label, back: isaParent.label, answer: isaParent.label, source: isaParent.source || null });
+    }
+    // scelta multipla: la definizione vera e tre definizioni di altri concetti
+    var firstDef = (info.defs || [])[0];
+    if (firstDef && pool && pool.length > 4) {
+      var wrongNames = distractors(node, pool, 3, function (p) { return p.label; });
+      if (wrongNames.length === 3) {
+        out.push({
+          kind: 'mc', ask: ASK.mc, front: firstDef.text, back: node.label, answer: node.label,
+          options: shuffle([node.label].concat(wrongNames), hashStr(node.id)),
+          source: { doc: firstDef.doc, name: firstDef.name, path: firstDef.path, n: firstDef.n, page: firstDef.page, slide: firstDef.slide, line: firstDef.line, where: firstDef.where }
+        });
+      }
+      var wrongDefs = distractors(node, pool, 3, function (p) { return p.firstDef; });
+      if (wrongDefs.length === 3) {
+        out.push({
+          kind: 'mcrev', ask: ASK.mcrev, front: node.label, back: firstDef.text, answer: firstDef.text,
+          options: shuffle([firstDef.text].concat(wrongDefs), hashStr(node.id + 'r')),
+          source: { doc: firstDef.doc, name: firstDef.name, path: firstDef.path, n: firstDef.n, page: firstDef.page, slide: firstDef.slide, line: firstDef.line, where: firstDef.where }
+        });
+      }
+      // domanda aperta: si risponde a voce o a mente e ci si giudica da soli
+      out.push({ kind: 'open', ask: ASK.open, front: node.label, back: firstDef.text, answer: null, open: true,
+        source: { doc: firstDef.doc, name: firstDef.name, path: firstDef.path, n: firstDef.n, page: firstDef.page, slide: firstDef.slide, line: firstDef.line, where: firstDef.where } });
+    }
+    // codice: che cosa fa, di cosa ha bisogno, chi la chiama. Tutto dalla struttura già letta.
+    if (info.code) {
+      var cd = info.code;
+      var src2 = firstDef ? { doc: firstDef.doc, name: firstDef.name, path: firstDef.path, n: firstDef.n, line: firstDef.line, where: firstDef.where } : null;
+      var what = firstDef ? String(firstDef.text).replace(/^[a-zà-ú]+\s+[^:]{1,80}:\s*/, '') : '';
+      if (what) out.push({ kind: 'codewhat', ask: ASK.codewhat, front: cd.signature || node.label, back: what, answer: null, open: true, code: cd, source: src2 });
+      var uses = (info.related || []).filter(function (r) { return r.rel === 'usa'; }).map(function (r) { return r.label; });
+      var by = (info.related || []).filter(function (r) { return r.rel === 'usato da'; }).map(function (r) { return r.label; });
+      if (uses.length) out.push({ kind: 'codedeps', ask: ASK.codedeps, front: cd.signature || node.label, back: uses.join(', '), answer: null, open: true, code: cd, source: src2 });
+      if (by.length) out.push({ kind: 'codewho', ask: ASK.codewho, front: node.label, back: by.join(', '), answer: null, open: true, code: cd, source: src2 });
     }
     if (!out.length) {
       var srcs = (info.sources || []).slice(0, 6);
@@ -380,6 +454,7 @@
         });
       }
       var cards = [];
+      var pool = kb.pool ? kb.pool(400) : [];
       picked.forEach(function (n) {
         var info = kb.concept(n.id);
         if (!info) return;
@@ -391,12 +466,17 @@
             parent = { label: pn.label, source: pdef ? { doc: pdef.doc, name: pdef.name, path: pdef.path, n: pdef.n, page: pdef.page, slide: pdef.slide, where: pdef.where } : null };
           }
         }
-        var list = cardsFor(n, info, parent);
+        var list = cardsFor(n, info, parent, pool);
         if (!list.length) return;
+        if (o.kinds && o.kinds.length) {
+          var only = list.filter(function (x) { return o.kinds.indexOf(x.kind) >= 0; });
+          if (only.length) list = only;
+        }
         var c = cardOf(n);
         var pick = list[((c && c.seen) || 0) % list.length];
         pick.id = n.id;
         pick.label = n.label;
+        pick.lang = n.lang || 'it';
         pick.mastery = masteryOf(c);
         pick.state = dueState(c, now);
         pick.reps = c ? c.reps : 0;
@@ -431,6 +511,54 @@
       };
     }
 
+    /*
+     * Esame simulato: un numero fisso di domande, nessun verdetto fino alla fine, e alla fine un
+     * punteggio con l'elenco di quello che non sapevi. Non tocca gli intervalli finché non si
+     * consegna: "consegna" vota tutte le risposte in blocco.
+     */
+    function exam(opts) {
+      var o = opts || {}, now = Date.now();
+      graph();
+      var want = clamp(o.limit || 20, 1, MAX_SESSION);
+      var items = order.filter(function (n) {
+        if (o.doc && n.docs.indexOf(o.doc) < 0) return false;
+        return worth(n);
+      });
+      // l'esame pesca a caso tra tutti, non solo tra quelli scaduti: è una verifica, non un ripasso
+      var seed = o.seed || (now % 100000);
+      items = shuffle(items, seed).slice(0, want);
+      var pool2 = kb.pool ? kb.pool(400) : [];
+      var cards = [];
+      items.forEach(function (n) {
+        var info = kb.concept(n.id);
+        if (!info) return;
+        var par = isaOf.get(n.id) ? byId(isaOf.get(n.id)) : null;
+        var list = cardsFor(n, info, par ? { label: par.label } : null, pool2);
+        // in un esame si preferiscono le domande con una risposta verificabile
+        var auto = list.filter(function (c) { return c.kind === 'mc' || c.kind === 'mcrev' || c.kind === 'cloze' || c.kind === 'use'; });
+        var c2 = (auto.length ? auto : list)[0];
+        if (!c2) return;
+        c2.id = n.id; c2.label = n.label; c2.lang = n.lang || 'it';
+        cards.push(c2);
+      });
+      return { mode: 'exam', cards: cards, stats: stats({ doc: o.doc }) };
+    }
+
+    /* Consegna dell'esame: vota tutto in blocco e torna il risultato. */
+    function submit(answers) {
+      var list = (answers || []).slice(0, MAX_SESSION), right = 0, out = [];
+      list.forEach(function (a) {
+        var n = byId(a.id);
+        if (!n) return;
+        var ok = a.correct;
+        if (ok == null && a.typed != null) ok = matches(a.typed, a.answer || n.label, a.lang);
+        var r = grade({ id: a.id, grade: ok ? 2 : 0, kind: a.kind, typed: null });
+        if (ok) right++;
+        out.push({ id: a.id, label: n.label, correct: !!ok, given: a.typed || a.chosen || '', expected: a.answer || n.label, nextIn: r.nextIn });
+      });
+      return { total: list.length, right: right, score: list.length ? Math.round(right / list.length * 100) : 0, items: out, stats: stats() };
+    }
+
     function reset(opts) {
       var o = opts || {};
       if (o.id) {
@@ -461,7 +589,7 @@
         if (!info) continue;
         var parent = null, pid = isaOf.get(n.id);
         if (pid) { var pn = byId(pid); if (pn) parent = { label: pn.label }; }
-        var list = cardsFor(n, info, parent);
+        var list = cardsFor(n, info, parent, null);
         if (!list.length) continue;
         var c = list[0];
         var src = c.source ? ' <i>(' + clean(c.source.name + (c.source.where ? ', ' + c.source.where : '')) + ')</i>' : '';
@@ -475,7 +603,7 @@
 
     return {
       stats: stats, path: path, session: session, grade: grade, mastery: mastery,
-      anki: anki, reset: reset, invalidate: invalidate,
+      exam: exam, submit: submit, anki: anki, reset: reset, invalidate: invalidate,
       state: function () { return st; }
     };
   }

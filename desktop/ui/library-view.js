@@ -152,15 +152,19 @@
     var stHowMany = el('select', { 'aria-label': 'Quante domande' }, [10, 20, 30, 40].map(function (n) {
       return el('option', { value: String(n), text: n + ' domande', selected: n === 20 ? 'selected' : null });
     }));
+    var stMode = el('select', { 'aria-label': 'Modo' }, [
+      el('option', { value: 'review', text: 'Ripasso' }), el('option', { value: 'challenge', text: 'Sfida a tempo' }),
+      el('option', { value: 'exam', text: 'Esame simulato' })]);
     var stStart = el('button', { type: 'button', class: 'wc-btn wc-primary', text: 'Comincia' });
     var stAnki = el('select', { 'aria-label': 'Esporta le domande' }, [
       el('option', { value: '', text: 'Esporta…' }), el('option', { value: 'anki', text: 'Per Anki (.txt)' }),
       el('option', { value: 'csv', text: 'Domande e risposte (.csv)' })]);
-    var stTools = el('div', { class: 'lb-sttools' }, [stScope, stHowMany, stStart, stAnki]);
+    var stTools = el('div', { class: 'lb-sttools' }, [stScope, stMode, stHowMany, stStart, stAnki]);
+    var stXp = el('div', { class: 'lb-xp', hidden: 'hidden' });
     var stTiles = el('div', { class: 'lb-sttiles' });
     var stCard = el('div', { class: 'lb-card', hidden: 'hidden' });
     var stPath = el('div', { class: 'lb-path' });
-    var studyBox = el('div', { class: 'lb-study', hidden: 'hidden' }, [stTools, stTiles, stCard, stPath]);
+    var studyBox = el('div', { class: 'lb-study', hidden: 'hidden' }, [stTools, stXp, stTiles, stCard, stPath]);
 
     // codice
     var cdWhat = el('select', { 'aria-label': 'Cosa mostrare del codice' }, [
@@ -1274,6 +1278,41 @@
      */
     var studyStats = null, session = null, cardAt = 0, revealed = false, sessionLog = [], mastery = null, studyTimer = 0;
 
+    /*
+     * Il testo di una carta può contenere formule in LaTeX fra dollari o righe di codice. Qui si
+     * decide come disegnarlo: niente innerHTML, solo nodi veri, come nel resto dell'app.
+     */
+    function rich(text, opts) {
+      var o = opts || {};
+      var box = el(o.block ? 'div' : 'span', { class: o.cls || '' });
+      var t = String(text == null ? '' : text);
+      if (o.code) {
+        var pre = el('pre', { class: 'lb-snippet' });
+        (g.WCCode ? g.WCCode.highlight(t, o.code) : [[t, '']]).forEach(function (p2) {
+          pre.appendChild(p2[1] ? el('span', { class: 'hl-' + p2[1], text: p2[0] }) : document.createTextNode(p2[0]));
+        });
+        box.appendChild(pre);
+        return box;
+      }
+      if (g.WCMath && g.WCMath.has(t)) box.appendChild(g.WCMath.render(t));
+      else box.textContent = t;
+      return box;
+    }
+    // leggere ad alta voce: la voce del sistema, nessun servizio esterno
+    function sayBtn(text, lang) {
+      if (!window.speechSynthesis) return null;
+      var b = el('button', { type: 'button', class: 'wc-link lb-say', title: 'Leggi ad alta voce', 'aria-label': 'Leggi ad alta voce', text: '🔊' });
+      b.addEventListener('click', function () {
+        try {
+          window.speechSynthesis.cancel();
+          var u = new SpeechSynthesisUtterance(g.WCMath ? g.WCMath.toText(text) : text);
+          u.lang = { it: 'it-IT', en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', pt: 'pt-PT' }[lang || 'it'] || 'it-IT';
+          window.speechSynthesis.speak(u);
+        } catch (e) { toast('La voce non è disponibile qui.'); }
+      });
+      return b;
+    }
+
     function saveStudy(state) {
       clearTimeout(studyTimer);
       studyTimer = setTimeout(function () {
@@ -1307,8 +1346,36 @@
       if (keep && docById.has(keep)) stScope.value = keep;
     }
 
+    function renderXp() {
+      return kb.call('gamify', { doc: studyScope() }).then(function (gm) {
+        stXp.hidden = !gm.answers;
+        if (!gm.answers) return gm;
+        stXp.textContent = '';
+        var lv = el('div', { class: 'lb-lv' }, [
+          el('b', { text: 'Livello ' + gm.level }),
+          el('div', { class: 'lb-mbar lb-xpbar', title: gm.xp + ' punti' }, [el('i', { style: 'width:' + Math.round(gm.progress * 100) + '%' })]),
+          el('span', { class: 'wc-note', text: gm.xp.toLocaleString('it-IT') + ' punti · ' + gm.toNext + ' al livello ' + (gm.level + 1) })]);
+        stXp.appendChild(lv);
+        var line = [];
+        if (gm.streak) line.push('🔥 ' + plural(gm.streak, 'giorno di fila', 'giorni di fila'));
+        line.push('oggi ' + gm.today + ' di ' + gm.goal + (gm.done ? ' ✓' : ''));
+        if (gm.answers) line.push(Math.round(gm.accuracy * 100) + '% giuste su ' + plural(gm.answers, 'risposta', 'risposte'));
+        stXp.appendChild(el('p', { class: 'wc-note', text: line.join(' · ') }));
+        var got = gm.badges.filter(function (b) { return b.got; });
+        if (got.length) {
+          var row = el('div', { class: 'lb-badges-row' });
+          got.forEach(function (b) { row.appendChild(el('span', { class: 'lb-trophy', title: b.why, text: b.name })); });
+          var miss = gm.badges.length - got.length;
+          if (miss) row.appendChild(el('span', { class: 'wc-note', text: '+' + miss + ' da prendere' }));
+          stXp.appendChild(row);
+        }
+        return gm;
+      }).catch(function () { return null; });
+    }
+
     function renderStudy() {
       fillScope();
+      renderXp();
       return kb.call('study-stats', { doc: studyScope() }).then(function (s) {
         studyStats = s;
         updateDueBadge();
@@ -1336,7 +1403,8 @@
     }
 
     function renderPath() {
-      stCard.hidden = true;
+      // la carta resta se c'è qualcosa da leggere (il riepilogo di fine sessione o di fine esame)
+      if (!stCard.childNodes.length) stCard.hidden = true;
       stPath.textContent = '';
       kb.call('study-path', { doc: studyScope(), limit: 300 }).then(function (p) {
         if (!p.items.length) return;
@@ -1362,16 +1430,37 @@
     }
     var STATE = { new: 'mai visto', learning: 'in corso', due: 'da ripassare', mature: 'saldo' };
 
+    var mode = 'review', examAnswers = [], clock0 = 0, clockTimer = 0;
     function startSession() {
-      return kb.call('session', { doc: studyScope(), limit: +stHowMany.value || 20, anyway: true }).then(function (s) {
+      mode = stMode.value || 'review';
+      var limit = +stHowMany.value || 20;
+      var call = mode === 'exam' ? kb.call('exam', { doc: studyScope(), limit: limit }) : kb.call('session', { doc: studyScope(), limit: limit, anyway: true });
+      return call.then(function (s) {
         session = s.cards;
         studyStats = s.stats;
         cardAt = 0;
         sessionLog = [];
+        examAnswers = [];
         if (!session.length) { toast('Non ho trovato domande da fare: prova ad aggiungere documenti con definizioni.'); session = null; return; }
         stPath.textContent = '';
+        clock0 = Date.now();
         showCard();
       }).catch(function (e) { toast('Non riesco a preparare le domande: ' + e.message); });
+    }
+    function stopClock() { clearInterval(clockTimer); clockTimer = 0; }
+    // sfida a tempo: trenta secondi a domanda, e il tempo che scorre si vede
+    var CHALLENGE_S = 30;
+    function startClock(onEnd) {
+      stopClock();
+      var left = CHALLENGE_S, box = stCard.querySelector('.lb-clock');
+      if (!box) return;
+      box.textContent = left + 's';
+      clockTimer = setInterval(function () {
+        left--;
+        box.textContent = Math.max(0, left) + 's';
+        box.classList.toggle('low', left <= 5);
+        if (left <= 0) { stopClock(); onEnd(); }
+      }, 1000);
     }
 
     function showCard() {
@@ -1385,16 +1474,41 @@
           [el('span', { style: 'width:' + Math.round(cardAt / session.length * 100) + '%' })]),
         el('span', { class: 'wc-note', text: (cardAt + 1) + ' di ' + session.length })
       ]);
+      if (mode === 'challenge') top.appendChild(el('span', { class: 'lb-clock', text: CHALLENGE_S + 's' }));
       var stop = el('button', { type: 'button', class: 'wc-link', text: 'Chiudi' });
-      stop.addEventListener('click', function () { session = null; renderStudy(); });
+      stop.addEventListener('click', function () { session = null; clearCard(); renderStudy(); });
       top.appendChild(stop);
       stCard.appendChild(top);
       stCard.appendChild(el('p', { class: 'lb-prompt', text: c.ask }));
-      stCard.appendChild(el('div', { class: 'lb-front' + (c.kind === 'def' || c.kind === 'isa' ? ' lb-term' : ''), text: c.front }));
+      var front = el('div', { class: 'lb-front' + (c.kind === 'def' || c.kind === 'isa' || c.kind === 'open' ? ' lb-term' : '') });
+      front.appendChild(rich(c.front, { code: c.code ? (c.source && c.source.name) || 'x.js' : null }));
+      stCard.appendChild(front);
+      var say = sayBtn(c.front, c.lang);
+      if (say && !c.code) stCard.appendChild(el('p', { class: 'lb-saybar' }, [say]));
       if (c.state === 'due' || c.reps) stCard.appendChild(el('p', { class: 'wc-note', text: 'Già ripassato ' + plural(c.reps, 'volta', 'volte') + '.' }));
 
       var answerRow = el('div', { class: 'lb-answer' });
-      if (c.answer) {
+      // scelta multipla: quattro alternative, tutte concetti veri della tua libreria
+      if (c.options && c.options.length) {
+        var opts = el('div', { class: 'lb-options', role: 'group', 'aria-label': 'Risposte' });
+        c.options.forEach(function (opt, oi) {
+          var b = el('button', { type: 'button', class: 'wc-btn lb-opt', 'data-opt': String(oi + 1) });
+          b.appendChild(el('span', { class: 'lb-optn', text: String(oi + 1) }));
+          b.appendChild(rich(opt));
+          b.addEventListener('click', function () {
+            if (revealed) return;
+            var right = fold(opt) === fold(c.answer);
+            Array.prototype.forEach.call(opts.children, function (x) {
+              x.disabled = true;
+              if (fold(x.textContent.replace(/^\d+/, '')) === fold(c.answer)) x.classList.add('is-right');
+            });
+            if (!right) b.classList.add('is-wrong');
+            pick(c, right, opt);
+          });
+          opts.appendChild(b);
+        });
+        answerRow.appendChild(opts);
+      } else if (c.answer) {
         var input = el('input', { type: 'text', class: 'lb-typed', placeholder: 'Scrivi la risposta…', 'aria-label': 'Scrivi la risposta', autocomplete: 'off', spellcheck: 'false' });
         var ok = el('button', { type: 'submit', class: 'wc-btn wc-primary', text: 'Controlla' });
         var form = el('form', { class: 'wc-inline' }, [input, ok]);
@@ -1402,16 +1516,54 @@
         answerRow.appendChild(form);
         setTimeout(function () { input.focus(); }, 0);
       }
-      var reveal = el('button', { type: 'button', class: 'wc-btn' + (c.answer ? '' : ' wc-primary'), text: 'Mostra la risposta' });
-      reveal.addEventListener('click', function () { showBack(c, null); });
-      answerRow.appendChild(reveal);
+      if (!c.options) {
+        var reveal = el('button', { type: 'button', class: 'wc-btn' + (c.answer ? '' : ' wc-primary'), text: c.open ? 'Mostra la risposta giusta' : 'Mostra la risposta' });
+        reveal.addEventListener('click', function () { showBack(c, null); });
+        answerRow.appendChild(reveal);
+      }
       stCard.appendChild(answerRow);
-      stCard.appendChild(el('p', { class: 'wc-note lb-keys', text: c.answer ? 'Invio per controllare · barra spaziatrice per vedere la risposta' : 'Barra spaziatrice per vedere la risposta, poi da 1 a 4 per il voto' }));
+      var hint = c.options ? 'Premi da 1 a 4 per scegliere' : (c.answer ? 'Invio per controllare · barra spaziatrice per vedere la risposta' : 'Barra spaziatrice per vedere la risposta, poi da 1 a 4 per il voto');
+      stCard.appendChild(el('p', { class: 'wc-note lb-keys', text: hint }));
+      if (mode === 'challenge') startClock(function () { if (!revealed) pick(c, false, '(tempo scaduto)'); });
+    }
+    function fold(x) { return g.WCText.fold(String(x == null ? '' : x)).replace(/\s+/g, ' ').trim(); }
+
+    /*
+     * Una risposta scelta (quiz o tempo scaduto). Nell'esame il voto non si dà subito: si tiene da
+     * parte e si consegna tutto alla fine, come in un compito vero.
+     */
+    function pick(c, right, chosen) {
+      stopClock();
+      if (mode === 'exam') {
+        revealed = true;
+        examAnswers.push({ id: c.id, kind: c.kind, correct: right, chosen: chosen, answer: c.answer, lang: c.lang });
+        sessionLog.push({ label: c.label, correct: right });
+        stCard.appendChild(el('p', { class: 'wc-note', text: 'Risposta registrata. Il risultato alla fine.' }));
+        var next = el('button', { type: 'button', class: 'wc-btn wc-primary', text: cardAt + 1 < session.length ? 'Prossima' : 'Consegna' });
+        next.addEventListener('click', function () { nextCard(); });
+        stCard.appendChild(el('div', { class: 'lb-grades' }, [next]));
+        return;
+      }
+      grade({ id: c.id, grade: right ? 2 : 0, kind: c.kind }).then(function (r) {
+        sessionLog.push({ label: c.label, correct: right });
+        showBack(c, r ? Object.assign({}, r, { correct: right }) : { correct: right, nextIn: 1 });
+      });
     }
 
-    // la risposta scritta: il voto lo decide il confronto, nel thread separato
+    // la risposta scritta: il voto lo decide il confronto, nel thread separato.
+    // Nell'esame non si vota subito: la risposta si mette da parte e si consegna alla fine.
     function answer(opts) {
       var c = session[cardAt];
+      if (mode === 'exam') {
+        stopClock();
+        revealed = true;
+        examAnswers.push({ id: c.id, kind: c.kind, typed: opts.typed, answer: c.answer, lang: c.lang });
+        stCard.appendChild(el('p', { class: 'wc-note', text: 'Risposta registrata. Il risultato alla fine.' }));
+        var next = el('button', { type: 'button', class: 'wc-btn wc-primary', text: cardAt + 1 < session.length ? 'Prossima' : 'Consegna' });
+        next.addEventListener('click', function () { nextCard(); });
+        stCard.appendChild(el('div', { class: 'lb-grades' }, [next]));
+        return;
+      }
       grade(Object.assign({ id: c.id, kind: c.kind, answer: c.answer, lang: c.lang }, opts)).then(function (r) {
         showBack(c, r);
       });
@@ -1436,8 +1588,11 @@
           text: graded.correct ? 'Giusto.' : 'Non è questa. La risposta è: ' + (c.answer || c.back) }));
       }
       var back = el('div', { class: 'lb-back' });
-      back.appendChild(el('h3', { text: c.kind === 'cloze' || c.kind === 'use' ? 'La frase intera' : 'Risposta' }));
-      back.appendChild(el('p', { text: c.back }));
+      var head = { cloze: 'La frase intera', use: 'La frase intera', codewhat: 'Che cosa fa', codedeps: 'Chiama', codewho: 'La chiamano', open: 'Una risposta buona' };
+      back.appendChild(el('h3', { text: head[c.kind] || 'Risposta' }));
+      back.appendChild(rich(c.back, { block: true, cls: 'lb-backtext' }));
+      var sayB = sayBtn(c.back, c.lang);
+      if (sayB) back.appendChild(el('p', { class: 'lb-saybar' }, [sayB]));
       if (c.source) {
         var src = el('p', { class: 'lb-src' }, [el('b', { text: c.source.name }), el('span', { text: c.source.where ? ', ' + c.source.where : '' })]);
         var open = el('button', { type: 'button', class: 'wc-link', text: 'Apri nel documento' });
@@ -1449,13 +1604,26 @@
       card.addEventListener('click', function () { openConcept(c.id); });
       back.appendChild(card);
       stCard.appendChild(back);
-      if (!graded) stCard.appendChild(grades(c));
+      if (mode === 'exam') stCard.appendChild(examGrades(c));
+      else if (!graded) stCard.appendChild(grades(c));
       else stCard.appendChild(nextRow(graded));
       var keys = stCard.querySelector('.lb-keys');
       if (keys) {
         keys.textContent = graded ? 'Invio o barra spaziatrice per la prossima' : 'Da 1 a 4 per il voto: 1 di nuovo, 2 difficile, 3 bene, 4 facile';
         stCard.appendChild(keys); // il suggerimento sui tasti resta in fondo, sotto i voti
       }
+    }
+    function examGrades(c) {
+      var row = el('div', { class: 'lb-grades' });
+      [['Lo sapevo', true], ['Non lo sapevo', false]].forEach(function (x) {
+        var b = el('button', { type: 'button', class: 'wc-btn ' + (x[1] ? 'lb-g2' : 'lb-g0'), text: x[0] });
+        b.addEventListener('click', function () {
+          revealed = false; // pick() rimette il segno e registra
+          pick(c, x[1], '');
+        });
+        row.appendChild(b);
+      });
+      return row;
     }
     function grades(c) {
       var row = el('div', { class: 'lb-grades' });
@@ -1495,10 +1663,14 @@
       else showCard();
     }
     function endSession() {
+      stopClock();
+      if (mode === 'exam' && examAnswers.length) return submitExam();
       var done = sessionLog.length, right = sessionLog.filter(function (x) { return x.correct; }).length;
+      var secs = clock0 ? Math.round((Date.now() - clock0) / 1000) : 0;
       stCard.textContent = '';
-      stCard.appendChild(el('h3', { text: 'Sessione finita' }));
-      stCard.appendChild(el('p', { text: done ? right + ' su ' + done + ' le sapevi.' : 'Nessuna risposta registrata.' }));
+      stCard.appendChild(el('h3', { text: mode === 'challenge' ? 'Sfida finita' : 'Sessione finita' }));
+      stCard.appendChild(el('p', { text: (done ? right + ' su ' + done + ' le sapevi.' : 'Nessuna risposta registrata.') +
+        (secs && mode === 'challenge' ? ' In ' + secs + ' secondi.' : '') }));
       var wrong = sessionLog.filter(function (x) { return !x.correct; });
       if (wrong.length) {
         stCard.appendChild(el('p', { class: 'wc-note', text: 'Da riguardare: ' + wrong.map(function (x) { return x.label; }).join(', ') }));
@@ -1506,11 +1678,44 @@
       var again = el('button', { type: 'button', class: 'wc-btn wc-primary', text: 'Un altro giro' });
       again.addEventListener('click', startSession);
       var close = el('button', { type: 'button', class: 'wc-btn', text: 'Chiudi' });
-      close.addEventListener('click', function () { session = null; renderStudy(); });
+      close.addEventListener('click', function () { session = null; clearCard(); renderStudy(); });
       stCard.appendChild(el('div', { class: 'lb-grades' }, [again, close]));
       session = null;
       refreshMastery();
       renderStudy();
+    }
+
+    /* La consegna dell'esame: si vota tutto in blocco e si vede il risultato. */
+    function submitExam() {
+      kb.call('submit', { answers: examAnswers }).then(function (r) {
+        saveStudy(r.state);
+        var res = r.result;
+        stCard.textContent = '';
+        stCard.appendChild(el('h3', { text: 'Esame consegnato' }));
+        stCard.appendChild(el('p', { class: 'lb-score' + (res.score >= 60 ? ' ok' : ' no'), text: res.score + ' su 100' }));
+        stCard.appendChild(el('p', { text: res.right + ' risposte giuste su ' + res.total + '.' }));
+        var bad = res.items.filter(function (x) { return !x.correct; });
+        if (bad.length) {
+          stCard.appendChild(el('h3', { text: 'Da riguardare' }));
+          var ul = el('ul', { class: 'lb-cdlist' });
+          bad.forEach(function (x) {
+            var b = el('button', { type: 'button', class: 'wc-link', text: x.label });
+            b.addEventListener('click', function () { openConcept(x.id); });
+            ul.appendChild(el('li', {}, [b, el('span', { class: 'wc-note', text: x.given ? ' · avevi risposto «' + x.given + '»' : '' })]));
+          });
+          stCard.appendChild(ul);
+        } else stCard.appendChild(el('p', { class: 'wc-note', text: 'Nessun errore.' }));
+        var again = el('button', { type: 'button', class: 'wc-btn wc-primary', text: 'Un altro esame' });
+        again.addEventListener('click', startSession);
+        var close = el('button', { type: 'button', class: 'wc-btn', text: 'Chiudi' });
+        close.addEventListener('click', function () { session = null; clearCard(); renderStudy(); });
+        stCard.appendChild(el('div', { class: 'lb-grades' }, [again, close]));
+        session = null;
+        examAnswers = [];
+        updateDueBadge();
+        refreshMastery();
+        renderStudy();
+      }).catch(function (e) { toast('Non riesco a consegnare l’esame: ' + e.message); });
     }
     function openSource(s) {
       if (!s || !s.path) return;
@@ -1519,7 +1724,11 @@
     }
 
     stStart.addEventListener('click', startSession);
-    stScope.addEventListener('change', function () { session = null; renderStudy(); });
+    stMode.addEventListener('change', function () {
+      stStart.textContent = stMode.value === 'exam' ? 'Fai l’esame' : (stMode.value === 'challenge' ? 'Via alla sfida' : 'Comincia');
+    });
+    function clearCard() { stopClock(); stCard.textContent = ''; stCard.hidden = true; }
+    stScope.addEventListener('change', function () { session = null; clearCard(); renderStudy(); });
     stHowMany.addEventListener('change', function () { if (!session) renderStudy(); });
     stAnki.addEventListener('change', function () {
       var k = stAnki.value;
@@ -1550,6 +1759,9 @@
         e.preventDefault();
         if (!revealed) showBack(c, null);
         else { var nb = stCard.querySelector('.lb-grades .wc-primary'); if (nb) nb.click(); }
+      } else if (!revealed && e.key >= '1' && e.key <= '4' && stCard.querySelector('.lb-opt')) {
+        var o2 = stCard.querySelector('.lb-opt[data-opt="' + e.key + '"]');
+        if (o2) { e.preventDefault(); o2.click(); }
       } else if (revealed && e.key >= '1' && e.key <= '4') {
         var b = stCard.querySelector('.lb-g' + (+e.key - 1));
         if (b) { e.preventDefault(); b.click(); }

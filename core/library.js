@@ -499,7 +499,7 @@
             c.forms.forEach(function (f, i) { forms.set(f, (forms.get(f) || 0) + (i === 0 ? c.count + 1 : 1)); });
             (c.defs || []).forEach(function (df) { var dk = fold(df.text); if (!defSeen.has(dk) && defs.length < 12) { defSeen.add(dk); defs.push({ text: df.text, d: o.d, n: df.n }); } });
             score += c.score; if (c.name) name = true; kinds.add(c.kind);
-            if (c.code && (!code || c.score > (code.score || 0))) { code = Object.assign({}, c.code, { doc: o.d }); }
+            if (c.code && (!code || c.score > (code.score || 0))) { code = Object.assign({}, c.code, { docIndex: o.d }); }
           });
           (keyChunks.get(k) || []).forEach(function (dc) {
             var key = dc[0] + ':' + dc[1];
@@ -897,6 +897,20 @@
     }
     var REL = { co: 'compare con', def: 'nella definizione', isa: 'è un tipo di', user: 'collegato a', use: 'usa', dep: 'dipende da', ext: 'eredita da' };
 
+    /*
+     * I concetti in forma leggera, con la loro prima definizione: servono per costruire le
+     * alternative sbagliate di un quiz senza aprire la scheda di ognuno.
+     */
+    function pool(limit) {
+      var G = graph(), out = [];
+      G.nodes.forEach(function (nd) {
+        out.push({ id: nd.id, label: nd.label, rank: round(nd.rank, 3), defs: nd.defs.length,
+          code: nd.code ? nd.code.kind : null, firstDef: nd.defs.length ? nd.defs[0].text : '' });
+      });
+      out.sort(function (a, b) { return b.rank - a.rank; });
+      return out.slice(0, limit || 400);
+    }
+
     function concept(id) {
       var G = graph(), nd = G.nodes.get(G.nodeOfKey.get(id) || id);
       if (!nd) return null;
@@ -1208,6 +1222,7 @@
 
     return {
       search: search,
+      pool: pool,
       code: code,
       codeMarkdown: codeMarkdown,
       graph: graphOut,

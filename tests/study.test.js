@@ -4,9 +4,9 @@
 const path = require('path');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
-['core/settings.js', 'core/lang.js', 'core/text.js', 'core/analysis.js', 'core/library.js', 'core/study.js']
+['core/settings.js', 'core/lang.js', 'core/text.js', 'core/analysis.js', 'core/code.js', 'core/library.js', 'core/study.js', 'core/gamify.js']
   .forEach((f) => require(path.join(root, f)));
-const { WCText, WCLibrary, WCStudy } = globalThis;
+const { WCText, WCLibrary, WCStudy, WCGamify } = globalThis;
 
 let failures = 0;
 async function check(name, fn) {
@@ -265,6 +265,117 @@ const docC = input('Appunti_Telecomunicazioni.md', [
     assert.strictEqual(st.studied, 1);
     assert.ok(again.mastery()[qam.id][0] > 0, 'la padronanza è tornata');
     assert.strictEqual(again.state().log.length, 1);
+  });
+
+  await check('quiz a scelta multipla: alternative vere, non inventate', () => {
+    const study = WCStudy.open(WCStudy.emptyState(), kb);
+    const pool = kb.pool(400);
+    assert.ok(pool.length >= 5 && pool.some((p) => p.firstDef), 'il serbatoio delle alternative: ' + pool.length);
+    const s = study.session({ limit: 40, anyway: true });
+    const mc = s.cards.find((c) => c.kind === 'mc') || (() => {
+      // la rotazione sceglie una carta per concetto: si forza un giro in più
+      kb.graph().nodes.slice(0, 6).forEach((n) => study.grade({ id: n.id, grade: 2 }));
+      return study.session({ limit: 40, anyway: true }).cards.find((c) => c.kind === 'mc');
+    })();
+    if (mc) {
+      assert.strictEqual(mc.options.length, 4, 'quattro alternative');
+      assert.ok(mc.options.includes(mc.answer), 'la risposta giusta è fra le alternative');
+      assert.strictEqual(new Set(mc.options).size, 4, 'nessun doppione');
+      const labels = new Set(kb.graph().nodes.map((n) => n.label));
+      mc.options.forEach((o) => assert.ok(labels.has(o), 'è un concetto vero della libreria: ' + o));
+    }
+  });
+
+  await check('domande sul codice e carte aperte', async () => {
+    const code = globalThis.WCCode.parse(['// somma due numeri e li manda alla radio', 'void invia(int a, int b) {', '  trasmetti(a + b);', '}', '', 'void trasmetti(int v) { }', '', 'void loop() { invia(1, 2); }'].join('\n'), 'radio.ino');
+    const toks = WCText.tokenizeBlocks(code.blocks.map((b) => ({ text: b.text, w: b.type === 'h' ? 2 : 1 })));
+    const rec = await WCLibrary.buildRecord({
+      meta: { id: 'd-00000000000000c0', path: '/p/radio.ino', name: 'radio.ino', ext: 'ino', size: 1, hash: 'hc' },
+      format: 'Arduino', title: 'radio.ino', tokens: toks.map((t) => [t.text, t.gap, t.blk, t.w, null]), tail: '',
+      blocks: code.blocks.map((b) => ({ type: b.type, level: b.level, line: b.line })), code: code
+    }, {});
+    const kb2 = WCLibrary.open([rec], WCLibrary.emptyEdits());
+    const study = WCStudy.open(WCStudy.emptyState(), kb2);
+    const kinds = new Set();
+    for (let i = 0; i < 5; i++) {
+      const s = study.session({ limit: 20, anyway: true });
+      s.cards.forEach((c) => kinds.add(c.kind));
+      s.cards.forEach((c) => study.grade({ id: c.id, grade: 2 }));
+    }
+    assert.ok(kinds.has('codewhat'), 'una domanda «che cosa fa»: ' + Array.from(kinds).join(', '));
+    assert.ok(kinds.has('codedeps') || kinds.has('codewho'), 'e una sulle dipendenze: ' + Array.from(kinds).join(', '));
+    const one = study.session({ limit: 20, anyway: true, kinds: ['codewhat'] }).cards.find((c) => c.kind === 'codewhat');
+    if (one) {
+      assert.ok(one.open, 'è una domanda aperta');
+      assert.ok(/somma due numeri/.test(one.back), 'la risposta è il commento vero: ' + one.back);
+      assert.ok(/invia/.test(one.front), 'la domanda è la firma: ' + one.front);
+    }
+  });
+
+  await check('esame simulato: nessun verdetto fino alla consegna, poi il punteggio', () => {
+    const study = WCStudy.open(WCStudy.emptyState(), kb);
+    const ex = study.exam({ limit: 6, seed: 7 });
+    assert.strictEqual(ex.mode, 'exam');
+    assert.ok(ex.cards.length >= 3 && ex.cards.length <= 6, 'domande: ' + ex.cards.length);
+    ex.cards.forEach((c) => assert.ok(['mc', 'mcrev', 'cloze', 'use', 'def', 'isa', 'open'].includes(c.kind), c.kind));
+    assert.strictEqual(study.stats().studied, 0, 'prima della consegna niente è votato');
+    const answers = ex.cards.map((c, i) => ({ id: c.id, kind: c.kind, correct: i % 2 === 0, answer: c.answer }));
+    const res = study.submit(answers);
+    assert.strictEqual(res.total, answers.length);
+    assert.strictEqual(res.right, answers.filter((a) => a.correct).length);
+    assert.strictEqual(res.score, Math.round(res.right / res.total * 100));
+    assert.strictEqual(study.stats().studied, answers.length, 'alla consegna i voti si registrano');
+    assert.ok(res.items.every((x) => x.label && x.nextIn >= 1), 'ogni voce col suo prossimo ripasso');
+    const stesso = study.exam({ limit: 6, seed: 7 }).cards.map((c) => c.id).join(',');
+    assert.strictEqual(stesso, ex.cards.map((c) => c.id).join(','), 'lo stesso seme dà lo stesso esame');
+  });
+
+  // ---------------------------------------------------------------- punti e traguardi
+  await check('punti, livelli, giorni di fila e traguardi', () => {
+    const empty = WCGamify.of({ cards: {}, log: [] });
+    assert.strictEqual(empty.xp, 0);
+    assert.strictEqual(empty.level, 1);
+    assert.strictEqual(empty.streak, 0);
+    assert.ok(empty.badges.every((b) => !b.got), 'niente traguardi senza risposte');
+
+    const now = Date.UTC(2026, 9, 28, 12);
+    const day = (n) => new Date(now - n * 86400000).toISOString();
+    const log = [];
+    for (let i = 0; i < 12; i++) log.push({ t: day(0), id: 'c' + i, g: i % 4 === 0 ? 0 : 2 });
+    log.push({ t: day(1), id: 'x', g: 2 });
+    log.push({ t: day(2), id: 'y', g: 2 });
+    const gm = WCGamify.of({ cards: { a: { interval: 30 }, b: { interval: 3 } }, log }, { now, goal: 10 });
+    assert.strictEqual(gm.answers, 14);
+    assert.strictEqual(gm.right, 11);
+    assert.strictEqual(gm.xp, 11 * 10 + 3 * 3 + 1 * 5, 'punti: giuste, sbagliate e un concetto saldo');
+    assert.strictEqual(gm.level, WCGamify.levelOf(gm.xp));
+    assert.ok(gm.level >= 2, 'livello: ' + gm.level);
+    assert.strictEqual(gm.streak, 3, 'tre giorni di fila');
+    assert.strictEqual(gm.today, 12);
+    assert.ok(gm.done, 'obiettivo del giorno raggiunto');
+    assert.ok(gm.progress >= 0 && gm.progress <= 1);
+    const got = gm.badges.filter((b) => b.got).map((b) => b.id);
+    assert.ok(got.includes('first') && got.includes('ten') && got.includes('goal'), 'traguardi: ' + got.join(', '));
+    assert.ok(!got.includes('week'), 'una settimana non ancora');
+
+    // un giorno saltato azzera la serie
+    const rotta = WCGamify.of({ cards: {}, log: [{ t: day(0), g: 2 }, { t: day(3), g: 2 }] }, { now });
+    assert.strictEqual(rotta.streak, 1);
+    assert.strictEqual(rotta.best, 1);
+    // e i punti seguono lo studio: azzerare lo studio azzera tutto
+    assert.strictEqual(WCGamify.of({ cards: {}, log: [] }).xp, 0);
+  });
+
+  await check('le formule in LaTeX diventano testo leggibile', () => {
+    const M = require(path.join(root, 'core/math.js')) || globalThis.WCMath;
+    const WM = globalThis.WCMath;
+    assert.ok(WM.has('la formula $E = mc^2$ dice'), 'riconosce una formula in linea');
+    assert.ok(WM.has('$$\\frac{a}{b}$$'), 'e una a capo');
+    assert.ok(!WM.has('costa 30 euro'), 'niente formule qui');
+    assert.strictEqual(WM.toText('\\frac{1}{2}'), '(1)/(2)');
+    assert.strictEqual(WM.toText('\\alpha + \\beta'), 'α + β');
+    assert.strictEqual(WM.toText('\\sqrt{x}'), '√(x)');
+    assert.ok(/Ω/.test(WM.toText('R = 10 \\Omega')));
   });
 
   console.log(failures ? '\n' + failures + ' prove fallite' : '\ntutte le prove dello studio sono passate');

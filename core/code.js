@@ -66,7 +66,7 @@
    * Torna { masked, comments: [{ line, text, block }] }.
    */
   function mask(text, family) {
-    var n = text.length, out = new Array(n), comments = [];
+    var n = text.length, out = new Array(n), comments = [], ranges = [];
     var lineStarts = [0];
     for (var i = 0; i < n; i++) if (text.charCodeAt(i) === 10) lineStarts.push(i + 1);
     function lineOf(pos) {
@@ -93,6 +93,7 @@
           out[i2] = text[i2] === '\n' ? '\n' : ' ';
           i2++;
         }
+        ranges.push([start, i2, triple ? 'com' : 'str']);
         // le stringhe lunghe di Python sono documentazione
         if (triple) comments.push({ line: lineOf(start), text: text.slice(start + 3, i2 - 3).trim(), block: true, doc: true });
         continue;
@@ -109,6 +110,7 @@
         var s0 = i2;
         while (i2 < n && text[i2] !== '\n') { out[i2] = ' '; i2++; }
         comments.push({ line: lineOf(s0), text: text.slice(s0, i2).replace(/^[\/#;\-\s]+/, '').trim(), block: false });
+        ranges.push([s0, i2, 'com']);
         continue;
       }
       if (kind === 'block') {
@@ -118,13 +120,14 @@
         i2 += 2;
         var body = text.slice(s1 + 2, i2 - 2).replace(/^\*+/, '').split('\n').map(function (l) { return l.replace(/^\s*\*?\s?/, ''); }).join('\n').trim();
         comments.push({ line: lineOf(s1), text: body, block: true, doc: text[s1 + 2] === '*' });
+        ranges.push([s1, i2, 'com']);
         continue;
       }
       out[i2] = c;
       i2++;
     }
     for (var k = 0; k < n; k++) if (out[k] === undefined) out[k] = ' ';
-    return { masked: out.join(''), comments: comments, lineOf: lineOf };
+    return { masked: out.join(''), comments: comments, ranges: ranges, lineOf: lineOf };
   }
 
   // il commento attaccato sopra una riga: è la documentazione di quel simbolo
@@ -464,5 +467,52 @@
     'funzione metodo classe interfaccia struttura enumerazione variabile costante endpoint tabella stile configurazione cella dipendenze righe elementi fare'
   ).split(' ').filter(Boolean));
 
-  g.WCCode = { is: is, parse: parse, ext: ext, dead: dead, EXT: EXT, LANGS: LANGS, KIND_IT: KIND_IT, ENTRY: ENTRY, STOP: STOP };
+  /*
+   * Evidenziazione del codice: si riusa la stessa mascheratura che serve a leggerlo, così commenti e
+   * stringhe sono già individuati con esattezza invece che indovinati. Torna un elenco di pezzi
+   * [testo, tipo] con tipo fra 'com', 'str', 'kw', 'num', 'fn' e '' (normale): chi disegna ci mette
+   * i colori che vuole, senza passare da innerHTML.
+   */
+  var HL_KW = new Set(('if else for while do switch case default break continue return function func def fn class struct enum interface ' +
+    'const let var static public private protected new delete this self super import export from require include package namespace using ' +
+    'try catch finally throw throws async await yield lambda pass with as in is not and or void int float double char bool boolean string ' +
+    'true false null nil none undefined end then elif unless module trait impl pub fn let mut match where select insert update create table').split(' '));
+  function highlight(text, name) {
+    var family = (LANGS[ext(name)] || ['', 'braces'])[1];
+    var src = String(text == null ? '' : text).replace(/\r\n?/g, '\n');
+    var m = mask(src, family === 'notebook' ? 'python' : family);
+    var out = [], at = 0;
+    function push(t, kind) {
+      if (!t) return;
+      var last = out[out.length - 1];
+      if (last && last[1] === kind) last[0] += t; else out.push([t, kind]);
+    }
+    function plain(from, to) {
+      var s2 = src.slice(from, to), i = 0;
+      while (i < s2.length) {
+        var w = /^[A-Za-z_$][\w$]*/.exec(s2.slice(i));
+        if (w) {
+          var word = w[0];
+          i += word.length;
+          push(word, HL_KW.has(word.toLowerCase()) ? 'kw' : (/^\s*\(/.test(s2.slice(i)) ? 'fn' : ''));
+          continue;
+        }
+        var num = /^\d[\w.]*/.exec(s2.slice(i));
+        if (num) { push(num[0], 'num'); i += num[0].length; continue; }
+        push(s2[i], '');
+        i++;
+      }
+    }
+    m.ranges.sort(function (a, b) { return a[0] - b[0]; });
+    m.ranges.forEach(function (r) {
+      if (r[0] < at) return;
+      plain(at, r[0]);
+      push(src.slice(r[0], r[1]), r[2]);
+      at = r[1];
+    });
+    plain(at, src.length);
+    return out;
+  }
+
+  g.WCCode = { is: is, parse: parse, ext: ext, dead: dead, highlight: highlight, EXT: EXT, LANGS: LANGS, KIND_IT: KIND_IT, ENTRY: ENTRY, STOP: STOP };
 })(globalThis);
