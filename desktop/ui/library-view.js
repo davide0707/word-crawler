@@ -632,6 +632,17 @@
       if (c.multi) badges.appendChild(el('span', { class: 'lb-badge multi', text: 'in ' + c.docs.length + ' documenti' }));
       panel.appendChild(el('h2', { text: 'Concetto' }));
       panel.appendChild(el('p', { class: 'lb-title', text: c.label }));
+      if (c.code) {
+        var CK = { function: 'funzione', method: 'metodo', class: 'classe', interface: 'interfaccia', struct: 'struttura', enum: 'enumerazione',
+          variable: 'variabile', constant: 'costante', endpoint: 'endpoint', table: 'tabella', style: 'stile', setting: 'configurazione' };
+        var bits = [CK[c.code.kind] || c.code.kind];
+        if (c.code.params && c.code.params.length) bits.push(plural(c.code.params.length, 'parametro', 'parametri') + ': ' + c.code.params.join(', '));
+        if (c.code.exported) bits.push('esportata');
+        if (c.code.complexity > 1) bits.push('complessità ' + c.code.complexity);
+        panel.appendChild(el('p', { class: 'lb-codebar' }, [
+          el('code', { text: c.code.signature || c.label }),
+          el('span', { class: 'wc-note', text: ' · ' + bits.join(' · ') + ' · riga ' + c.code.line + (c.code.endLine > c.code.line ? '–' + c.code.endLine : '') })]));
+      }
       panel.appendChild(badges);
       panel.appendChild(el('p', { class: 'wc-note', text: plural(c.count, 'volta', 'volte') + ' in ' + plural(c.total, 'passaggio', 'passaggi') + ': ' + c.docs.map(function (d) { return d.name; }).join(', ') }));
       var actions = el('div', { class: 'lb-actions' });

@@ -3,6 +3,7 @@
  * Word Crawler: lettura dei file per la libreria (nel browser o nella finestra dell'app).
  * Trasforma un file in parole con la loro posizione, pronte per l'analisi (library.js):
  *  - documenti (Word, OpenDocument, PowerPoint, Excel, EPUB, RTF, HTML, Markdown, testo…): blocchi di formats.js;
+ *  - codice (JavaScript, Python, C, Arduino, SQL…): struttura letta da code.js, che viaggia col documento;
  *  - PDF: testo di PDF.js con il riquadro di ogni parola sulla pagina; le pagine senza testo con l'OCR;
  *  - immagini: OCR (Tesseract).
  * Il file non viene modificato: si leggono solo i suoi byte.
@@ -135,9 +136,10 @@
           format: model.format, title: model.title, warnings: model.warnings || [],
           pages: blocks.some(function (b) { return b.slide; }) ? blocks.reduce(function (m, b) { return Math.max(m, b.slide || 0); }, 0) : null,
           tokens: toks.map(function (t) { return [t.text, t.gap, t.blk, t.w, null]; }),
-          blocks: blocks.map(function (b) { var o = { type: b.type }; if (b.level) o.level = b.level; if (b.slide) o.slide = b.slide; return o; })
+          blocks: blocks.map(function (b) { var o = { type: b.type }; if (b.level) o.level = b.level; if (b.slide) o.slide = b.slide; if (b.line) o.line = b.line; return o; })
         };
         if (toks.length) out.tail = toks[toks.length - 1].tail || '';
+        if (model.code) out.code = model.code; // funzioni, classi, import, chiamate: diventano nodi del grafo
       }
       out.meta = meta;
       if (!out.title) out.title = String(name).replace(/\.[^.]+$/, '');

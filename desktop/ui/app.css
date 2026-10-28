@@ -170,6 +170,8 @@ body { padding-top: var(--wc-top, 52px); }
 .lb-panel h2 { margin: 12px 0 0; }
 .lb-back { align-self: flex-start; font-size: 12.5px; }
 .lb-title { margin: 0; font: 700 21px/1.25 var(--wc-ui); overflow-wrap: anywhere; }
+.lb-codebar { margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.lb-codebar code { font: 12.5px var(--wc-mono); color: var(--wc-cyan); background: var(--wc-panel-2); border-radius: 5px; padding: 4px 7px; overflow-wrap: anywhere; }
 .lb-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
 .lb-top, .lb-alias, .lb-sum { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; }
 .lb-dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: 13px; }

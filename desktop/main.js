@@ -27,8 +27,11 @@ const scanTools = require('./scan-tools');
 const APP_ROOT = path.join(__dirname, '..');
 const SERVED = ['core', path.join('desktop', 'ui'), path.join('node_modules', 'pdfjs-dist'), path.join('node_modules', 'tesseract.js', 'dist'),
   path.join('node_modules', 'tesseract.js-core'), path.join('build', 'icons')];
+// i file di codice sono documenti come gli altri: l'elenco deve restare uguale a quello di core/code.js
+const CODE_EXT = ['js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'py', 'pyw', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'ino', 'java', 'cs', 'go', 'rs',
+  'php', 'swift', 'kt', 'kts', 'rb', 'v', 'sv', 'css', 'scss', 'sass', 'less', 'sql', 'sh', 'bash', 'zsh', 'json', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'ipynb'];
 const DOC_EXT = ['pdf', 'docx', 'docm', 'dotx', 'doc', 'odt', 'ott', 'odp', 'ods', 'pptx', 'pptm', 'ppsx', 'xlsx', 'xlsm', 'epub', 'rtf', 'html', 'htm', 'xhtml', 'md', 'markdown', 'txt', 'text', 'log', 'srt', 'vtt', 'csv', 'tsv',
-  'png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'];
+  'png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].concat(CODE_EXT);
 const MAX_OPEN_BYTES = 300 * 1024 * 1024;
 
 protocol.registerSchemesAsPrivileged([
@@ -386,7 +389,10 @@ ipcMain.handle('scan:export-csv', async (_e, csvPath) => {
 // ------------------------------------------------------------------ IPC: libreria
 // I documenti originali si leggono soltanto. Per ognuno si salva un "record" (testo diviso in pezzi,
 // concetti, posizione delle fonti) nella cartella dati dell'app: library/docs/<id>.json.
-const LIB_SKIP_DIRS = new Set(['node_modules', '$recycle.bin', 'system volume information', '.git', '.svn', '.trash', '.trashes', '__pycache__']);
+const LIB_SKIP_DIRS = new Set(['node_modules', '$recycle.bin', 'system volume information', '.git', '.svn', '.trash', '.trashes', '__pycache__',
+  'dist', 'build', 'out', 'target', 'vendor', 'venv', '.venv', 'env', '.next', '.nuxt', 'coverage', 'bower_components', '.gradle', '.idea', '.vscode', 'pods', 'deps', '_build']);
+// file generati che non vale la pena leggere
+const LIB_SKIP_FILES = /(\.min\.(js|css)|\.map|-lock\.json|\.lock)$/i;
 // nelle cartelle si saltano le immagini (foto, icone…): si aggiungono una per una se servono
 const LIB_FOLDER_EXT = DOC_EXT.filter((e) => !['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'log', 'text'].includes(e));
 const LIB_MAX_FILES = 5000;
@@ -481,7 +487,7 @@ async function libWalk(root) {
       if (e.isSymbolicLink()) continue;
       if (e.isDirectory()) {
         if (depth < 20 && !LIB_SKIP_DIRS.has(e.name.toLowerCase())) stack.push([full, depth + 1]);
-      } else if (e.isFile() && LIB_FOLDER_EXT.includes(path.extname(e.name).slice(1).toLowerCase())) {
+      } else if (e.isFile() && LIB_FOLDER_EXT.includes(path.extname(e.name).slice(1).toLowerCase()) && !LIB_SKIP_FILES.test(e.name)) {
         if (files.length >= LIB_MAX_FILES) { truncated = true; break; }
         try { files.push(await libFileInfo(full)); } catch (err) { skipped++; }
       }

@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 const root = path.join(__dirname, '..');
-['core/settings.js', 'core/lang.js', 'core/text.js', 'core/analysis.js', 'core/zip.js', 'core/cfb.js', 'core/formats.js',
+['core/settings.js', 'core/lang.js', 'core/text.js', 'core/analysis.js', 'core/zip.js', 'core/cfb.js', 'core/code.js', 'core/formats.js',
   'core/annotate.js', 'core/docx.js', 'core/export.js', 'core/ocr.js', 'core/pen.js'].forEach((f) => require(path.join(root, f)));
 const { WCText, WCAnalysis, WCSettings, WCLang, WCZip, WCFormats, WCAnnotate, WCDocx, WCExport, WCOcr, WCPen } = globalThis;
 

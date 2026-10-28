@@ -88,6 +88,7 @@
       var c = { n: chunks.length, kind: kind, text: T.sentenceText(toks, from, to).slice(0, 4000), section: section, from: from, to: to };
       if (t0.page != null) { c.page = t0.page; if (tl.page != null && tl.page !== t0.page) c.pageTo = tl.page; }
       if (info && info.slide) c.slide = info.slide;
+      if (info && info.line) c.line = info.line; // file di codice: la riga da cui viene il pezzo
       var box = null;
       for (var k = from; k < to; k++) {
         var b = toks[k].box;
@@ -198,7 +199,8 @@
       mtime: meta.mtime || null, created: meta.created || null, hash: meta.hash || '', imported: meta.imported || new Date().toISOString(),
       format: input.format || '', title: input.title || meta.name || '', lang: lang, langName: LANG.get(lang).name,
       pages: input.pages || null, ocrPages: input.ocrPages || 0, words: toks.length, warnings: input.warnings || [],
-      status: 'ok', error: null, summary: [], chunks: [], concepts: [], aliases: []
+      status: 'ok', error: null, summary: [], chunks: [], concepts: [], aliases: [],
+      code: input.code ? compactCode(input.code) : null
     };
     if (!toks.length) { base.status = 'empty'; base.error = 'nessun testo da leggere'; return Promise.resolve(base); }
     return LANG.ensure(lang).then(function () {
@@ -250,6 +252,23 @@
         });
       });
 
+      /*
+       * I simboli del codice diventano concetti come gli altri: così entrano nella ricerca, nel grafo
+       * e nello studio senza regole a parte. Il commento sopra la funzione fa da definizione, la riga
+       * fa da fonte, e il conteggio degli usi arriva dalla scansione qui sotto (una funzione chiamata
+       * in dieci punti compare in dieci pezzi).
+       */
+      if (input.code && input.code.symbols) {
+        var CK = (g.WCCode && g.WCCode.KIND_IT) || {};
+        input.code.symbols.forEach(function (sym) {
+          if (!sym.name || sym.name.length < 2) return;
+          var c = add(sym.name, sym.kind === 'function' || sym.kind === 'class' || sym.kind === 'method' ? 0.9 : 0.4, 'code:' + sym.kind, false);
+          if (!c) return;
+          c.code = { kind: sym.kind, line: sym.line, endLine: sym.endLine, signature: sym.signature || sym.name, params: sym.params || [], exported: !!sym.exported, complexity: sym.complexity || 1, base: sym.base || '' };
+          if (sym.doc && c.defs.length < 4) c.defs.push({ text: (CK[sym.kind] || sym.kind) + ' ' + sym.name + ': ' + sym.doc, n: 0, code: true });
+        });
+      }
+
       // dove compare ogni concetto (sequenza di radici dentro il pezzo)
       var byFirst = new Map();
       cands.forEach(function (c) {
@@ -271,16 +290,37 @@
         }
       });
 
+      // la definizione di un simbolo punta al pezzo con la sua firma, non al primo dove compare
+      cands.forEach(function (c) {
+        if (!c.code || !c.defs.length) return;
+        var want = fold((((g.WCCode || {}).KIND_IT || {})[c.code.kind] || '') + ' ' + (c.code.signature || ''));
+        var at = null;
+        chunks.forEach(function (ch) { if (at === null && want && fold(ch.text).indexOf(want) === 0) at = ch.n; });
+        if (at === null && c.chunks.size) at = Math.min.apply(null, Array.from(c.chunks));
+        c.defs.forEach(function (d) { if (d.code && at !== null) d.n = at; });
+      });
+      // in un file di codice le parole del linguaggio non sono concetti
+      if (input.code && g.WCCode) {
+        var CSTOP = g.WCCode.STOP;
+        Array.from(cands.keys()).forEach(function (k) {
+          var c = cands.get(k);
+          if (c.code) return;
+          var only = Array.from(c.forms.keys()).every(function (f) { return CSTOP.has(fold(f)); });
+          if (only) cands.delete(k);
+        });
+      }
       var list = Array.from(cands.values()).filter(function (c) { return c.chunks.size || c.defs.length; });
       list.sort(function (a, b) { return b.score - a.score || b.count - a.count; });
       // una parola sola, comparsa una volta, che non è un nome, una sigla o un termine definito: troppo debole
-      list = list.filter(function (c, i) { return i < 5 || c.count >= 2 || c.name || c.defs.length || c.kind === 'acronym' || c.seq.length > 1; });
+      list = list.filter(function (c, i) { return i < 5 || c.count >= 2 || c.name || c.defs.length || c.code || c.kind === 'acronym' || c.seq.length > 1; });
       var keep = new Set(list.slice(0, MAX_CONCEPTS));
-      list.forEach(function (c) { if (c.defs.length || c.kind === 'acronym') keep.add(c); });
+      list.forEach(function (c) { if (c.defs.length || c.code || c.kind === 'acronym') keep.add(c); });
       base.aliases.forEach(function (p) { [ckey(p[0], lang), ckey(p[1], lang)].forEach(function (k) { if (cands.get(k)) keep.add(cands.get(k)); }); });
       base.concepts = list.filter(function (c) { return keep.has(c); }).map(function (c) {
         var forms = Array.from(c.forms.entries()).sort(function (a, b) { return b[1] - a[1]; }).map(function (e) { return e[0]; });
-        return { key: c.key, label: forms[0], forms: forms.slice(0, 6), score: round(c.score), count: c.count, name: c.name, kind: c.kind, defs: c.defs };
+        var o = { key: c.key, label: forms[0], forms: forms.slice(0, 6), score: round(c.score), count: c.count, name: c.name, kind: c.kind, defs: c.defs };
+        if (c.code) o.code = c.code;
+        return o;
       });
       base.summary = res.summary.slice(0, 6).map(function (x) { return { text: x.text, n: chunkOf[Math.max(0, Math.min(toks.length - 1, x.idx))] }; });
       base.keywords = res.keywords.slice(0, 12).map(function (k) { return k.word; });
@@ -291,6 +331,7 @@
         if (c.page != null) o.page = c.page;
         if (c.pageTo != null) o.pageTo = c.pageTo;
         if (c.slide) o.slide = c.slide;
+        if (c.line) o.line = c.line;
         if (c.box) o.box = c.box;
         return o;
       });
@@ -304,6 +345,7 @@
     var parts = [];
     if (ch.page != null) parts.push('p. ' + (ch.page + 1) + (ch.pageTo != null ? '–' + (ch.pageTo + 1) : ''));
     if (ch.slide) parts.push('slide ' + ch.slide);
+    if (ch.line) parts.push('riga ' + ch.line);
     if (ch.section && ch.kind !== 'h') parts.push(ch.section);
     return parts.join(' · ');
   }
@@ -449,7 +491,7 @@
         members.sort();
         var id = members[0];
         var forms = new Map(), docCount = new Map(), chunks = [], chunkSeen = new Set(), defs = [], defSeen = new Set();
-        var score = 0, count = 0, name = false, kinds = new Set();
+        var score = 0, count = 0, name = false, kinds = new Set(), code = null;
         members.forEach(function (k) {
           nodeOfKey.set(k, id);
           occ.get(k).forEach(function (o) {
@@ -457,6 +499,7 @@
             c.forms.forEach(function (f, i) { forms.set(f, (forms.get(f) || 0) + (i === 0 ? c.count + 1 : 1)); });
             (c.defs || []).forEach(function (df) { var dk = fold(df.text); if (!defSeen.has(dk) && defs.length < 12) { defSeen.add(dk); defs.push({ text: df.text, d: o.d, n: df.n }); } });
             score += c.score; if (c.name) name = true; kinds.add(c.kind);
+            if (c.code && (!code || c.score > (code.score || 0))) { code = Object.assign({}, c.code, { doc: o.d }); }
           });
           (keyChunks.get(k) || []).forEach(function (dc) {
             var key = dc[0] + ':' + dc[1];
@@ -474,7 +517,7 @@
         nodes.set(id, {
           id: id, members: members, memberLabels: members.map(function (k) { return occ.get(k)[0].c.label; }), label: label || fl[0][0], forms: fl.map(function (e) { return e[0]; }).concat(extra.filter(function (x) { return !forms.has(x); })),
           userAliases: extra, docs: Array.from(docCount.entries()).map(function (e) { return { id: e[0], count: e[1] }; }).sort(function (a, b) { return b.count - a.count; }),
-          chunks: chunks, defs: defs, score: score, count: count, name: name, kinds: Array.from(kinds), lang: keyLang.get(id) || 'it'
+          chunks: chunks, defs: defs, score: score, count: count, name: name, kinds: Array.from(kinds), code: code, lang: keyLang.get(id) || 'it'
         });
       });
 
@@ -498,6 +541,64 @@
         var w = c / Math.sqrt(A.chunks.length * B.chunks.length);
         if (c >= 2 || w >= 0.5) edges.set(k, { a: ab[0], b: ab[1], c: c, w: w, type: 'co' });
       });
+      /*
+       * Archi dal codice: chi chiama chi ("usa"), cosa importa cosa ("dipende da"), chi eredita da chi.
+       * Sono relazioni certe, lette dalla struttura del file, non dedotte dal testo: hanno un peso alto
+       * e vincono sulla semplice co-occorrenza.
+       */
+      var CODE_REL = { use: 'usa', dep: 'dipende da', ext: 'eredita da' };
+      function codeNode(name2, lang2) {
+        var k = ckey(name2, lang2);
+        return k ? nodeOfKey.get(k) : null;
+      }
+      docs.forEach(function (r) {
+        if (!r.code) return;
+        (r.code.calls || []).forEach(function (c) {
+          if (!c.from || !c.to) return;
+          var a = codeNode(c.from, r.lang), b = codeNode(c.to, r.lang);
+          if (!a || !b || a === b) return;
+          var k = pairKey(a, b), e = edges.get(k);
+          if (!e) { e = { a: a, b: b, c: 0, w: 0.75, type: 'use', label: CODE_REL.use }; edges.set(k, e); }
+          else if (e.type === 'co') { e.type = 'use'; e.label = CODE_REL.use; e.a = a; e.b = b; e.w = Math.max(e.w, 0.75); }
+        });
+        (r.code.symbols || []).forEach(function (sym) {
+          if (!sym.base) return;
+          var a2 = codeNode(sym.name, r.lang), b2 = codeNode(sym.base, r.lang);
+          if (!a2 || !b2 || a2 === b2) return;
+          var k2 = pairKey(a2, b2);
+          edges.set(k2, { a: a2, b: b2, c: 0, w: 0.9, type: 'ext', label: CODE_REL.ext });
+        });
+      });
+      // dipendenze tra file: il file che importa -> il file importato (quando è nella libreria)
+      var byBase = new Map();
+      docs.forEach(function (r, di) {
+        var bn = String(r.name || '').replace(/\.[^.]+$/, '').toLowerCase();
+        if (bn) { if (!byBase.has(bn)) byBase.set(bn, []); byBase.get(bn).push(di); }
+      });
+      docs.forEach(function (r) {
+        if (!r.code) return;
+        (r.code.imports || []).forEach(function (im) {
+          var target = String(im.from || '').split(/[\\/]/).pop().replace(/\.[^.]+$/, '').toLowerCase();
+          if (!target) return;
+          (byBase.get(target) || []).forEach(function (di2) {
+            if (docs[di2] === r) return;
+            // il collegamento è tra i concetti più centrali dei due file: li rappresentano
+            var a3 = mainNodeOf(r), b3 = mainNodeOf(docs[di2]);
+            if (!a3 || !b3 || a3 === b3) return;
+            var k3 = pairKey(a3, b3);
+            if (!edges.has(k3)) edges.set(k3, { a: a3, b: b3, c: 0, w: 0.6, type: 'dep', label: CODE_REL.dep });
+          });
+        });
+      });
+      function mainNodeOf(r) {
+        var best = null;
+        (r.concepts || []).forEach(function (c) {
+          if (!c.code || (c.code.kind !== 'class' && c.code.kind !== 'function')) return;
+          if (!best || c.score > best.score) best = c;
+        });
+        return best ? nodeOfKey.get(best.key) : null;
+      }
+
       // relazioni lette nelle definizioni
       var firstIdx = new Map();
       nodes.forEach(function (nd) {
@@ -735,7 +836,7 @@
         var snip = snippet(ch.text, qkeys.get(r.lang), phraseF, r.lang);
         return {
           doc: r.id, name: r.name, title: r.title, ext: r.ext, format: r.format, path: r.path, lang: r.lang,
-          n: ch.n, kind: ch.kind, page: ch.page, pageTo: ch.pageTo, slide: ch.slide, section: ch.section, where: where(r, ch), box: ch.box,
+          n: ch.n, kind: ch.kind, page: ch.page, pageTo: ch.pageTo, slide: ch.slide, line: ch.line, section: ch.section, where: where(r, ch), box: ch.box,
           text: snip.text, marks: snip.marks, full: ch.text, score: round(x[1], 2), concepts: conceptsOfChunk(G, e.d, ch.n, 4)
         };
       });
@@ -779,7 +880,7 @@
     function nodeOut(nd, pos) {
       var p = pos.get(nd.id) || [0, 0];
       return { id: nd.id, label: nd.label, ndocs: nd.docs.length, count: nd.count, weight: round(nd.weight, 3), rank: round(nd.rank, 3), deg: nd.deg,
-        central: nd.central, multi: nd.multi, name: nd.name, defs: nd.defs.length, lang: nd.lang, members: nd.members,
+        central: nd.central, multi: nd.multi, name: nd.name, defs: nd.defs.length, lang: nd.lang, members: nd.members, code: nd.code ? nd.code.kind : null,
         x: round(p[0], 1), y: round(p[1], 1), pinned: !!p.pinned, docs: nd.docs.map(function (d) { return d.id; }) };
     }
     function graphOut() {
@@ -794,7 +895,7 @@
         stats: stats()
       };
     }
-    var REL = { co: 'compare con', def: 'nella definizione', isa: 'è un tipo di', user: 'collegato a' };
+    var REL = { co: 'compare con', def: 'nella definizione', isa: 'è un tipo di', user: 'collegato a', use: 'usa', dep: 'dipende da', ext: 'eredita da' };
 
     function concept(id) {
       var G = graph(), nd = G.nodes.get(G.nodeOfKey.get(id) || id);
@@ -803,23 +904,26 @@
         var other = e.a === nd.id ? e.b : e.a, o = G.nodes.get(other);
         var label = e.label || REL[e.type];
         if (e.type === 'isa' || e.type === 'def') label = e.a === nd.id ? REL[e.type] : (e.type === 'isa' ? 'ha come tipo' : 'usato per definire');
+        if (e.type === 'use') label = e.a === nd.id ? 'usa' : 'usato da';
+        if (e.type === 'ext') label = e.a === nd.id ? 'eredita da' : 'ereditato da';
+        if (e.type === 'dep') label = e.a === nd.id ? 'dipende da' : 'usato da';
         return { id: other, label: o.label, rel: label, type: e.type, w: round(e.w, 3), c: e.c };
       }).sort(function (a, b) { return (b.type !== 'co') - (a.type !== 'co') || b.w - a.w; });
       var sources = nd.chunks.slice(0, 120).map(function (dc) {
         var r = docs[dc[0]], ch = r.chunks[dc[1]];
         if (!ch) return null;
-        return { doc: r.id, name: r.name, title: r.title, path: r.path, n: ch.n, page: ch.page, slide: ch.slide, section: ch.section, where: where(r, ch), box: ch.box,
+        return { doc: r.id, name: r.name, title: r.title, path: r.path, n: ch.n, page: ch.page, slide: ch.slide, line: ch.line, section: ch.section, where: where(r, ch), box: ch.box,
           text: ch.text.length > 260 ? ch.text.slice(0, 257) + '…' : ch.text, full: ch.text };
       }).filter(Boolean);
       var defs = nd.defs.map(function (df) {
         var r = docs[df.d], ch = r.chunks[df.n] || {};
-        return { text: df.text, doc: r.id, name: r.name, path: r.path, n: df.n, page: ch.page, slide: ch.slide, where: where(r, ch) };
+        return { text: df.text, doc: r.id, name: r.name, path: r.path, n: df.n, page: ch.page, slide: ch.slide, line: ch.line, where: where(r, ch) };
       });
       var log = edits.log.filter(function (l) { return (l.keys || []).some(function (k) { return nd.members.indexOf(k) >= 0; }); }).slice(-30);
       return {
         id: nd.id, label: nd.label, members: nd.members, memberLabels: nd.memberLabels, forms: nd.forms, userAliases: nd.userAliases, defs: defs, sources: sources, total: nd.chunks.length,
         docs: nd.docs.map(function (d) { var r = docs[byId.get(d.id)]; return { id: d.id, name: r.name, count: d.count }; }),
-        related: related, central: nd.central, multi: nd.multi, count: nd.count, rank: round(nd.rank, 3),
+        related: related, central: nd.central, multi: nd.multi, count: nd.count, rank: round(nd.rank, 3), code: nd.code || null,
         suggestions: G.suggestions.filter(function (s) { return s.a === nd.id || s.b === nd.id; }), log: log
       };
     }
@@ -952,10 +1056,29 @@
     };
   }
 
+  /*
+   * La struttura del codice, ridotta a quello che serve al grafo: righe, corpi e usi non si salvano.
+   */
+  function compactCode(c) {
+    return {
+      lang: c.lang, langName: c.langName, family: c.family,
+      symbols: (c.symbols || []).slice(0, 2000).map(function (s) {
+        return { kind: s.kind, name: s.name, line: s.line, endLine: s.endLine, doc: s.doc || '', signature: s.signature || '',
+          params: s.params || [], exported: !!s.exported, base: s.base || '', complexity: s.complexity || 1 };
+      }),
+      imports: (c.imports || []).slice(0, 500),
+      calls: (c.calls || []).slice(0, 4000),
+      todos: (c.todos || []).slice(0, 300),
+      usage: c.usage || {},
+      stats: c.stats || {}
+    };
+  }
+
   function docOut(r) {
     var o = {};
     ['id', 'path', 'name', 'ext', 'size', 'mtime', 'created', 'hash', 'imported', 'format', 'title', 'lang', 'langName', 'pages', 'ocrPages', 'words', 'warnings', 'status', 'error', 'summary', 'keywords']
       .forEach(function (k) { o[k] = r[k]; });
+    if (r.code) o.code = { lang: r.code.lang, langName: r.code.langName, symbols: r.code.symbols.length, imports: r.code.imports.length, todos: r.code.todos.length, stats: r.code.stats };
     o.chunks = r.chunks.length;
     o.concepts = (r.concepts || []).length;
     return o;

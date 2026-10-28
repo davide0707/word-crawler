@@ -12,7 +12,7 @@ const { zipDir } = require('./zip');
 const ROOT = path.join(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 const OUT = path.join(DIST, 'extension');
-const CORE = ['settings.js', 'lang.js', 'text.js', 'analysis.js', 'analysis-worker.js', 'zip.js', 'cfb.js', 'formats.js', 'dom.js', 'pdfcore.js', 'crawler.js',
+const CORE = ['settings.js', 'lang.js', 'text.js', 'analysis.js', 'analysis-worker.js', 'zip.js', 'cfb.js', 'code.js', 'formats.js', 'dom.js', 'pdfcore.js', 'crawler.js',
   'annotate.js', 'docx.js', 'export.js', 'ocr.js', 'pen.js', 'settings-ui.js', 'results-ui.js', 'reader.js', 'archive-ui.js', 'reader.css'];
 
 fs.rmSync(OUT, { recursive: true, force: true });

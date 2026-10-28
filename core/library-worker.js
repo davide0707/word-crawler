@@ -26,7 +26,7 @@
  */
 /* global importScripts, WCLibrary, WCStudy */
 'use strict';
-importScripts('settings.js', 'lang.js', 'text.js', 'analysis.js', 'library.js', 'study.js');
+importScripts('settings.js', 'lang.js', 'text.js', 'analysis.js', 'code.js', 'library.js', 'study.js');
 
 var records = [], edits = null, kb = null, study = null, studyState = null;
 function base() {

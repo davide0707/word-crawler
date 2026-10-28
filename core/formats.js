@@ -676,6 +676,9 @@
   // ------------------------------------------------------------------ riconoscimento
   var SUPPORTED = ['pdf', 'docx', 'docm', 'dotx', 'dotm', 'doc', 'odt', 'ott', 'odp', 'ods', 'pptx', 'pptm', 'ppsx', 'xlsx', 'xlsm', 'epub', 'rtf', 'html', 'htm', 'xhtml', 'md', 'markdown', 'txt', 'text', 'log', 'srt', 'vtt', 'csv', 'tsv'];
   var IMAGES = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'];
+  // il codice (core/code.js): non è prosa, si legge la sua struttura
+  var CODE = g.WCCode ? g.WCCode.EXT.slice() : [];
+  SUPPORTED = SUPPORTED.concat(CODE.filter(function (e) { return SUPPORTED.indexOf(e) < 0; }));
 
   // immagine riconosciuta dai primi byte -> tipo MIME (o null)
   function imageType(bytes, name) {
@@ -699,6 +702,7 @@
     if (e === 'md' || e === 'markdown') return 'md';
     if (e === 'srt' || e === 'vtt' || /^WEBVTT/.test(head)) return 'subs';
     if (e === 'csv' || e === 'tsv') return 'csv';
+    if (g.WCCode && g.WCCode.is(name) && e !== 'html' && e !== 'htm' && e !== 'xhtml') return 'code';
     if (/^(<!doctype html|<html|<\?xml[^>]*>\s*<html)/i.test(head) || e === 'html' || e === 'htm' || e === 'xhtml') return 'html';
     if (/[\x00-\x08\x0e-\x1f]/.test(head.replace(/\x00/g, '')) && !(bytes[0] === 0xff || bytes[0] === 0xfe)) return 'binary';
     return 'txt';
@@ -726,6 +730,7 @@
       else throw new Error('Archivio ZIP che non contiene un documento riconosciuto.');
     } else if (kind === 'cfb') model = fromDoc(bytes);
     else if (kind === 'rtf') model = fromRtf(decodeText(bytes));
+    else if (kind === 'code') model = fromCode(decodeText(bytes), name);
     else if (kind === 'md') model = fromMarkdown(decodeText(bytes));
     else if (kind === 'subs') model = fromSubtitles(decodeText(bytes), 'Sottotitoli');
     else if (kind === 'csv') model = fromDelimited(decodeText(bytes));
@@ -737,8 +742,21 @@
     return model;
   }
 
+  /*
+   * Un file di codice: WCCode ne legge funzioni, classi, import, chiamate e cose da fare, e ne fa
+   * blocchi di testo come per gli altri documenti. La struttura resta attaccata al modello (model.code)
+   * e arriva fino al cervello, che la trasforma in nodi e archi.
+   */
+  function fromCode(text, name) {
+    var r = g.WCCode.parse(text, name);
+    return {
+      format: r.langName, code: r, title: String(name || '').replace(/\.[^.]+$/, ''),
+      blocks: r.blocks, warnings: r.symbols.length ? [] : ['In questo file non ho riconosciuto funzioni o classi: lo leggo come testo.']
+    };
+  }
+
   g.WCFormats = {
-    open: open, fromHtml: fromHtml, fromPlain: fromPlain, fromMarkdown: fromMarkdown, ext: ext, imageType: imageType,
+    open: open, fromHtml: fromHtml, fromPlain: fromPlain, fromMarkdown: fromMarkdown, fromCode: fromCode, ext: ext, imageType: imageType, CODE: CODE,
     SUPPORTED: SUPPORTED, IMAGES: IMAGES, accept: SUPPORTED.concat(IMAGES).map(function (e) { return '.' + e; }).join(',')
   };
 })(globalThis);
